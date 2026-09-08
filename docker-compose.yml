@@ -1,0 +1,61 @@
+services:
+  # ====================================================================
+  # 1. Primary Relational RDBMS: PostgreSQL 16 (ACID & pgcrypto AES-256)
+  # Section 2.1 & NFR-SEC-01
+  # ====================================================================
+  postgres:
+    image: postgres:${POSTGRES_IMAGE_TAG:-16-alpine}
+    container_name: ehealth-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ehealth_db}
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ehealth_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ehealth-network
+
+  # ====================================================================
+  # 2. In-Memory & Distributed Lock: Redis Stack 7.2+
+  # Section 2.1, Section 5.1 & SRS-PAT-02
+  # ====================================================================
+  redis:
+    image: redis/redis-stack:${REDIS_IMAGE_TAG:-7.2.0-v10}
+    container_name: ehealth-redis
+    restart: unless-stopped
+    environment:
+      REDIS_ARGS: "--requirepass ${REDIS_PASSWORD:-ehealth_redis_pass}"
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_INSIGHT_PORT:-8001}:8001"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-ehealth_redis_pass} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ehealth-network
+
+networks:
+  ehealth-network:
+    name: ehealth-network
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: ehealth-postgres-data
+  redis_data:
+    name: ehealth-redis-data
