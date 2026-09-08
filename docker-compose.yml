@@ -1,8 +1,4 @@
 services:
-  # ====================================================================
-  # 1. Primary Relational RDBMS: PostgreSQL 16 (ACID & pgcrypto AES-256)
-  # Section 2.1 & NFR-SEC-01
-  # ====================================================================
   postgres:
     image: postgres:${POSTGRES_IMAGE_TAG:-16-alpine}
     container_name: ehealth-postgres
@@ -25,10 +21,6 @@ services:
     networks:
       - ehealth-network
 
-  # ====================================================================
-  # 2. In-Memory & Distributed Lock: Redis Stack 7.2+
-  # Section 2.1, Section 5.1 & SRS-PAT-02
-  # ====================================================================
   redis:
     image: redis/redis-stack:${REDIS_IMAGE_TAG:-7.2.0-v10}
     container_name: ehealth-redis
@@ -49,10 +41,6 @@ services:
     networks:
       - ehealth-network
 
-  # ====================================================================
-  # 3. API Gateway & Reverse Proxy: Nginx (HTTPS TLS 1.3 & Rate Limiting)
-  # Section 2.1, Section 3.4, NFR-SEC-01 & NFR-SEC-03
-  # ====================================================================
   nginx:
     image: nginx:alpine
     container_name: ehealth-nginx
