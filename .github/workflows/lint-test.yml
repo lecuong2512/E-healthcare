@@ -1,0 +1,92 @@
+name: CI - Lint, Build & Validate Environment
+
+'on':
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ====================================================================
+  # Job 1: Validate Docker Compose & Nginx Reverse Proxy Configuration
+  # ====================================================================
+  validate-docker-env:
+    name: Validate Docker & Nginx Config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Environment File
+        run: |
+          cp .env.example .env
+          echo "Created .env from .env.example successfully"
+
+      - name: Validate Docker Compose Configuration
+        run: |
+          docker compose --env-file .env config
+
+      - name: Validate Nginx Syntax (TLS 1.3 & Rate Limiting)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            -v "${{ github.workspace }}/docker/nginx/conf.d:/etc/nginx/conf.d:ro" \
+            -v "${{ github.workspace }}/docker/nginx/ssl:/etc/nginx/ssl:ro" \
+            nginx:alpine nginx -t
+
+  # ====================================================================
+  # Job 2: Code Syntax Linting & Build Verification
+  # ====================================================================
+  code-lint-and-build:
+    name: Lint & Build Monorepo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: ${{ hashFiles('package-lock.json') != '' && 'npm' || '' }}
+
+      - name: Verify Root & Workspace Packages
+        run: |
+          echo "==> Inspecting Monorepo Project Structure..."
+          test -f docker-compose.yml || { echo "Missing docker-compose.yml"; exit 1; }
+          test -f .env.example || { echo "Missing .env.example"; exit 1; }
+          test -d shared || { echo "Missing shared directory"; exit 1; }
+          test -d server || { echo "Missing server directory"; exit 1; }
+          test -d client || { echo "Missing client directory"; exit 1; }
+          echo "Monorepo structure verified."
+
+      - name: Install Monorepo Dependencies (If package.json has scripts)
+        run: |
+          if [ -s package.json ] && grep -q '"dependencies"' package.json; then
+            echo "Installing root dependencies..."
+            npm ci
+          else
+            echo "Base scaffold state: root package.json is in scaffold initialization."
+          fi
+
+      - name: Run Linting Checks
+        run: |
+          if [ -s package.json ] && grep -q '"lint"' package.json; then
+            npm run lint
+          else
+            echo "Skipping lint: scripts will be activated when project dependencies are installed."
+          fi
+
+      - name: Run Build Checks
+        run: |
+          if [ -s package.json ] && grep -q '"build"' package.json; then
+            npm run build
+          else
+            echo "Skipping build: build scripts will be executed upon full module initialization."
+          fi
