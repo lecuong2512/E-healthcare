@@ -34,7 +34,7 @@ services:
     container_name: ehealth-redis
     restart: unless-stopped
     environment:
-      REDIS_ARGS: "--requirepass ${REDIS_PASSWORD:-ehealth_redis_pass}"
+      REDIS_ARGS: ${REDIS_ARGS:-""}
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -42,7 +42,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-ehealth_redis_pass} ping | grep PONG"]
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5

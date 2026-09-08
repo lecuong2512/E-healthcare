@@ -66,20 +66,20 @@ Report-Result -Suite "Suite 1" -TestName "1.5 Sinh khoa chinh ngau nhien UUIDv4 
 # ------------------------------------------------------------------------------
 Write-Host "`n[TEST SUITE 2] Redis Stack 7.2 In-Memory & Distributed Lock (SRS-PAT-02)" -ForegroundColor Yellow
 
-# 2.1 Connection & Auth (using REDISCLI_AUTH to avoid insecure password CLI warnings)
-$redisPing = (docker exec -e REDISCLI_AUTH=ehealth_redis_pass ehealth-redis redis-cli ping 2>&1) | Out-String
+# 2.1 Connection (No password needed for local dev)
+$redisPing = (docker exec ehealth-redis redis-cli ping 2>&1) | Out-String
 $isRedisAuth = [bool]($redisPing -match "PONG")
-Report-Result -Suite "Suite 2" -TestName "2.1 Ket noi Redis 7.2 voi Auth password (port 6379)" -Success $isRedisAuth -Details "PONG"
+Report-Result -Suite "Suite 2" -TestName "2.1 Ket noi Redis 7.2 khong can mat khau o local dev (port 6379)" -Success $isRedisAuth -Details "PONG"
 
 # 2.2 Distributed Lock (SETNX with TTL 600s)
 $testSlotKey = "slot_lock:doctor_01:2026-09-08_0830"
-docker exec -e REDISCLI_AUTH=ehealth_redis_pass ehealth-redis redis-cli DEL $testSlotKey 2>&1 | Out-Null
-$lockAcquire = (docker exec -e REDISCLI_AUTH=ehealth_redis_pass ehealth-redis redis-cli SET $testSlotKey "user_patient_999" EX 600 NX 2>&1) | Out-String
+docker exec ehealth-redis redis-cli DEL $testSlotKey 2>&1 | Out-Null
+$lockAcquire = (docker exec ehealth-redis redis-cli SET $testSlotKey "user_patient_999" EX 600 NX 2>&1) | Out-String
 $isLockAcquired = [bool]($lockAcquire -match "OK")
 Report-Result -Suite "Suite 2" -TestName "2.2 Thiet lap khoa phan tan giu slot (TTL 600s SETNX)" -Success $isLockAcquired -Details $lockAcquire.Trim()
 
 # 2.3 Collision rejection (Second client tries to lock the same slot)
-$lockConflict = (docker exec -e REDISCLI_AUTH=ehealth_redis_pass ehealth-redis redis-cli SET $testSlotKey "user_patient_888" EX 600 NX 2>&1) | Out-String
+$lockConflict = (docker exec ehealth-redis redis-cli SET $testSlotKey "user_patient_888" EX 600 NX 2>&1) | Out-String
 $isConflictDetected = [bool]([string]::IsNullOrWhiteSpace($lockConflict.Trim()) -or ($lockConflict -match "nil"))
 Report-Result -Suite "Suite 2" -TestName "2.3 Tu choi xung dot khi tranh chap cung 1 slot (Lock Conflict)" -Success $isConflictDetected -Details "Khoa bi tu choi nhu ky vong"
 
