@@ -1,0 +1,38 @@
+<div
+  class="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-4 px-4 pb-24"
+>
+  <h1 class="text-xl font-semibold text-slate-900">Đăng nhập</h1>
+
+  <label class="text-sm font-medium text-slate-700">
+    Email / Số điện thoại
+    <input
+      type="text"
+      [(ngModel)]="identifier"
+      class="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3"
+    />
+  </label>
+
+  <label class="text-sm font-medium text-slate-700">
+    Mật khẩu
+    <input
+      type="password"
+      [(ngModel)]="password"
+      class="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3"
+    />
+  </label>
+
+  @if (errorMessage()) {
+  <p class="text-sm text-red-600">{{ errorMessage() }}</p>
+  }
+
+  <app-button [loading]="loading()" (onClick)="submit()">Đăng nhập</app-button>
+
+  <button
+    type="button"
+    class="text-sm text-sky-600 underline"
+    (click)="authService.loginWithGoogle()"
+  >
+    Đăng nhập với Google
+  </button>
+
+</div>
