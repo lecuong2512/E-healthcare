@@ -1,0 +1,54 @@
+@use 'styles/variables' as *;
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+// NFR-UX-02: đảm bảo mọi phần tử tương tác (a, button, input) có vùng chạm
+// tối thiểu 44x44px trên mobile, kể cả những chỗ quên dùng <app-button>.
+@layer base {
+  @media (max-width: #{$breakpoint-tablet - 1px}) {
+    button,
+    a[role='button'],
+    input[type='checkbox'],
+    input[type='radio'] {
+      min-height: $min-touch-target;
+      min-width: $min-touch-target;
+    }
+  }
+
+  // NFR-UX-03: tránh layout shift đột ngột khi skeleton -> content
+  .animate-pulse {
+    animation-duration: 1.5s;
+  }
+}
+
+// Ví dụ nesting SCSS cho các phần không tiện diễn đạt bằng utility class
+// (vd. style theo trạng thái con/hover phức tạp, hoặc third-party component
+// không có sẵn class hook). Team cứ bổ sung dần vào đây hoặc tách file riêng
+// trong src/styles/ rồi @use lại ở đây.
+.app-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+
+  &__header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+
+  &__content {
+    flex: 1;
+
+    @include tablet-up {
+      padding-inline: 1.5rem;
+    }
+
+    @include desktop-up {
+      padding-inline: 2rem;
+      max-width: 1280px;
+      margin-inline: auto;
+    }
+  }
+}
