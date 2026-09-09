@@ -1,0 +1,8 @@
+{
+  "name": "@ehealth/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared TypeScript definitions, enums and DTOs for E-Healthcare Portal",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

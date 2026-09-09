@@ -1,4 +1,19 @@
 {
   "name": "e-healthcare",
-  "private": true
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hệ thống Quản lý & Đặt lịch Khám chữa bệnh (E-Healthcare Portal) - Monorepo",
+  "workspaces": [
+    "shared",
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:client": "npm run build --workspace=ehealth-web-client",
+    "build:shared": "npm run build --workspace=@ehealth/shared",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "dependencies": {}
 }

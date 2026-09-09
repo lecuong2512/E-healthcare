@@ -1,0 +1,6 @@
+{
+  "name": "@ehealth/server",
+  "version": "0.0.1",
+  "private": true,
+  "description": "NestJS Backend API for E-Healthcare Portal"
+}
