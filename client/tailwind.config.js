@@ -4,12 +4,12 @@ module.exports = {
   theme: {
     // Section 3.1: Mobile (<768px) / Tablet (768px-1024px) / Desktop (>1024px)
     // Tailwind mặc định: sm=640, md=768, lg=1024, xl=1280.
-    // Ta dùng đúng md (768px) làm biên Mobile->Tablet và lg (1024px) làm biên
+    // Ta dùng đúng md (768px) làm biên Mobile->Tablet và lg (>1024px) làm biên
     // Tablet->Desktop để khớp chính xác với SRS thay vì bịa breakpoint riêng.
     screens: {
       sm: "640px", // (tuỳ chọn - phụ trợ cho fine-tuning trong khoảng mobile)
       md: "768px", // >= 768px: bắt đầu vùng Tablet
-      lg: "1024px", // >= 1024px: bắt đầu vùng Desktop
+      lg: "1025px", // > 1024px: bắt đầu vùng Desktop
       xl: "1280px",
     },
     extend: {
