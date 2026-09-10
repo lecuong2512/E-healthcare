@@ -1,8 +1,11 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { roleGuard } from './core/guards/role.guard';
+import { Role } from '@shared/enums';
 
 // Lazy-load từng phân hệ theo mã SRS (4.1 - 4.5) để giảm bundle ban đầu.
+// FIX (review 2026-09): Role enum từ @shared/enums để không lệch với giá trị thật
+// server trả về (và có auto-complete/type-check khi gõ sai).
 export const routes: Routes = [
   {
     path: '',
@@ -13,7 +16,7 @@ export const routes: Routes = [
   {
     path: 'patient',
     canActivate: [authGuard, roleGuard],
-    data: { roles: ['ROLE_PATIENT'] },
+    data: { roles: [Role.PATIENT] },
     loadChildren: () => import('./features/patient/patient.routes').then((m) => m.PATIENT_ROUTES),
   },
 
@@ -21,7 +24,7 @@ export const routes: Routes = [
   {
     path: 'doctor',
     canActivate: [authGuard, roleGuard],
-    data: { roles: ['ROLE_DOCTOR'] },
+    data: { roles: [Role.DOCTOR] },
     loadChildren: () => import('./features/doctor/doctor.routes').then((m) => m.DOCTOR_ROUTES),
   },
 
@@ -29,7 +32,7 @@ export const routes: Routes = [
   {
     path: 'receptionist',
     canActivate: [authGuard, roleGuard],
-    data: { roles: ['ROLE_RECEPTIONIST'] },
+    data: { roles: [Role.RECEPTIONIST] },
     loadChildren: () =>
       import('./features/receptionist/receptionist.routes').then((m) => m.RECEPTIONIST_ROUTES),
   },
@@ -38,7 +41,7 @@ export const routes: Routes = [
   {
     path: 'admin',
     canActivate: [authGuard, roleGuard],
-    data: { roles: ['ROLE_ADMIN'] },
+    data: { roles: [Role.ADMIN] },
     loadChildren: () => import('./features/admin/admin.routes').then((m) => m.ADMIN_ROUTES),
   },
 

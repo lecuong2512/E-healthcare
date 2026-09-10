@@ -6,6 +6,7 @@ import { ButtonComponent } from '../../../../shared/components/button/button.com
 import { TokenStoreService } from '../../../../core/services/token-store.service';
 import { environment } from '../../../../../environments/environment';
 import { HttpErrorResponse } from '@angular/common/http';
+import { Role } from '@shared/enums/role.enum';
 
 /**
  * Trang login thật (không phải stub) vì đây là nơi tốt nhất để kiểm chứng
@@ -31,11 +32,11 @@ export class LoginPage {
   loading = signal(false);
   errorMessage = signal<string | null>(null);
 
-  private readonly roleHome: Record<string, string> = {
-    ROLE_PATIENT: '/patient',
-    ROLE_DOCTOR: '/doctor',
-    ROLE_RECEPTIONIST: '/receptionist',
-    ROLE_ADMIN: '/admin',
+  private readonly roleHome: Record<Role, string> = {
+    [Role.PATIENT]: '/patient',
+    [Role.DOCTOR]: '/doctor',
+    [Role.RECEPTIONIST]: '/receptionist',
+    [Role.ADMIN]: '/admin',
   };
 
   submit(): void {
