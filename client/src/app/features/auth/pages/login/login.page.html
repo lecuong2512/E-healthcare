@@ -1,0 +1,89 @@
+<div class="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 pb-24">
+  <h1 class="mb-6 text-xl font-semibold text-slate-900">Đăng nhập</h1>
+
+  <form (ngSubmit)="submit()" class="flex flex-col gap-4" novalidate>
+    <!-- Email / Số điện thoại -->
+    <div>
+      <label for="identifier" class="block text-sm font-medium text-slate-700">
+        Email / Số điện thoại
+      </label>
+      <input
+        id="identifier"
+        name="identifier"
+        type="text"
+        [(ngModel)]="identifier"
+        autocomplete="username"
+        [disabled]="loading()"
+        placeholder="Nhập email hoặc số điện thoại"
+        class="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 transition-colors focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 disabled:bg-slate-100 disabled:text-slate-400"
+      />
+    </div>
+
+    <!-- Mật khẩu + Nút xem mật khẩu duy nhất -->
+    <div>
+      <label for="password" class="block text-sm font-medium text-slate-700">
+        Mật khẩu
+      </label>
+      <div class="relative mt-1">
+        <input
+          id="password"
+          name="password"
+          [type]="showPassword() ? 'text' : 'password'"
+          [(ngModel)]="password"
+          autocomplete="current-password"
+          [disabled]="loading()"
+          placeholder="Nhập mật khẩu"
+          class="min-h-11 w-full rounded-lg border border-slate-300 pl-3 pr-11 transition-colors focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 disabled:bg-slate-100 disabled:text-slate-400 [&::-ms-reveal]:hidden [&::-webkit-credentials-type-change-button]:hidden"
+        />
+
+        <!-- Nút toggle custom duy nhất -->
+        <button
+          type="button"
+          (click)="showPassword.set(!showPassword())"
+          [disabled]="loading()"
+          [attr.aria-label]="showPassword() ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'"
+          class="absolute inset-y-0 right-0 flex items-center px-3 text-slate-500 hover:text-slate-700 focus:outline-none disabled:opacity-50"
+        >
+          @if (showPassword()) {
+            <!-- Icon Mắt gạch (Ẩn) -->
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+            </svg>
+          } @else {
+            <!-- Icon Mắt mở (Hiện) -->
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+            </svg>
+          }
+        </button>
+      </div>
+    </div>
+
+    <!-- Thông báo lỗi (Hỗ trợ Screen Reader) -->
+    @if (errorMessage()) {
+      <p role="alert" aria-live="assertive" class="text-sm font-medium text-red-600">
+        {{ errorMessage() }}
+      </p>
+    }
+
+    <!-- Nút Submit Form -->
+    <app-button
+      type="submit"
+      [loading]="loading()"
+      [disabled]="loading() || !identifier.trim() || !password"
+    >
+      Đăng nhập
+    </app-button>
+
+    <!-- Google Login -->
+    <button
+      type="button"
+      class="mt-2 text-center text-sm text-sky-600 underline hover:text-sky-700 disabled:opacity-50"
+      [disabled]="loading()"
+      (click)="authService.loginWithGoogle()"
+    >
+      Đăng nhập với Google
+    </button>
+  </form>
+</div>
