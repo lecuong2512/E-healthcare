@@ -2,7 +2,13 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, of, tap } from 'rxjs';
 import { TokenStoreService } from './token-store.service';
-import { LoginResponse, RefreshResponse } from '@shared/interfaces';
+import {
+  LoginResponse,
+  RefreshResponse,
+  RegisterRequest,
+  RegisterOtpResponse,
+  RegisterVerifyResponse,
+} from '@shared/interfaces';
 
 const API_BASE = '/api/v1';
 
@@ -39,33 +45,42 @@ export class AuthService {
     return this.refreshToken().pipe(catchError(() => of(null)));
   }
 
-  // TODO (SRS-AUTH-01, task riêng): đăng ký kèm xác thực OTP qua SMS.
-  requestRegisterOtp(_phone: string): Observable<void> {
-    return this.http.post<void>(`${API_BASE}/auth/register/otp`, {
-      phone: _phone,
-    });
+  requestRegisterOtp(
+    payload: RegisterRequest,
+  ): Observable<RegisterOtpResponse> {
+    return this.http.post<RegisterOtpResponse>(
+      `${API_BASE}/auth/register/otp`,
+      payload,
+    );
   }
 
   verifyRegisterOtp(
-    _phone: string,
-    _otp: string,
-    _payload: unknown,
-  ): Observable<LoginResponse> {
+    registrationId: string,
+    otp: string,
+  ): Observable<RegisterVerifyResponse> {
+    return this.http.post<RegisterVerifyResponse>(
+      `${API_BASE}/auth/register/verify`,
+      { registrationId, otp },
+    );
+  }
+
+  // Chuyển sang Google; backend xác thực danh tính và thiết lập cookie phiên.
+  loginWithGoogle(): void {
+    window.location.href = `${API_BASE}/auth/google`;
+  }
+
+  completeGoogleRegistration(payload: {
+    fullName: string;
+    gender: RegisterRequest['gender'];
+    dateOfBirth: string;
+  }): Observable<LoginResponse> {
     return this.http
-      .post<LoginResponse>(
-        `${API_BASE}/auth/register/verify`,
-        { phone: _phone, otp: _otp, ...(_payload as Record<string, unknown>) },
-        { withCredentials: true },
-      )
+      .post<LoginResponse>(`${API_BASE}/auth/google/complete`, payload, {
+        withCredentials: true,
+      })
       .pipe(
         tap((res) => this.tokenStore.setSession(res.accessToken, res.role)),
       );
-  }
-
-  // TODO (SRS-AUTH-02, task riêng): redirect sang Google OAuth2 consent screen,
-  // backend xử lý callback rồi set cookie như luồng login thường.
-  loginWithGoogle(): void {
-    window.location.href = `${API_BASE}/auth/google`;
   }
 
   refreshToken(): Observable<RefreshResponse> {

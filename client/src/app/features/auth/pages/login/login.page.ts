@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ButtonComponent } from '../../../../shared/components/button/button.component';
 import { TokenStoreService } from '../../../../core/services/token-store.service';
@@ -24,6 +24,7 @@ export class LoginPage {
   protected readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   private readonly tokenStore = inject(TokenStoreService);
+  private readonly route = inject(ActivatedRoute);
   protected readonly isProd = environment.production;
 
   showPassword = signal(false);
@@ -39,6 +40,18 @@ export class LoginPage {
     [Role.ADMIN]: '/admin',
   };
 
+  constructor() {
+    if (this.route.snapshot.queryParamMap.get('google') === 'success') {
+      const role = this.tokenStore.userRole() as Role | null;
+      if (role && this.roleHome[role])
+        void this.router.navigateByUrl(this.roleHome[role]);
+      else
+        this.errorMessage.set(
+          'Không thể phục hồi phiên Google. Vui lòng thử lại trên HTTPS.',
+        );
+    }
+  }
+
   submit(): void {
     this.errorMessage.set(null);
     this.loading.set(true);
@@ -53,7 +66,9 @@ export class LoginPage {
 
         if (err.status === 429) {
           this.errorMessage.set(
-            'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng chờ 1 phút rồi thử lại.',
+            err.error?.code === 'LOGIN_LOCKED'
+              ? `Tài khoản tạm khóa. Vui lòng chờ ${Math.ceil((err.error.retryAfter ?? 1800) / 60)} phút rồi thử lại.`
+              : 'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng chờ 1 phút rồi thử lại.',
           );
         } else if (err.status === 401) {
           this.errorMessage.set('Tài khoản hoặc mật khẩu không chính xác.');
