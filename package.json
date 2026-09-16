@@ -15,5 +15,8 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "overrides": {
+    "@nestjs/platform-express": { "multer": "^2.3.0" }
+  }
 }
