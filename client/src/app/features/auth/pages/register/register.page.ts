@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../../core/services/auth.service';
 import { Role } from '@shared/enums/role.enum';
+import { Gender } from '@shared/enums/gender.enum';
 
 /**
  * Bổ sung thông tin bắt buộc cho tài khoản Google mới trước khi kích hoạt.
@@ -93,7 +94,7 @@ export class RegisterPage {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   fullName = '';
-  gender: 'MALE' | 'FEMALE' | 'OTHER' | '' = '';
+  gender: Gender | '' = '';
   dateOfBirth = '';
   readonly today = new Date().toISOString().slice(0, 10);
   readonly loading = signal(false);

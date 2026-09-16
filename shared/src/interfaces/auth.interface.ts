@@ -1,4 +1,5 @@
 import { Role } from "../enums/role.enum";
+import { Gender } from "../enums/gender.enum";
 
 export interface LoginResponse {
   accessToken: string;
@@ -15,7 +16,7 @@ export interface RegisterRequest {
   phoneNumber?: string;
   password: string;
   fullName: string;
-  gender: "MALE" | "FEMALE" | "OTHER";
+  gender: Gender;
   dateOfBirth: string;
 }
 
@@ -23,7 +24,7 @@ export interface RegisterOtpResponse {
   registrationId: string;
   expiresIn: number;
   resendAfter: number;
-  channel: "email" | "sms";
+  channel: "email" | "sms" | "both";
 }
 
 export interface RegisterVerifyResponse {
