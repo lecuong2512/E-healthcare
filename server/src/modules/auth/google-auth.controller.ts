@@ -11,21 +11,16 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { Request, Response } from "express";
-import { Public } from "./auth.decorators";
+import { Public } from "../../common/decorators/auth.decorators";
 import { GoogleAuthService } from "./google-auth.service";
 import { GoogleCompleteDto } from "./dto/google-complete.dto";
-import { environment } from "../config/environment";
+import { environment } from "../../config/environment";
 import { writeSession } from "./session.controller";
+import { googleCookieBase } from "./cookie-security";
 
 // Cookie cho phiên OAuth.
 const FLOW_COOKIE = "ehealth_google_flow";
 const COMPLETE_COOKIE = "ehealth_google_complete";
-const cookieBase = {
-  httpOnly: true,
-  secure: true,
-  path: "/api/v1/auth/google",
-} as const;
-
 // API Google không cần JWT.
 @Public()
 @Controller("auth/google")
@@ -49,7 +44,7 @@ export class GoogleAuthController {
     const flow = await this.google.start();
     response.setHeader("Cache-Control", "no-store");
     response.cookie(FLOW_COOKIE, flow.browserToken, {
-      ...cookieBase,
+      ...googleCookieBase(),
       sameSite: "lax",
       maxAge: 300000,
     });
@@ -67,7 +62,10 @@ export class GoogleAuthController {
     const frontend = this.frontendUrl();
     
     const browserToken = request.cookies?.[FLOW_COOKIE]; 
-    response.clearCookie(FLOW_COOKIE, { ...cookieBase, sameSite: "lax" });
+    response.clearCookie(FLOW_COOKIE, {
+      ...googleCookieBase(),
+      sameSite: "lax",
+    });
     response.setHeader("Cache-Control", "no-store");
     if (
       typeof code !== "string" ||
@@ -85,7 +83,7 @@ export class GoogleAuthController {
       response.redirect(`${frontend}/login?google=success`);
     } else {
       response.cookie(COMPLETE_COOKIE, result.completionToken, {
-        ...cookieBase,
+        ...googleCookieBase(),
         sameSite: "strict",
         maxAge: 600000,
       });
@@ -106,7 +104,7 @@ export class GoogleAuthController {
       throw new UnauthorizedException("Phiên đăng ký Google không hợp lệ.");
     const session = await this.google.complete(token, dto);
     response.clearCookie(COMPLETE_COOKIE, {
-      ...cookieBase,
+      ...googleCookieBase(),
       sameSite: "strict",
     });
     return writeSession(response, session);

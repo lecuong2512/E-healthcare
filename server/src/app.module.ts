@@ -1,8 +1,9 @@
 import { Module } from "@nestjs/common";
-import { AuthModule } from "./auth/auth.module";
+import { AuthModule } from "./modules/auth/auth.module";
 import { APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
-import { AccessTokenGuard, RolesGuard } from "./auth/auth.guards";
+import { AccessTokenGuard } from "./common/guards/access-token.guard";
+import { RolesGuard } from "./common/guards/roles.guard";
 
 @Module({
   imports: [AuthModule, ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }])],

@@ -5,6 +5,17 @@ import { CreateAppointmentsTable1788851428977 } from "./migrations/1788851428977
 import { CreateRegistrationAndPhr1789477200000 } from "./migrations/1789477200000-create-registration-and-phr";
 import { CreateRegistrationOtpSendLimit1789477800000 } from "./migrations/1789477800000-create-registration-otp-send-limit";
 import { CreateAuthSessionsAndGoogle1789478400000 } from "./migrations/1789478400000-create-auth-sessions-and-google";
+import { AllowRegistrationWithBothContacts1789479000000 } from "./migrations/1789479000000-allow-registration-with-both-contacts";
+import {
+  AuthSessionEntity,
+  GoogleOAuthFlowEntity,
+  GoogleRegistrationSessionEntity,
+  PersonalHealthProfileEntity,
+  RegistrationOtpSendEntity,
+  RegistrationSessionEntity,
+  UserRoleEntity,
+} from "./entities/auth.entity";
+import { UserEntity } from "./entities/user.entity";
 
 export function createDataSource(url: string): DataSource {
   return new DataSource({
@@ -12,6 +23,16 @@ export function createDataSource(url: string): DataSource {
     url,
     synchronize: false,
     logging: false,
+    entities: [
+      UserEntity,
+      UserRoleEntity,
+      PersonalHealthProfileEntity,
+      RegistrationSessionEntity,
+      RegistrationOtpSendEntity,
+      AuthSessionEntity,
+      GoogleOAuthFlowEntity,
+      GoogleRegistrationSessionEntity,
+    ],
     migrationsTransactionMode: "each",
     migrations: [
       CreateCatalogAndRbacTables1788834118637,
@@ -20,6 +41,7 @@ export function createDataSource(url: string): DataSource {
       CreateRegistrationAndPhr1789477200000,
       CreateRegistrationOtpSendLimit1789477800000,
       CreateAuthSessionsAndGoogle1789478400000,
+      AllowRegistrationWithBothContacts1789479000000,
     ],
   });
 }

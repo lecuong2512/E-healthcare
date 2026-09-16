@@ -5,7 +5,7 @@ import { DataSource } from "typeorm";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { DatabaseModule } from "../src/database/database.module";
-import { AuthService } from "../src/auth/auth.service";
+import { AuthService } from "../src/modules/auth/auth.service";
 import { configureApp } from "../src/configure-app";
 import { environment } from "../src/config/environment";
 

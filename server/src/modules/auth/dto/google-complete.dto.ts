@@ -1,6 +1,6 @@
 import { Transform } from "class-transformer";
 import { IsEnum, IsISO8601, IsString, Length, Matches } from "class-validator";
-import { Gender } from "./register.dto";
+import { Gender } from "../../../../../shared/src/enums/gender.enum";
 
 export class GoogleCompleteDto {
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))

@@ -1,6 +1,6 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { createTransport } from "nodemailer";
-import { environment } from "../config/environment";
+import { environment } from "../../config/environment";
 
 @Injectable()
 export class OtpDeliveryService {
@@ -33,7 +33,8 @@ export class OtpDeliveryService {
           subject: "Xác nhận đăng ký E-Healthcare",
           text: message,
         });
-      } else {
+      }
+      if (contact.phoneNumber) {
         if (!environment.SMS_WEBHOOK_URL || !environment.SMS_WEBHOOK_TOKEN)
           throw new Error("SMS not configured");
         const url = new URL(environment.SMS_WEBHOOK_URL);

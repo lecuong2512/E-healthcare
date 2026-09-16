@@ -2,7 +2,7 @@ import { Body, Controller, HttpCode, HttpStatus, Post } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { RegisterDto, VerifyRegisterDto } from "./dto/register.dto";
 import { Throttle } from "@nestjs/throttler";
-import { Public } from "./auth.decorators";
+import { Public } from "../../common/decorators/auth.decorators";
 
 @Controller("auth/register")
 @Public()

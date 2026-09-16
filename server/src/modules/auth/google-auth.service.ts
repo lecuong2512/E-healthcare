@@ -9,8 +9,8 @@ import {
 import { OAuth2Client, CodeChallengeMethod } from "google-auth-library";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { DataSource, EntityManager } from "typeorm";
-import { Role } from "../../../shared/src/enums/role.enum";
-import { environment } from "../config/environment";
+import { Role } from "../../../../shared/src/enums/role.enum";
+import { environment } from "../../config/environment";
 import { GoogleCompleteDto } from "./dto/google-complete.dto";
 import { SessionService } from "./session.service";
 

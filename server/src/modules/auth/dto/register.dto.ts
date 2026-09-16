@@ -10,13 +10,10 @@ import {
   MaxLength,
   ValidateIf,
 } from "class-validator";
-import { PASSWORD_PATTERN } from "../../common/utils/crypto.util";
+import { PASSWORD_PATTERN } from "../../../common/utils/crypto.util";
+import { Gender } from "../../../../../shared/src/enums/gender.enum";
 
-export enum Gender {
-  MALE = "MALE",
-  FEMALE = "FEMALE",
-  OTHER = "OTHER",
-}
+export { Gender } from "../../../../../shared/src/enums/gender.enum";
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === "string" ? value.trim() : value;

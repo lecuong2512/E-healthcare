@@ -4,10 +4,13 @@ import {
   ForbiddenException,
 } from "@nestjs/common";
 import { environment } from "./config/environment";
+import { usesSecureCookies } from "./modules/auth/cookie-security";
 import cookieParser from "cookie-parser";
 import { Request, Response, NextFunction } from "express";
 
 export function configureApp(app: INestApplication): void {
+  // Báo lỗi sớm nếu production vô tình tắt Secure Cookie.
+  usesSecureCookies();
   app.use(cookieParser());
   // Từ chối thao tác xác thực từ origin khác khi đã cấu hình frontend tin cậy.
   app.use((request: Request, _response: Response, next: NextFunction) => {

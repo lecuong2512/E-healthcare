@@ -6,7 +6,9 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { compare } from "bcrypt";
-import { DataSource } from "typeorm";
+import { DataSource, IsNull } from "typeorm";
+import { AuthSessionEntity } from "../../database/entities/auth.entity";
+import { UserEntity, UserStatus } from "../../database/entities/user.entity";
 import { LoginDto } from "./dto/login.dto";
 import { SessionService, IssuedSession } from "./session.service";
 
@@ -32,44 +34,48 @@ export class LoginService {
     const result = await this.database.transaction(
       async (manager): Promise<IssuedSession | HttpException> => {
         // Khóa user để các lần đăng nhập sai đồng thời không làm mất bộ đếm.
-        const [user] = await manager.query(
-          `SELECT *,clock_timestamp() AS now FROM users
-        WHERE LOWER(email)=$1 OR phone_number=$1 OR phone_number=$2 FOR UPDATE`,
-          [identifier, localPhone],
-        );
+        const now = new Date();
+        const users = manager.getRepository(UserEntity);
+        const user = await users
+          .createQueryBuilder("user")
+          .setLock("pessimistic_write")
+          .where("LOWER(user.email) = LOWER(:identifier)", { identifier })
+          .orWhere("user.phoneNumber = :identifier", { identifier })
+          .orWhere("user.phoneNumber = :localPhone", { localPhone })
+          .getOne();
 
-        if (!user || user.status !== "ACTIVE") return this.invalidLogin();
+        if (!user || user.status !== UserStatus.ACTIVE) return this.invalidLogin();
 
-        if (user.login_locked_until && user.login_locked_until > user.now)
-          return this.locked(user.login_locked_until, user.now);
+        if (user.loginLockedUntil && user.loginLockedUntil > now)
+          return this.locked(user.loginLockedUntil, now);
 
-        const attempts = user.login_locked_until
+        const attempts = user.loginLockedUntil
           ? 0
-          : user.failed_login_attempts;
+          : user.failedLoginAttempts;
 
-        if (!user.password_hash ||!(await compare(dto.password, user.password_hash))) {
+        if (!user.passwordHash ||!(await compare(dto.password, user.passwordHash))) {
           const failed = attempts + 1;
           const until =
-            failed >= 5 ? new Date(user.now.getTime() + 1800000) : null;
-          await manager.query(
-            "UPDATE users SET failed_login_attempts=$2,login_locked_until=$3 WHERE id=$1",
-            [user.id, failed, until],
-          );
+            failed >= 5 ? new Date(now.getTime() + 1800000) : null;
+          await users.update(user.id, {
+            failedLoginAttempts: failed,
+            loginLockedUntil: until,
+          });
 
 
           if (until) {
-            await manager.query(
-              "UPDATE auth_sessions SET revoked_at=clock_timestamp() WHERE user_id=$1 AND revoked_at IS NULL",
-              [user.id],
+            await manager.getRepository(AuthSessionEntity).update(
+              { userId: user.id, revokedAt: IsNull() },
+              { revokedAt: now },
             );
-            return this.locked(until, user.now);
+            return this.locked(until, now);
           }
           return this.invalidLogin();
         }
-        await manager.query(
-          "UPDATE users SET failed_login_attempts=0,login_locked_until=NULL WHERE id=$1",
-          [user.id],
-        );
+        await users.update(user.id, {
+          failedLoginAttempts: 0,
+          loginLockedUntil: null,
+        });
         
         return this.sessions.issueSession(
           manager,

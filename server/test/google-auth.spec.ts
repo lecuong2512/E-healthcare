@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { DataSource } from "typeorm";
 import { OAuth2Client } from "google-auth-library";
-import { GoogleAuthService } from "../src/auth/google-auth.service";
-import { SessionService } from "../src/auth/session.service";
+import { GoogleAuthService } from "../src/modules/auth/google-auth.service";
+import { SessionService } from "../src/modules/auth/session.service";
 import { environment } from "../src/config/environment";
 
 jest.mock("google-auth-library", () => ({

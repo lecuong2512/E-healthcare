@@ -2,8 +2,10 @@ import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { createHash, randomUUID } from "node:crypto";
 import { sign, verify, JwtPayload } from "jsonwebtoken";
 import { DataSource, EntityManager } from "typeorm";
-import { Role } from "../../../shared/src/enums/role.enum";
-import { requiredEnvironment } from "../config/environment";
+import { Role } from "../../../../shared/src/enums/role.enum";
+import { requiredEnvironment } from "../../config/environment";
+import { AuthSessionEntity, UserRoleEntity } from "../../database/entities/auth.entity";
+import { UserEntity, UserStatus } from "../../database/entities/user.entity";
 
 export const ACCESS_TTL = 900;
 export const REFRESH_TTL = 604800;
@@ -49,10 +51,7 @@ export class SessionService {
   }
 
   async roleFor(manager: EntityManager, userId: string): Promise<Role> {
-    const roles: { role: Role }[] = await manager.query(
-      "SELECT role FROM user_roles WHERE user_id=$1",
-      [userId],
-    );
+    const roles = await manager.getRepository(UserRoleEntity).findBy({ userId });
     const role = [
       Role.ADMIN,
       Role.RECEPTIONIST,
@@ -70,11 +69,14 @@ export class SessionService {
   ): Promise<IssuedSession> {
     const id = randomUUID();
     const tokens = this.tokens(userId, role, id);
-    await manager.query(
-      `INSERT INTO auth_sessions (id,user_id,refresh_token_hash,expires_at)
-      VALUES ($1,$2,$3,clock_timestamp()+$4 * interval '1 second')`,
-      [id, userId, this.digest(tokens.refreshToken), REFRESH_TTL],
-    );
+    const sessions = manager.getRepository(AuthSessionEntity);
+    await sessions.save(sessions.create({
+      id,
+      userId,
+      refreshTokenHash: this.digest(tokens.refreshToken),
+      expiresAt: new Date(Date.now() + REFRESH_TTL * 1000),
+      revokedAt: null,
+    }));
     return tokens;
   }
 
@@ -83,28 +85,33 @@ export class SessionService {
     const result = await this.database.transaction(
       async (manager): Promise<IssuedSession | UnauthorizedException> => {
         // Cùng thứ tự khóa user -> session với đăng nhập/đăng xuất để tránh deadlock.
-        const [user] = await manager.query(
-          "SELECT *, clock_timestamp() AS now FROM users WHERE id=$1 FOR UPDATE",
-          [claims.userId],
-        );
-        const [session] = await manager.query(
-          "SELECT *,clock_timestamp() AS now FROM auth_sessions WHERE id=$1 AND user_id=$2 FOR UPDATE",
-          [claims.sid, claims.userId],
-        );
-        if (!session || session.revoked_at || session.expires_at <= session.now)
+        const now = new Date();
+        const user = await manager
+          .getRepository(UserEntity)
+          .createQueryBuilder("user")
+          .setLock("pessimistic_write")
+          .where("user.id = :id", { id: claims.userId })
+          .getOne();
+        const sessions = manager.getRepository(AuthSessionEntity);
+        const session = await sessions
+          .createQueryBuilder("session")
+          .setLock("pessimistic_write")
+          .where("session.id = :id AND session.userId = :userId", {
+            id: claims.sid,
+            userId: claims.userId,
+          })
+          .getOne();
+        if (!session || session.revokedAt || session.expiresAt <= now)
           return this.unauthorized();
-        if (session.refresh_token_hash !== this.digest(token!)) {
+        if (session.refreshTokenHash !== this.digest(token!)) {
           // Token cũ bị dùng lại: thu hồi cả phiên, kể cả token mới đã cấp.
-          await manager.query(
-            "UPDATE auth_sessions SET revoked_at=clock_timestamp() WHERE id=$1",
-            [session.id],
-          );
+          await sessions.update(session.id, { revokedAt: now });
           return this.unauthorized();
         }
         if (
           !user ||
-          user.status !== "ACTIVE" ||
-          (user.login_locked_until && user.login_locked_until > user.now)
+          user.status !== UserStatus.ACTIVE ||
+          (user.loginLockedUntil && user.loginLockedUntil > now)
         )
           return this.unauthorized();
         const role = await this.roleFor(manager, user.id);
@@ -114,15 +121,12 @@ export class SessionService {
           session.id,
           Math.min(
             REFRESH_TTL,
-            Math.floor(
-              (session.expires_at.getTime() - session.now.getTime()) / 1000,
-            ),
+            Math.floor((session.expiresAt.getTime() - now.getTime()) / 1000),
           ),
         );
-        await manager.query(
-          "UPDATE auth_sessions SET refresh_token_hash=$2 WHERE id=$1",
-          [session.id, this.digest(tokens.refreshToken)],
-        );
+        await sessions.update(session.id, {
+          refreshTokenHash: this.digest(tokens.refreshToken),
+        });
         return tokens;
       },
     );
@@ -132,16 +136,20 @@ export class SessionService {
 
   async authenticate(token: string | undefined): Promise<AccessClaims> {
     const claims = this.verifyToken(token, "access");
-    const [user] = await this.database.query(
-      `SELECT u.*,clock_timestamp() AS now FROM users u
-      JOIN auth_sessions s ON s.user_id=u.id WHERE u.id=$1 AND s.id=$2
-        AND s.revoked_at IS NULL AND s.expires_at > clock_timestamp()`,
-      [claims.userId, claims.sid],
-    );
+    const now = new Date();
+    const session = await this.database.manager
+      .getRepository(AuthSessionEntity)
+      .findOneBy({ id: claims.sid, userId: claims.userId });
+    const user = await this.database.manager
+      .getRepository(UserEntity)
+      .findOneBy({ id: claims.userId });
     if (
+      !session ||
+      session.revokedAt ||
+      session.expiresAt <= now ||
       !user ||
-      user.status !== "ACTIVE" ||
-      (user.login_locked_until && user.login_locked_until > user.now)
+      user.status !== UserStatus.ACTIVE ||
+      (user.loginLockedUntil && user.loginLockedUntil > now)
     )
       throw this.unauthorized();
     const role = await this.roleFor(this.database.manager, user.id);
@@ -159,9 +167,9 @@ export class SessionService {
     }
 
     
-    await this.database.query(
-      "UPDATE auth_sessions SET revoked_at=clock_timestamp() WHERE id=$1 AND user_id=$2",
-      [claims.sid, claims.userId],
+    await this.database.manager.getRepository(AuthSessionEntity).update(
+      { id: claims.sid, userId: claims.userId },
+      { revokedAt: new Date() },
     );
   }
 

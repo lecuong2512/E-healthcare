@@ -11,13 +11,24 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
-import { DataSource, EntityManager } from "typeorm";
-import { Role } from "../../../shared/src/enums/role.enum";
-import {RegisterOtpResponse,RegisterVerifyResponse} from "../../../shared/src/interfaces/auth.interface";
-import { requiredEnvironment } from "../config/environment";
-import { hashPassword } from "../common/utils/crypto.util";
+import { DataSource, EntityManager, MoreThan } from "typeorm";
+import { Role } from "../../../../shared/src/enums/role.enum";
+import {RegisterOtpResponse,RegisterVerifyResponse} from "../../../../shared/src/interfaces/auth.interface";
+import { requiredEnvironment } from "../../config/environment";
+import { hashPassword } from "../../common/utils/crypto.util";
 import { RegisterDto, VerifyRegisterDto } from "./dto/register.dto";
 import { OtpDeliveryService } from "./otp-delivery.service";
+import {
+  PersonalHealthProfileEntity,
+  RegistrationOtpSendEntity,
+  RegistrationSessionEntity,
+  UserRoleEntity,
+} from "../../database/entities/auth.entity";
+import {
+  UserEntity,
+  UserStatus,
+} from "../../database/entities/user.entity";
+import { Gender } from "../../../../shared/src/enums/gender.enum";
 
 const OTP_TTL_SECONDS = 180;
 const RESEND_SECONDS = 60;
@@ -27,21 +38,6 @@ const MAX_OTP_ATTEMPTS = 5;
 const LOCK_SECONDS = 900;
 const DUPLICATE_MESSAGE =
   "Email hoặc Số điện thoại đã được đăng ký. Vui lòng đăng nhập hoặc sử dụng chức năng quên mật khẩu.";
-
-interface Session {
-  id: string;
-  email: string | null;
-  phone_number: string | null;
-  password_hash: string;
-  full_name: string;
-  gender: string;
-  date_of_birth: string;
-  otp_hash: string;
-  expires_at: Date;
-  sent_at: Date;
-  failed_attempts: number;
-  locked_until: Date | null;
-}
 
 @Injectable()
 export class AuthService {
@@ -57,10 +53,10 @@ export class AuthService {
   }
 
   async requestRegistration(dto: RegisterDto): Promise<RegisterOtpResponse> {
-    if (Boolean(dto.email) === Boolean(dto.phoneNumber)) {
+    if (!dto.email && !dto.phoneNumber) {
       throw new BadRequestException({
         code: "INVALID_CONTACT",
-        message: "Vui lòng cung cấp một Email hoặc Số điện thoại.",
+        message: "Vui lòng cung cấp Email hoặc Số điện thoại.",
       });
     }
     if (
@@ -90,10 +86,14 @@ export class AuthService {
       phoneNumber,
     );
 
-    const [pending]: Session[] = await this.database.query(
-      "SELECT * FROM registration_sessions WHERE email = $1 OR phone_number = $2",
-      [email, phoneNumber],
-    );
+    const pending = await this.database.manager
+      .getRepository(RegistrationSessionEntity)
+      .createQueryBuilder("session")
+      .where("session.email = :email OR session.phoneNumber = :phoneNumber", {
+        email,
+        phoneNumber,
+      })
+      .getOne();
 
     this.assertRequestAllowed(
       pending,
@@ -108,10 +108,15 @@ export class AuthService {
     return this.database.transaction(async (manager) => {
       await this.lockContact(manager, email, phoneNumber);
       await this.assertContactAvailable(manager, email, phoneNumber);
-      const [previous]: Session[] = await manager.query(
-        "SELECT * FROM registration_sessions WHERE email = $1 OR phone_number = $2 FOR UPDATE",
-        [email, phoneNumber],
-      );
+      const sessions = manager.getRepository(RegistrationSessionEntity);
+      const previous = await sessions
+        .createQueryBuilder("session")
+        .setLock("pessimistic_write")
+        .where("session.email = :email OR session.phoneNumber = :phoneNumber", {
+          email,
+          phoneNumber,
+        })
+        .getOne();
 
       const now = await this.databaseNow(manager);
       this.assertRequestAllowed(previous, now);
@@ -122,50 +127,41 @@ export class AuthService {
       await this.delivery.send({ email, phoneNumber }, otp);
       if (phoneNumber) {
         // Lưu lịch sử gửi độc lập với phiên OTP để gửi lại không làm reset hạn mức.
-        await manager.query(
-          `DELETE FROM registration_otp_sends
-          WHERE phone_number = $1 AND sent_at <= clock_timestamp() - $2 * interval '1 second'`,
-          [phoneNumber, SMS_SEND_WINDOW_SECONDS],
-        );
-        await manager.query(
-          "INSERT INTO registration_otp_sends (phone_number) VALUES ($1)",
-          [phoneNumber],
-        );
+        const receipts = manager.getRepository(RegistrationOtpSendEntity);
+        await receipts
+          .createQueryBuilder()
+          .delete()
+          .where("phone_number = :phoneNumber", { phoneNumber })
+          .andWhere("sent_at <= :expiresAt", {
+            expiresAt: new Date(now.getTime() - SMS_SEND_WINDOW_SECONDS * 1000),
+          })
+          .execute();
+        await receipts.save(receipts.create({ phoneNumber, sentAt: now }));
       }
-      if (previous)
-        await manager.query("DELETE FROM registration_sessions WHERE id = $1", [
-          previous.id,
-        ]);
+      if (previous) await sessions.remove(previous);
       // Gửi lại không reset số lần nhập sai; chỉ reset sau khi hết thời gian khóa.
-      const attempts = previous?.locked_until
+      const attempts = previous?.lockedUntil
         ? 0
-        : (previous?.failed_attempts ?? 0);
-      await manager.query(
-        `
-        INSERT INTO registration_sessions
-          (id, email, phone_number, password_hash, full_name, gender, date_of_birth,
-           otp_hash, expires_at, sent_at, failed_attempts)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-          clock_timestamp() + $9 * interval '1 second', clock_timestamp(), $10)
-      `,
-        [
-          registrationId,
-          email,
-          phoneNumber,
-          passwordHash,
-          dto.fullName,
-          dto.gender,
-          dto.dateOfBirth,
-          this.otpHash(registrationId, otp),
-          OTP_TTL_SECONDS,
-          attempts,
-        ],
-      );
+        : (previous?.failedAttempts ?? 0);
+      await sessions.save(sessions.create({
+        id: registrationId,
+        email,
+        phoneNumber,
+        passwordHash,
+        fullName: dto.fullName,
+        gender: dto.gender as Gender,
+        dateOfBirth: dto.dateOfBirth,
+        otpHash: this.otpHash(registrationId, otp),
+        expiresAt: new Date(now.getTime() + OTP_TTL_SECONDS * 1000),
+        sentAt: now,
+        failedAttempts: attempts,
+        lockedUntil: null,
+      }));
       return {
         registrationId,
         expiresIn: OTP_TTL_SECONDS,
         resendAfter: RESEND_SECONDS,
-        channel: email ? "email" : "sms",
+        channel: email && phoneNumber ? "both" : email ? "email" : "sms",
       };
     });
   }
@@ -174,40 +170,41 @@ export class AuthService {
 
   async verifyRegistration(dto: VerifyRegisterDto): Promise<RegisterVerifyResponse> {
     // Luôn khóa thông tin liên hệ trước khi khóa bản ghi, cùng thứ tự với requestRegistration.
-    const [contact]: Session[] = await this.database.query(
-      "SELECT email, phone_number FROM registration_sessions WHERE id = $1",
-      [dto.registrationId],
-    );
+    const contact = await this.database.manager
+      .getRepository(RegistrationSessionEntity)
+      .findOneBy({ id: dto.registrationId });
     if (!contact) throw this.invalidSession();
     try {
       const result = await this.database.transaction(
         async (manager): Promise<RegisterVerifyResponse | HttpException> => {
-          await this.lockContact(manager, contact.email, contact.phone_number);
-          const [session]: Session[] = await manager.query(
-            "SELECT * FROM registration_sessions WHERE id = $1 FOR UPDATE",
-            [dto.registrationId],
-          );
+          await this.lockContact(manager, contact.email, contact.phoneNumber);
+          const sessions = manager.getRepository(RegistrationSessionEntity);
+          const session = await sessions
+            .createQueryBuilder("session")
+            .setLock("pessimistic_write")
+            .where("session.id = :id", { id: dto.registrationId })
+            .getOne();
           if (!session) return this.invalidSession();
           const now = await this.databaseNow(manager);
-          if (session.locked_until && session.locked_until > now)
-            return this.locked(session.locked_until, now);
-          if (session.locked_until || session.expires_at <= now)
+          if (session.lockedUntil && session.lockedUntil > now)
+            return this.locked(session.lockedUntil, now);
+          if (session.lockedUntil || session.expiresAt <= now)
             return this.invalidSession();
           const actual = Buffer.from(
             this.otpHash(dto.registrationId, dto.otp),
             "hex",
           );
-          const expected = Buffer.from(session.otp_hash, "hex");
+          const expected = Buffer.from(session.otpHash, "hex");
           if (!timingSafeEqual(actual, expected)) {
-            const attempts = session.failed_attempts + 1;
+            const attempts = session.failedAttempts + 1;
             const lockUntil =
               attempts >= MAX_OTP_ATTEMPTS
                 ? new Date(now.getTime() + LOCK_SECONDS * 1000)
                 : null;
-            await manager.query(
-              "UPDATE registration_sessions SET failed_attempts = $2, locked_until = $3 WHERE id = $1",
-              [session.id, attempts, lockUntil],
-            );
+            await sessions.update(session.id, {
+              failedAttempts: attempts,
+              lockedUntil: lockUntil,
+            });
             // Trả lỗi thay vì ném ngay để transaction vẫn lưu số lần sai và trạng thái khóa.
             return lockUntil
               ? this.locked(lockUntil, now)
@@ -220,34 +217,26 @@ export class AuthService {
           await this.assertContactAvailable(
             manager,
             session.email,
-            session.phone_number,
+            session.phoneNumber,
           );
-          const [user]: { id: string }[] = await manager.query(
-            `
-          INSERT INTO users (email, phone_number, password_hash, full_name, gender, date_of_birth, status)
-          VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE') RETURNING id
-        `,
-            [
-              session.email,
-              session.phone_number,
-              session.password_hash,
-              session.full_name,
-              session.gender,
-              session.date_of_birth,
-            ],
-          );
-          await manager.query(
-            "INSERT INTO user_roles (user_id, role) VALUES ($1, $2)",
-            [user.id, Role.PATIENT],
-          );
-          const [phr]: { id: string }[] = await manager.query(
-            "INSERT INTO personal_health_profiles (user_id) VALUES ($1) RETURNING id",
-            [user.id],
-          );
-          await manager.query(
-            "DELETE FROM registration_sessions WHERE id = $1",
-            [session.id],
-          );
+          const users = manager.getRepository(UserEntity);
+          const user = await users.save(users.create({
+            email: session.email,
+            phoneNumber: session.phoneNumber,
+            passwordHash: session.passwordHash,
+            fullName: session.fullName,
+            gender: session.gender,
+            dateOfBirth: session.dateOfBirth,
+            status: UserStatus.ACTIVE,
+            failedLoginAttempts: 0,
+            loginLockedUntil: null,
+            googleSubject: null,
+          }));
+          const roles = manager.getRepository(UserRoleEntity);
+          await roles.save(roles.create({ userId: user.id, role: Role.PATIENT }));
+          const profiles = manager.getRepository(PersonalHealthProfileEntity);
+          const phr = await profiles.save(profiles.create({ userId: user.id }));
+          await sessions.remove(session);
           return {
             userId: user.id,
             phrId: phr.id,
@@ -282,19 +271,19 @@ export class AuthService {
   ): Promise<void> {
     if (!phoneNumber) return;
     const now = await this.databaseNow(manager);
-    const receipts: { sent_at: Date }[] = await manager.query(
-      `
-      SELECT sent_at FROM registration_otp_sends
-      WHERE phone_number = $1 AND sent_at > $2::timestamptz - $3 * interval '1 second'
-      ORDER BY sent_at DESC LIMIT $4
-    `,
-      [phoneNumber, now, SMS_SEND_WINDOW_SECONDS, MAX_SMS_SENDS],
-    );
+    const receipts = await manager.getRepository(RegistrationOtpSendEntity).find({
+      where: {
+        phoneNumber,
+        sentAt: MoreThan(new Date(now.getTime() - SMS_SEND_WINDOW_SECONDS * 1000)),
+      },
+      order: { sentAt: "DESC" },
+      take: MAX_SMS_SENDS,
+    });
     if (receipts.length >= MAX_SMS_SENDS) {
       const retryAfter = Math.max(
         1,
         Math.ceil(
-          (receipts[MAX_SMS_SENDS - 1].sent_at.getTime() +
+          (receipts[MAX_SMS_SENDS - 1].sentAt.getTime() +
             SMS_SEND_WINDOW_SECONDS * 1000 -
             now.getTime()) /
             1000,
@@ -314,19 +303,22 @@ export class AuthService {
 
   //  KIỂM TRA KHÓA OTP VÀ THỜI GIAN GỬI LẠI 
 
-  private assertRequestAllowed(previous: Session | undefined, now: Date): void {
-    if (previous?.locked_until && previous.locked_until > now)
-      throw this.locked(previous.locked_until, now);
+  private assertRequestAllowed(
+    previous: RegistrationSessionEntity | null,
+    now: Date,
+  ): void {
+    if (previous?.lockedUntil && previous.lockedUntil > now)
+      throw this.locked(previous.lockedUntil, now);
     if (
       previous &&
-      previous.sent_at.getTime() + RESEND_SECONDS * 1000 > now.getTime()
+      previous.sentAt.getTime() + RESEND_SECONDS * 1000 > now.getTime()
     ) {
       throw new HttpException(
         {
           code: "OTP_RESEND_TOO_SOON",
           message: "Vui lòng chờ trước khi yêu cầu OTP mới.",
           retryAfter: Math.ceil(
-            (previous.sent_at.getTime() +
+            (previous.sentAt.getTime() +
               RESEND_SECONDS * 1000 -
               now.getTime()) /
               1000,
@@ -344,10 +336,15 @@ export class AuthService {
     email: string | null,
     phoneNumber: string | null,
   ): Promise<void> {
-    await manager.query(
-      "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-      [email ? `register:email:${email}` : `register:phone:${phoneNumber}`],
-    );
+    const contacts = [
+      ...(email ? [`register:email:${email}`] : []),
+      ...(phoneNumber ? [`register:phone:${phoneNumber}`] : []),
+    ].sort();
+    for (const contact of contacts)
+      await manager.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+        [contact],
+      );
   }
 
   //  LẤY THỜI GIAN TỪ CƠ SỞ DỮ LIỆU 
@@ -369,11 +366,13 @@ export class AuthService {
     const phoneVariants = phone?.startsWith("+84")
       ? [phone, `0${phone.slice(3)}`]
       : [phone];
-    const users: unknown[] = await manager.query(
-      "SELECT id FROM users WHERE LOWER(email) = $1 OR phone_number = ANY($2::varchar[]) LIMIT 1",
-      [email, phoneVariants],
-    );
-    if (users.length) throw this.duplicateContact();
+    const user = await manager
+      .getRepository(UserEntity)
+      .createQueryBuilder("user")
+      .where("LOWER(user.email) = LOWER(:email)", { email })
+      .orWhere("user.phoneNumber IN (:...phoneVariants)", { phoneVariants })
+      .getOne();
+    if (user) throw this.duplicateContact();
   }
 
   //  TẠO LỖI THÔNG TIN LIÊN HỆ TRÙNG 

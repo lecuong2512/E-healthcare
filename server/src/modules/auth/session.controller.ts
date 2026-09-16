@@ -7,29 +7,24 @@ import {
   Req,
   Res,
 } from "@nestjs/common";
-import { Request, Response, CookieOptions } from "express";
+import { Request, Response } from "express";
 import { Throttle } from "@nestjs/throttler";
-import { Role } from "../../../shared/src/enums/role.enum";
-import { Public, Roles } from "./auth.decorators";
+import { Role } from "../../../../shared/src/enums/role.enum";
+import { Public, Roles } from "../../common/decorators/auth.decorators";
 import { LoginDto } from "./dto/login.dto";
 import { LoginService } from "./login.service";
 import { SessionService, IssuedSession, REFRESH_TTL } from "./session.service";
-import { AuthenticatedRequest } from "./auth.guards";
+import { AuthenticatedRequest } from "../../common/guards/authenticated-request";
+import { refreshCookieOptions } from "./cookie-security";
 
 export const REFRESH_COOKIE = "ehealth_refresh";
-export const refreshCookieOptions: CookieOptions = {
-  httpOnly: true,
-  secure: true,
-  sameSite: "strict",
-  path: "/api/v1/auth",
-  maxAge: REFRESH_TTL * 1000,
-};
 
 export function writeSession(response: Response, session: IssuedSession) {
   response.setHeader("Cache-Control", "no-store");
   response.cookie(REFRESH_COOKIE, session.refreshToken, {
-    ...refreshCookieOptions,
-    maxAge: (session.refreshExpiresIn ?? REFRESH_TTL) * 1000,
+    ...refreshCookieOptions(
+      (session.refreshExpiresIn ?? REFRESH_TTL) * 1000,
+    ),
   });
   return { accessToken: session.accessToken, role: session.role };
 }
@@ -65,7 +60,10 @@ export class SessionController {
         await this.sessions.refresh(request.cookies?.[REFRESH_COOKIE]),
       );
     } catch (error) {
-      response.clearCookie(REFRESH_COOKIE, refreshCookieOptions);
+      response.clearCookie(
+        REFRESH_COOKIE,
+        refreshCookieOptions(REFRESH_TTL * 1000),
+      );
       throw error;
     }
   }
@@ -78,7 +76,10 @@ export class SessionController {
     @Res({ passthrough: true }) response: Response,
   ) {
     await this.sessions.logout(request.cookies?.[REFRESH_COOKIE]);
-    response.clearCookie(REFRESH_COOKIE, refreshCookieOptions);
+    response.clearCookie(
+      REFRESH_COOKIE,
+      refreshCookieOptions(REFRESH_TTL * 1000),
+    );
   }
 
   @Get("me")

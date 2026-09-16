@@ -10,7 +10,7 @@ import { OAuth2Client } from "google-auth-library";
 import request from "supertest";
 import { DataSource } from "typeorm";
 import { AppModule } from "../src/app.module";
-import { Roles } from "../src/auth/auth.decorators";
+import { Roles } from "../src/common/decorators/auth.decorators";
 import { configureApp } from "../src/configure-app";
 import { environment } from "../src/config/environment";
 import { DatabaseModule } from "../src/database/database.module";

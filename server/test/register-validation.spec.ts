@@ -2,7 +2,7 @@ import { BadRequestException } from "@nestjs/common";
 import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 import { compare, getRounds } from "bcrypt";
-import { RegisterDto, VerifyRegisterDto } from "../src/auth/dto/register.dto";
+import { RegisterDto, VerifyRegisterDto } from "../src/modules/auth/dto/register.dto";
 import { hashPassword } from "../src/common/utils/crypto.util";
 import { configureApp } from "../src/configure-app";
 import { INestApplication } from "@nestjs/common";

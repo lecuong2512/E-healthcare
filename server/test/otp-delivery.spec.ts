@@ -1,4 +1,4 @@
-import { OtpDeliveryService } from "../src/auth/otp-delivery.service";
+import { OtpDeliveryService } from "../src/modules/auth/otp-delivery.service";
 import { environment } from "../src/config/environment";
 import { createTransport } from "nodemailer";
 

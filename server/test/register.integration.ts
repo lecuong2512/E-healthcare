@@ -8,13 +8,13 @@ import { DataSource } from "typeorm";
 import { AppModule } from "../src/app.module";
 import { DatabaseModule } from "../src/database/database.module";
 import { createDataSource } from "../src/database/database-options";
-import { OtpDeliveryService } from "../src/auth/otp-delivery.service";
-import { AuthService } from "../src/auth/auth.service";
+import { OtpDeliveryService } from "../src/modules/auth/otp-delivery.service";
+import { AuthService } from "../src/modules/auth/auth.service";
 import { configureApp } from "../src/configure-app";
 import { environment } from "../src/config/environment";
 import { ThrottlerGuard } from "@nestjs/throttler";
 import * as passwordUtils from "../src/common/utils/crypto.util";
-import { Gender } from "../src/auth/dto/register.dto";
+import { Gender } from "../src/modules/auth/dto/register.dto";
 
 // Bộ kiểm thử chỉ chạy với TEST_DATABASE_URL trỏ đến CSDL riêng dành cho kiểm thử.
 // Không xóa dữ liệu nếu tên CSDL không có tiền tố bắt buộc dành cho kiểm thử.
@@ -90,7 +90,6 @@ describe("SRS-AUTH-01 HTTP + real PostgreSQL", () => {
     await register({ dateOfBirth: "2099-01-01" }).expect(400);
     await register({ dateOfBirth: "2001-02-29" }).expect(400);
     await register({ role: "ROLE_ADMIN" }).expect(400);
-    await register({ phoneNumber: "0901234567" }).expect(400);
     await register({ email: undefined }).expect(400);
     await register({ password: "Aa1!" + "é".repeat(35) }).expect(400);
     expect(send).not.toHaveBeenCalled();
@@ -174,6 +173,25 @@ describe("SRS-AUTH-01 HTTP + real PostgreSQL", () => {
     await register({ email: undefined, phoneNumber: "+84901234567" }).expect(
       409,
     );
+  });
+
+  test("accepts both contacts, delivers one OTP through both channels and stores both", async () => {
+    const registration = await register({ phoneNumber: "0901234567" }).expect(
+      202,
+    );
+    expect(registration.body.channel).toBe("both");
+    expect(send).toHaveBeenCalledWith(
+      { email: payload.email, phoneNumber: "+84901234567" },
+      expect.any(String),
+    );
+    await verify(registration.body.registrationId).expect(201);
+    const [user] = await database.query(
+      "SELECT email, phone_number FROM users",
+    );
+    expect(user).toMatchObject({
+      email: payload.email,
+      phone_number: "+84901234567",
+    });
   });
 
   test("stores the full 16-character E.164 representation without truncation", async () => {

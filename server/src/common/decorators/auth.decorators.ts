@@ -1,5 +1,5 @@
 import { SetMetadata } from "@nestjs/common";
-import { Role } from "../../../shared/src/enums/role.enum";
+import { Role } from "../../../../shared/src/enums/role.enum";
 
 export const PUBLIC_ROUTE = "auth:public";
 export const REQUIRED_ROLES = "auth:roles";
