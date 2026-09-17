@@ -17,7 +17,10 @@ export class DoctorScheduleEntity {
   @Column({ name: 'doctor_id', type: 'uuid' })
   doctorId!: string;
 
-  @ManyToOne(() => DoctorEntity)
+  @ManyToOne(() => DoctorEntity, {
+    onDelete: 'RESTRICT',
+    onUpdate: 'CASCADE',
+  })
   @JoinColumn({ name: 'doctor_id' })
   doctor!: DoctorEntity;
 
@@ -30,7 +33,7 @@ export class DoctorScheduleEntity {
   @Column({ name: 'end_time', type: 'time' })
   endTime!: string;
 
-  @Column({ type: 'varchar', length: 20, default: SlotStatus.AVAILABLE })
+  @Column({ type: 'varchar', length: 20 })
   status!: SlotStatus;
 
   @VersionColumn({ default: 0 })

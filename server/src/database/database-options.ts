@@ -6,6 +6,7 @@ import { CreateRegistrationAndPhr1789477200000 } from "./migrations/178947720000
 import { CreateRegistrationOtpSendLimit1789477800000 } from "./migrations/1789477800000-create-registration-otp-send-limit";
 import { CreateAuthSessionsAndGoogle1789478400000 } from "./migrations/1789478400000-create-auth-sessions-and-google";
 import { AllowRegistrationWithBothContacts1789479000000 } from "./migrations/1789479000000-allow-registration-with-both-contacts";
+import { AddDoctorScheduleAndSearchIndexes1789565400000 } from "./migrations/1789565400000-add-doctor-schedule-and-search-indexes";
 import {
   AuthSessionEntity,
   GoogleOAuthFlowEntity,
@@ -16,6 +17,9 @@ import {
   UserRoleEntity,
 } from "./entities/auth.entity";
 import { UserEntity } from "./entities/user.entity";
+import { DoctorEntity } from "./entities/doctor.entity";
+import { DoctorScheduleEntity } from "./entities/doctor-schedule.entity";
+import { SpecialtyEntity } from "./entities/specialty.entity";
 
 export function createDataSource(url: string): DataSource {
   return new DataSource({
@@ -25,6 +29,9 @@ export function createDataSource(url: string): DataSource {
     logging: false,
     entities: [
       UserEntity,
+      DoctorEntity,
+      DoctorScheduleEntity,
+      SpecialtyEntity,
       UserRoleEntity,
       PersonalHealthProfileEntity,
       RegistrationSessionEntity,
@@ -42,6 +49,7 @@ export function createDataSource(url: string): DataSource {
       CreateRegistrationOtpSendLimit1789477800000,
       CreateAuthSessionsAndGoogle1789478400000,
       AllowRegistrationWithBothContacts1789479000000,
+      AddDoctorScheduleAndSearchIndexes1789565400000,
     ],
   });
 }
