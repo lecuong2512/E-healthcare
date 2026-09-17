@@ -1,54 +1,203 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { DataSource, EntityManager } from 'typeorm';
-import dayjs from 'dayjs';
-import isoWeek from 'dayjs/plugin/isoWeek';
-import timezone from 'dayjs/plugin/timezone';
-import utc from 'dayjs/plugin/utc';
-import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
-import { SlotStatus, SHIFT_TIME_RANGES } from '@shared/enums';
-import { CreateDoctorScheduleDto } from './dto/create-schedule.dto';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { DataSource, EntityManager, QueryFailedError } from "typeorm";
+import dayjs from "dayjs";
+import isoWeek from "dayjs/plugin/isoWeek";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
+import { DoctorEntity } from "../../database/entities/doctor.entity";
+import { DoctorScheduleEntity } from "../../database/entities/doctor-schedule.entity";
+import { SlotStatus, SHIFT_TIME_RANGES } from "@shared/enums";
+import { CreateDoctorScheduleDto } from "./dto/create-schedule.dto";
+import { ScheduleRangeDto } from "./dto/schedule-range.dto";
+import { UpdateDoctorScheduleDto } from "./dto/update-schedule.dto";
+import { DoctorCacheService } from "./doctor-cache.service";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isoWeek);
 
-const TZ = 'Asia/Ho_Chi_Minh';
+const TIME_ZONE = "Asia/Ho_Chi_Minh";
+const OVERLAP_ERROR_CODE = "23P01";
+
+export interface DoctorScheduleResult {
+  doctorId: string;
+  roomNumber: string;
+  slots: DoctorScheduleEntity[];
+}
 
 @Injectable()
 export class DoctorScheduleService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly cache: DoctorCacheService,
+  ) {}
 
   async createSchedule(
     doctorId: string,
     dto: CreateDoctorScheduleDto,
-  ): Promise<DoctorScheduleEntity[]> {
+  ): Promise<DoctorScheduleResult> {
     this.assertRegistrationDeadline(dto.date);
-
+    const doctor = await this.findDoctor(doctorId);
     const { startTime, endTime } = SHIFT_TIME_RANGES[dto.shiftType];
-    const slots = this.generateSlots(startTime, endTime, dto.slotDurationMinutes);
+    const slots = this.generateSlots(
+      startTime,
+      endTime,
+      dto.slotDurationMinutes,
+    );
 
-    return this.dataSource.transaction(async (manager) => {
-      const created: DoctorScheduleEntity[] = [];
-      for (const slot of slots) {
-        await this.assertNoOverlap(doctorId, dto.date, slot.startTime, slot.endTime, manager);
-        const entity = manager.create(DoctorScheduleEntity, {
+    try {
+      const saved = await this.dataSource.transaction(async (manager) => {
+        await this.assertNoOverlap(
           doctorId,
-          date: dto.date,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          status: SlotStatus.AVAILABLE,
-        });
-        created.push(await manager.save(entity));
-      }
-      return created;
-    });
+          dto.date,
+          startTime,
+          endTime,
+          manager,
+        );
+        const entities = slots.map((slot) =>
+          manager.create(DoctorScheduleEntity, {
+            doctorId,
+            date: dto.date,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            status: SlotStatus.AVAILABLE,
+          }),
+        );
+        return manager.save(entities);
+      });
+      await this.cache.invalidateDoctorData(doctorId);
+      return { doctorId, roomNumber: doctor.roomNumber, slots: saved };
+    } catch (error) {
+      this.rethrowOverlap(error);
+    }
   }
 
-  private generateSlots(shiftStart: string, shiftEnd: string, durationMinutes: number) {
-    const slots: { startTime: string; endTime: string }[] = [];
+  async getSchedules(
+    doctorId: string,
+    range: ScheduleRangeDto,
+  ): Promise<DoctorScheduleResult> {
+    const doctor = await this.findDoctor(doctorId);
+    if (range.from && range.to && range.from > range.to) {
+      throw new BadRequestException(
+        "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.",
+      );
+    }
+
+    const query = this.dataSource
+      .getRepository(DoctorScheduleEntity)
+      .createQueryBuilder("schedule")
+      .where("schedule.doctor_id = :doctorId", { doctorId })
+      .orderBy("schedule.date", "ASC")
+      .addOrderBy("schedule.start_time", "ASC");
+    if (range.from)
+      query.andWhere("schedule.date >= :from", { from: range.from });
+    if (range.to) query.andWhere("schedule.date <= :to", { to: range.to });
+
+    return {
+      doctorId,
+      roomNumber: doctor.roomNumber,
+      slots: await query.getMany(),
+    };
+  }
+
+  async updateSchedule(
+    doctorId: string,
+    scheduleId: string,
+    dto: UpdateDoctorScheduleDto,
+  ): Promise<DoctorScheduleEntity> {
+    const updated = await this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(DoctorScheduleEntity);
+      const schedule = await repository.findOneBy({ id: scheduleId, doctorId });
+      if (!schedule)
+        throw new NotFoundException("Không tìm thấy khung giờ khám.");
+      this.assertAvailable(schedule);
+
+      const date = dto.date ?? schedule.date;
+      const startTime = this.normalizeTime(dto.startTime ?? schedule.startTime);
+      const endTime = this.normalizeTime(dto.endTime ?? schedule.endTime);
+      this.assertTimeRange(startTime, endTime);
+      this.assertRegistrationDeadline(date);
+      await this.assertNoOverlap(
+        doctorId,
+        date,
+        startTime,
+        endTime,
+        manager,
+        scheduleId,
+      );
+
+      try {
+        const result = await repository
+          .createQueryBuilder()
+          .update(DoctorScheduleEntity)
+          .set({
+            date,
+            startTime,
+            endTime,
+            version: () => "version + 1",
+          })
+          .where("id = :scheduleId", { scheduleId })
+          .andWhere("doctor_id = :doctorId", { doctorId })
+          .andWhere("status = :status", { status: SlotStatus.AVAILABLE })
+          .andWhere("version = :version", { version: dto.version })
+          .execute();
+        if (result.affected !== 1) {
+          throw new ConflictException(
+            "Khung giờ đã được đặt hoặc vừa được thay đổi bởi yêu cầu khác.",
+          );
+        }
+      } catch (error) {
+        this.rethrowOverlap(error);
+      }
+
+      return (await repository.findOneBy({ id: scheduleId }))!;
+    });
+    await this.cache.invalidateDoctorData(doctorId);
+    return updated;
+  }
+
+  async deleteSchedule(doctorId: string, scheduleId: string): Promise<void> {
+    const repository = this.dataSource.getRepository(DoctorScheduleEntity);
+    const result = await repository
+      .createQueryBuilder()
+      .delete()
+      .from(DoctorScheduleEntity)
+      .where("id = :scheduleId", { scheduleId })
+      .andWhere("doctor_id = :doctorId", { doctorId })
+      .andWhere("status = :status", { status: SlotStatus.AVAILABLE })
+      .execute();
+    if (result.affected !== 1) {
+      const exists = await repository.existsBy({ id: scheduleId, doctorId });
+      if (!exists)
+        throw new NotFoundException("Không tìm thấy khung giờ khám.");
+      throw new ConflictException(
+        "Không thể hủy khung giờ đang được giữ chỗ hoặc đã có bệnh nhân đặt.",
+      );
+    }
+    await this.cache.invalidateDoctorData(doctorId);
+  }
+
+  private async findDoctor(doctorId: string): Promise<DoctorEntity> {
+    const doctor = await this.dataSource
+      .getRepository(DoctorEntity)
+      .findOneBy({ id: doctorId });
+    if (!doctor) throw new NotFoundException("Không tìm thấy bác sĩ.");
+    return doctor;
+  }
+
+  private generateSlots(
+    shiftStart: string,
+    shiftEnd: string,
+    durationMinutes: number,
+  ): Array<{ startTime: string; endTime: string }> {
+    const slots: Array<{ startTime: string; endTime: string }> = [];
     let cursor = this.toMinutes(shiftStart);
     const end = this.toMinutes(shiftEnd);
-
     while (cursor + durationMinutes <= end) {
       slots.push({
         startTime: this.toTimeString(cursor),
@@ -60,31 +209,61 @@ export class DoctorScheduleService {
   }
 
   private toMinutes(time: string): number {
-    const [h, m] = time.split(':').map(Number);
-    return h * 60 + m;
+    const [hours, minutes] = time.split(":").map(Number);
+    return hours * 60 + minutes;
   }
 
   private toTimeString(totalMinutes: number): string {
-    const h = Math.floor(totalMinutes / 60).toString().padStart(2, '0');
-    const m = (totalMinutes % 60).toString().padStart(2, '0');
-    return `${h}:${m}:00`;
+    const hours = Math.floor(totalMinutes / 60)
+      .toString()
+      .padStart(2, "0");
+    const minutes = (totalMinutes % 60).toString().padStart(2, "0");
+    return `${hours}:${minutes}:00`;
   }
 
-  private assertRegistrationDeadline(dateStr: string): void {
-    const targetDate = dayjs.tz(dateStr, TZ);
-    const now = dayjs().tz(TZ);
+  private normalizeTime(time: string): string {
+    return time.length === 5 ? `${time}:00` : time;
+  }
 
-    const startOfNextWeek = now.add(1, 'week').startOf('isoWeek');
-    const endOfNextWeek = startOfNextWeek.endOf('isoWeek');
+  private assertTimeRange(startTime: string, endTime: string): void {
+    if (this.toMinutes(endTime) <= this.toMinutes(startTime)) {
+      throw new BadRequestException("Giờ kết thúc phải sau giờ bắt đầu.");
+    }
+  }
+
+  private assertRegistrationDeadline(date: string): void {
+    const now = dayjs().tz(TIME_ZONE);
+    const targetDate = dayjs.tz(date, TIME_ZONE);
+    if (targetDate.isBefore(now.startOf("day"))) {
+      throw new BadRequestException("Không thể khai báo lịch trong quá khứ.");
+    }
+
+    const startOfNextWeek = now.add(1, "week").startOf("isoWeek");
+    const endOfNextWeek = startOfNextWeek.endOf("isoWeek");
     const isNextWeek =
-      (targetDate.isAfter(startOfNextWeek) || targetDate.isSame(startOfNextWeek)) &&
-      (targetDate.isBefore(endOfNextWeek) || targetDate.isSame(endOfNextWeek));
-
+      !targetDate.isBefore(startOfNextWeek) &&
+      !targetDate.isAfter(endOfNextWeek);
     if (!isNextWeek) return;
 
-    const deadline = now.startOf('isoWeek').add(4, 'day').hour(17).minute(0).second(0);
-    if (now.isAfter(deadline)) {
-      throw new BadRequestException('Đã quá hạn đăng ký lịch cho tuần sau (trước 17:00 Thứ Sáu)');
+    const deadline = now
+      .startOf("isoWeek")
+      .add(4, "day")
+      .hour(17)
+      .minute(0)
+      .second(0)
+      .millisecond(0);
+    if (!now.isBefore(deadline)) {
+      throw new BadRequestException(
+        "Đã quá hạn đăng ký lịch cho tuần sau (trước 17:00 Thứ Sáu).",
+      );
+    }
+  }
+
+  private assertAvailable(schedule: DoctorScheduleEntity): void {
+    if (schedule.status !== SlotStatus.AVAILABLE) {
+      throw new ConflictException(
+        "Không thể sửa khung giờ đang được giữ chỗ hoặc đã có bệnh nhân đặt.",
+      );
     }
   }
 
@@ -94,17 +273,36 @@ export class DoctorScheduleService {
     startTime: string,
     endTime: string,
     manager: EntityManager,
+    excludedId?: string,
   ): Promise<void> {
-    const overlapCount = await manager
+    const query = manager
       .getRepository(DoctorScheduleEntity)
-      .createQueryBuilder('ds')
-      .where('ds.doctor_id = :doctorId', { doctorId })
-      .andWhere('ds.date = :date', { date })
-      .andWhere('ds.start_time < :endTime AND ds.end_time > :startTime', { startTime, endTime })
-      .getCount();
-
-    if (overlapCount > 0) {
-      throw new BadRequestException('Slot bị trùng hoặc chồng giờ với ca đã khai báo');
+      .createQueryBuilder("schedule")
+      .where("schedule.doctor_id = :doctorId", { doctorId })
+      .andWhere("schedule.date = :date", { date })
+      .andWhere(
+        "schedule.start_time < :endTime AND schedule.end_time > :startTime",
+        { startTime, endTime },
+      );
+    if (excludedId)
+      query.andWhere("schedule.id <> :excludedId", { excludedId });
+    if ((await query.getCount()) > 0) {
+      throw new ConflictException(
+        "Khung giờ bị trùng hoặc chồng giờ với lịch đã khai báo.",
+      );
     }
+  }
+
+  private rethrowOverlap(error: unknown): never {
+    if (error instanceof ConflictException) throw error;
+    if (
+      error instanceof QueryFailedError &&
+      (error.driverError as { code?: string }).code === OVERLAP_ERROR_CODE
+    ) {
+      throw new ConflictException(
+        "Khung giờ bị trùng hoặc chồng giờ với lịch đã khai báo.",
+      );
+    }
+    throw error;
   }
 }
