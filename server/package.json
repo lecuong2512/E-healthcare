@@ -5,10 +5,10 @@
   "description": "NestJS Backend API for E-Healthcare Portal",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/server/src/main.js",
-    "start:dev": "ts-node src/main.ts",
-    "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
-    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
+    "start": "node server/dist/server/src/main.js",
+    "start:dev": "ts-node server/src/main.ts",
+    "migration:run": "typeorm-ts-node-commonjs migration:run -d server/src/database/data-source.ts",
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d server/src/database/data-source.ts",
     "test": "jest --runInBand",
     "test:integration": "jest --runInBand --config jest.integration.config.cjs"
   },
@@ -27,6 +27,7 @@
     "nodemailer": "^10.0.10",
     "pg": "^8.16.0",
     "reflect-metadata": "^0.2.2",
+    "redis": "^5.0.14",
     "rxjs": "^7.8.2",
     "typeorm": "^0.3.28"
   },
@@ -42,6 +43,7 @@
     "@types/supertest": "^6.0.3",
     "jest": "^30.0.0",
     "jest-util": "^30.0.0",
+    "js-tokens": "^4.0.0",
     "supertest": "^7.1.0",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",

@@ -1,16 +1,20 @@
-import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { DoctorEntity } from '../../database/entities/doctor.entity';
-import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
-import { DoctorScheduleController } from './doctor-schedule.controller';
-import { DoctorScheduleService } from './doctor-schedule.service';
-
+import { Module } from "@nestjs/common";
+import { OwnDoctorGuard } from "../../common/guards/own-doctor.guard";
+import { DatabaseModule } from "../../database/database.module";
+import { DoctorScheduleController } from "./doctor-schedule.controller";
+import { DoctorScheduleService } from "./doctor-schedule.service";
+import { DoctorCacheService } from "./doctor-cache.service";
+import { DoctorSearchController } from "./doctor-search.controller";
+import { DoctorSearchService } from "./doctor-search.service";
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([DoctorEntity, DoctorScheduleEntity]),
+  imports: [DatabaseModule],
+  controllers: [DoctorScheduleController, DoctorSearchController],
+  providers: [
+    DoctorScheduleService,
+    DoctorSearchService,
+    DoctorCacheService,
+    OwnDoctorGuard,
   ],
-  controllers: [DoctorScheduleController],
-  providers: [DoctorScheduleService],
 })
 export class DoctorModule {}
