@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    "paths": {
+      "@shared/*": ["../shared/src/*"]
+    },
     "module": "commonjs",
     "target": "ES2022",
     "lib": ["ES2022"],

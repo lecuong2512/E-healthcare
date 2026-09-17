@@ -16,6 +16,10 @@ import {
   UserRoleEntity,
 } from "./entities/auth.entity";
 import { UserEntity } from "./entities/user.entity";
+import { SpecialtyEntity } from "./entities/specialty.entity";
+import { DoctorEntity } from "./entities/doctor.entity";
+import { DoctorScheduleEntity } from "./entities/doctor-schedule.entity";
+import { AppointmentEntity } from "./entities/appointment.entity";
 
 export function createDataSource(url: string): DataSource {
   return new DataSource({
@@ -32,6 +36,10 @@ export function createDataSource(url: string): DataSource {
       AuthSessionEntity,
       GoogleOAuthFlowEntity,
       GoogleRegistrationSessionEntity,
+      SpecialtyEntity,
+      DoctorEntity,
+      DoctorScheduleEntity,
+      AppointmentEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
