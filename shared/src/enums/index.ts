@@ -4,3 +4,4 @@ export * from "./appointment-status.enum";
 export * from "./payment-status.enum";
 export * from "./gender.enum";
 export * from "./user-status.enum";
+export * from "./shift-type.enum";

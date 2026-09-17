@@ -8,9 +8,10 @@ import {
 import { compare } from "bcrypt";
 import { DataSource, IsNull } from "typeorm";
 import { AuthSessionEntity } from "../../database/entities/auth.entity";
-import { UserEntity, UserStatus } from "../../database/entities/user.entity";
+import { UserEntity } from "../../database/entities/user.entity";
 import { LoginDto } from "./dto/login.dto";
 import { SessionService, IssuedSession } from "./session.service";
+import { UserStatus } from "@shared/enums";
 
 @Injectable()
 export class LoginService {

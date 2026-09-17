@@ -7,27 +7,27 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { User } from './user.entity';
-import { Specialty } from './specialty.entity';
+import { UserEntity } from './user.entity';
+import { SpecialtyEntity } from './specialty.entity';
 
 @Entity('doctors')
-export class Doctor {
+export class DoctorEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
   @Column({ name: 'user_id', type: 'uuid' })
   userId!: string;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => UserEntity)
   @JoinColumn({ name: 'user_id' })
-  user!: User;
+  user!: UserEntity;
 
   @Column({ name: 'specialty_id', type: 'uuid' })
   specialtyId!: string;
 
-  @ManyToOne(() => Specialty)
+  @ManyToOne(() => SpecialtyEntity)
   @JoinColumn({ name: 'specialty_id' })
-  specialty!: Specialty;
+  specialty!: SpecialtyEntity;
 
   @Column({ name: 'license_number', type: 'varchar', length: 50 })
   licenseNumber!: string;

@@ -6,20 +6,20 @@ import {
   JoinColumn,
   VersionColumn,
 } from 'typeorm';
-import { Doctor } from './doctor.entity';
+import { DoctorEntity } from './doctor.entity';
 import { SlotStatus } from '@shared/enums';
 
 @Entity('doctor_schedules')
-export class DoctorSchedule {
+export class DoctorScheduleEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
   @Column({ name: 'doctor_id', type: 'uuid' })
   doctorId!: string;
 
-  @ManyToOne(() => Doctor)
+  @ManyToOne(() => DoctorEntity)
   @JoinColumn({ name: 'doctor_id' })
-  doctor!: Doctor;
+  doctor!: DoctorEntity;
 
   @Column({ type: 'date' })
   date!: string;

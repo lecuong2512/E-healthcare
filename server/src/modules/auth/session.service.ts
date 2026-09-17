@@ -5,7 +5,8 @@ import { DataSource, EntityManager } from "typeorm";
 import { Role } from "../../../../shared/src/enums/role.enum";
 import { requiredEnvironment } from "../../config/environment";
 import { AuthSessionEntity, UserRoleEntity } from "../../database/entities/auth.entity";
-import { UserEntity, UserStatus } from "../../database/entities/user.entity";
+import { UserEntity } from "../../database/entities/user.entity";
+import { UserStatus } from "@shared/enums";
 
 export const ACCESS_TTL = 900;
 export const REFRESH_TTL = 604800;

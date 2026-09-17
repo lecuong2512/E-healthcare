@@ -13,7 +13,10 @@ import {
 } from "node:crypto";
 import { DataSource, EntityManager, MoreThan } from "typeorm";
 import { Role } from "../../../../shared/src/enums/role.enum";
-import {RegisterOtpResponse,RegisterVerifyResponse} from "../../../../shared/src/interfaces/auth.interface";
+import {
+  RegisterOtpResponse,
+  RegisterVerifyResponse,
+} from "../../../../shared/src/interfaces/auth.interface";
 import { requiredEnvironment } from "../../config/environment";
 import { hashPassword } from "../../common/utils/crypto.util";
 import { RegisterDto, VerifyRegisterDto } from "./dto/register.dto";
@@ -24,11 +27,9 @@ import {
   RegistrationSessionEntity,
   UserRoleEntity,
 } from "../../database/entities/auth.entity";
-import {
-  UserEntity,
-  UserStatus,
-} from "../../database/entities/user.entity";
+import { UserEntity } from "../../database/entities/user.entity";
 import { Gender } from "../../../../shared/src/enums/gender.enum";
+import { UserStatus } from "@shared/enums";
 
 const OTP_TTL_SECONDS = 180;
 const RESEND_SECONDS = 60;
@@ -100,7 +101,6 @@ export class AuthService {
       await this.databaseNow(this.database.manager),
     );
 
-
     await this.assertSmsSendAllowed(this.database.manager, phoneNumber);
     // Băm BCrypt trước khi lưu phiên chờ để không lưu mật khẩu dạng plaintext .
     const passwordHash = await hashPassword(dto.password);
@@ -143,20 +143,22 @@ export class AuthService {
       const attempts = previous?.lockedUntil
         ? 0
         : (previous?.failedAttempts ?? 0);
-      await sessions.save(sessions.create({
-        id: registrationId,
-        email,
-        phoneNumber,
-        passwordHash,
-        fullName: dto.fullName,
-        gender: dto.gender as Gender,
-        dateOfBirth: dto.dateOfBirth,
-        otpHash: this.otpHash(registrationId, otp),
-        expiresAt: new Date(now.getTime() + OTP_TTL_SECONDS * 1000),
-        sentAt: now,
-        failedAttempts: attempts,
-        lockedUntil: null,
-      }));
+      await sessions.save(
+        sessions.create({
+          id: registrationId,
+          email,
+          phoneNumber,
+          passwordHash,
+          fullName: dto.fullName,
+          gender: dto.gender as Gender,
+          dateOfBirth: dto.dateOfBirth,
+          otpHash: this.otpHash(registrationId, otp),
+          expiresAt: new Date(now.getTime() + OTP_TTL_SECONDS * 1000),
+          sentAt: now,
+          failedAttempts: attempts,
+          lockedUntil: null,
+        }),
+      );
       return {
         registrationId,
         expiresIn: OTP_TTL_SECONDS,
@@ -168,7 +170,9 @@ export class AuthService {
 
   // XÁC MINH OTP VÀ TẠO TÀI KHOẢN
 
-  async verifyRegistration(dto: VerifyRegisterDto): Promise<RegisterVerifyResponse> {
+  async verifyRegistration(
+    dto: VerifyRegisterDto,
+  ): Promise<RegisterVerifyResponse> {
     // Luôn khóa thông tin liên hệ trước khi khóa bản ghi, cùng thứ tự với requestRegistration.
     const contact = await this.database.manager
       .getRepository(RegistrationSessionEntity)
@@ -220,20 +224,24 @@ export class AuthService {
             session.phoneNumber,
           );
           const users = manager.getRepository(UserEntity);
-          const user = await users.save(users.create({
-            email: session.email,
-            phoneNumber: session.phoneNumber,
-            passwordHash: session.passwordHash,
-            fullName: session.fullName,
-            gender: session.gender,
-            dateOfBirth: session.dateOfBirth,
-            status: UserStatus.ACTIVE,
-            failedLoginAttempts: 0,
-            loginLockedUntil: null,
-            googleSubject: null,
-          }));
+          const user = await users.save(
+            users.create({
+              email: session.email,
+              phoneNumber: session.phoneNumber,
+              passwordHash: session.passwordHash,
+              fullName: session.fullName,
+              gender: session.gender,
+              dateOfBirth: session.dateOfBirth,
+              status: UserStatus.ACTIVE,
+              failedLoginAttempts: 0,
+              loginLockedUntil: null,
+              googleSubject: null,
+            }),
+          );
           const roles = manager.getRepository(UserRoleEntity);
-          await roles.save(roles.create({ userId: user.id, role: Role.PATIENT }));
+          await roles.save(
+            roles.create({ userId: user.id, role: Role.PATIENT }),
+          );
           const profiles = manager.getRepository(PersonalHealthProfileEntity);
           const phr = await profiles.save(profiles.create({ userId: user.id }));
           await sessions.remove(session);
@@ -255,7 +263,7 @@ export class AuthService {
     }
   }
 
-  // BĂM MÃ OTP 
+  // BĂM MÃ OTP
 
   private otpHash(id: string, otp: string): string {
     return createHmac("sha256", this.otpSecret)
@@ -263,7 +271,7 @@ export class AuthService {
       .digest("hex");
   }
 
-  //  KIỂM TRA HẠN MỨC GỬI SMS 
+  //  KIỂM TRA HẠN MỨC GỬI SMS
 
   private async assertSmsSendAllowed(
     manager: EntityManager,
@@ -271,14 +279,18 @@ export class AuthService {
   ): Promise<void> {
     if (!phoneNumber) return;
     const now = await this.databaseNow(manager);
-    const receipts = await manager.getRepository(RegistrationOtpSendEntity).find({
-      where: {
-        phoneNumber,
-        sentAt: MoreThan(new Date(now.getTime() - SMS_SEND_WINDOW_SECONDS * 1000)),
-      },
-      order: { sentAt: "DESC" },
-      take: MAX_SMS_SENDS,
-    });
+    const receipts = await manager
+      .getRepository(RegistrationOtpSendEntity)
+      .find({
+        where: {
+          phoneNumber,
+          sentAt: MoreThan(
+            new Date(now.getTime() - SMS_SEND_WINDOW_SECONDS * 1000),
+          ),
+        },
+        order: { sentAt: "DESC" },
+        take: MAX_SMS_SENDS,
+      });
     if (receipts.length >= MAX_SMS_SENDS) {
       const retryAfter = Math.max(
         1,
@@ -301,7 +313,7 @@ export class AuthService {
     }
   }
 
-  //  KIỂM TRA KHÓA OTP VÀ THỜI GIAN GỬI LẠI 
+  //  KIỂM TRA KHÓA OTP VÀ THỜI GIAN GỬI LẠI
 
   private assertRequestAllowed(
     previous: RegistrationSessionEntity | null,
@@ -347,7 +359,7 @@ export class AuthService {
       );
   }
 
-  //  LẤY THỜI GIAN TỪ CƠ SỞ DỮ LIỆU 
+  //  LẤY THỜI GIAN TỪ CƠ SỞ DỮ LIỆU
 
   private async databaseNow(manager: EntityManager): Promise<Date> {
     const [row]: { now: Date }[] = await manager.query(
@@ -356,7 +368,7 @@ export class AuthService {
     return row.now;
   }
 
-  //  KIỂM TRA EMAIL HOẶC SĐT ĐÃ ĐĂNG KÝ 
+  //  KIỂM TRA EMAIL HOẶC SĐT ĐÃ ĐĂNG KÝ
 
   private async assertContactAvailable(
     manager: EntityManager,
@@ -375,7 +387,7 @@ export class AuthService {
     if (user) throw this.duplicateContact();
   }
 
-  //  TẠO LỖI THÔNG TIN LIÊN HỆ TRÙNG 
+  //  TẠO LỖI THÔNG TIN LIÊN HỆ TRÙNG
 
   private duplicateContact(): ConflictException {
     return new ConflictException({
@@ -384,7 +396,7 @@ export class AuthService {
     });
   }
 
-  //  TẠO LỖI PHIÊN OTP KHÔNG HỢP LỆ 
+  //  TẠO LỖI PHIÊN OTP KHÔNG HỢP LỆ
 
   private invalidSession(): BadRequestException {
     return new BadRequestException({
@@ -394,7 +406,7 @@ export class AuthService {
     });
   }
 
-  //  TẠO LỖI OTP ĐANG BỊ KHÓA 
+  //  TẠO LỖI OTP ĐANG BỊ KHÓA
 
   private locked(until: Date, now: Date): HttpException {
     return new HttpException(

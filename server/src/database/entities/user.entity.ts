@@ -8,7 +8,7 @@ import {
 import { Gender, UserStatus } from '@shared/enums';
 
 @Entity('users')
-export class User {
+export class UserEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
@@ -38,18 +38,19 @@ export class User {
   })
   status!: UserStatus;
 
+  // Cột mới, khớp auth.service.ts
+  @Column({ name: 'failed_login_attempts', type: 'int', default: 0 })
+  failedLoginAttempts!: number;
+
+  @Column({ name: 'login_locked_until', type: 'timestamptz', nullable: true })
+  loginLockedUntil!: Date | null;
+
+  @Column({ name: 'google_subject', type: 'varchar', length: 255, nullable: true })
+  googleSubject!: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
-  
-  @Column({ name: "failed_login_attempts", type: "smallint", default: 0 })
-  failedLoginAttempts!: number;
-
-  @Column({ name: "login_locked_until", type: "timestamptz", nullable: true })
-  loginLockedUntil!: Date | null;
-
-  @Column({ name: "google_subject", type: "varchar", length: 255, nullable: true })
-  googleSubject!: string | null;
 }
