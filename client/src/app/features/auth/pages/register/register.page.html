@@ -636,29 +636,23 @@
 
 
               <!-- Countdown -->
-              <p
-                class="mt-4 text-sm text-slate-600"
-              >
-                @if (resendCountdown() > 0) {
-                  Gửi lại mã sau
-                  <span class="font-medium">
-                    00:{{
-                      resendCountdown()
-                        .toString()
-                        .padStart(2, '0')
-                    }}
-                  </span>
-                } @else {
-                  <button
-                    type="button"
-                    (click)="resendOtp()"
-                    [disabled]="loading()"
-                    class="font-medium text-sky-600 hover:text-sky-700 disabled:opacity-50"
-                  >
-                    Gửi lại mã OTP
-                  </button>
-                }
-              </p>
+<p class="mt-4 text-sm text-slate-600">
+  @if (resendCountdown() > 0) {
+    Gửi lại mã sau
+    <span class="font-medium">
+      {{ formatCountdown(resendCountdown()) }}
+    </span>
+  } @else {
+    <button
+      type="button"
+      (click)="resendOtp()"
+      [disabled]="loading()"
+      class="font-medium text-sky-600 hover:text-sky-700 disabled:opacity-50"
+    >
+      Gửi lại mã OTP
+    </button>
+  }
+</p>
 
 
               <!-- Error -->
