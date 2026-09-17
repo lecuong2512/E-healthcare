@@ -129,76 +129,83 @@ export class RegisterPage implements OnDestroy {
   // =========================
 
   protected submitRegister(): void {
-    this.errorMessage.set('');
+  this.errorMessage.set('');
 
-    const fullName = this.fullName.trim();
-    const phoneNumber = this.phone.trim();
-    const email = this.email.trim();
-    const password = this.password;
+  const fullName = this.fullName.trim();
+  const phoneNumber = this.phone.replace(/\s+/g, '');
+  const email = this.email.trim();
+  const password = this.password;
 
-    if (
-      !fullName ||
-      !phoneNumber ||
-      !email ||
-      !password ||
-      !this.gender ||
-      !this.dateOfBirth
-    ) {
-      this.errorMessage.set(
-        'Vui lòng nhập đầy đủ thông tin.',
-      );
-      return;
-    }
-
-    if (password.length < 8) {
-      this.errorMessage.set(
-        'Mật khẩu phải có ít nhất 8 ký tự.',
-      );
-      return;
-    }
-
-    this.loading.set(true);
-
-    const payload = {
-      fullName,
-      phoneNumber,
-      email,
-      password,
-      gender: this.gender,
-      dateOfBirth: this.dateOfBirth,
-    };
-
-    this.auth
-      .requestRegisterOtp(payload)
-      .subscribe({
-        next: (res) => {
-          this.loading.set(false);
-
-          /**
-           * Backend tạo registration session
-           * và trả registrationId để dùng ở bước verify OTP.
-           */
-          this.registrationId = res.registrationId;
-
-          this.step.set(2);
-          this.clearOtp();
-          this.startResendCountdown();
-
-          setTimeout(() => {
-            this.otpInputs.first?.nativeElement.focus();
-          });
-        },
-
-        error: (error: HttpErrorResponse) => {
-          this.loading.set(false);
-
-          this.errorMessage.set(
-            error.error?.message ??
-              'Không thể gửi mã OTP. Vui lòng thử lại.',
-          );
-        },
-      });
+  if (
+    !fullName ||
+    !phoneNumber ||
+    !email ||
+    !password ||
+    !this.gender ||
+    !this.dateOfBirth
+  ) {
+    this.errorMessage.set(
+      'Vui lòng nhập đầy đủ thông tin.',
+    );
+    return;
   }
+
+  const isValidPassword =
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /\d/.test(password) &&
+    /[^A-Za-z0-9]/.test(password);
+
+  if (!isValidPassword) {
+    this.errorMessage.set(
+      'Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt.',
+    );
+    return;
+  }
+
+  this.loading.set(true);
+
+  const payload = {
+    fullName,
+    phoneNumber,
+    email,
+    password,
+    gender: this.gender,
+    dateOfBirth: this.dateOfBirth,
+  };
+
+  this.auth
+    .requestRegisterOtp(payload)
+    .subscribe({
+      next: (res) => {
+        this.loading.set(false);
+
+        /**
+         * Backend tạo registration session
+         * và trả registrationId để dùng ở bước verify OTP.
+         */
+        this.registrationId = res.registrationId;
+
+        this.step.set(2);
+        this.clearOtp();
+        this.startResendCountdown();
+
+        setTimeout(() => {
+          this.otpInputs.first?.nativeElement.focus();
+        });
+      },
+
+      error: (error: HttpErrorResponse) => {
+        this.loading.set(false);
+
+        this.errorMessage.set(
+          error.error?.message ??
+            'Không thể gửi mã OTP. Vui lòng thử lại.',
+        );
+      },
+    });
+}
 
   // =========================
   // OTP input

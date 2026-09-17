@@ -1,4 +1,4 @@
-<div class="min-h-dvh bg-slate-50 px-6 py-4">
+<div class="min-h-dvh bg-slate-50 px-4 py-4 sm:px-6">
   <div class="mx-auto max-w-[1200px]">
 
     <!-- ===================================================== -->
@@ -27,7 +27,7 @@
 
     @if (googleCompletion) {
 
-      <main class="mt-12">
+      <main class="mt-8 sm:mt-12">
 
         <div class="mb-5">
           <h1
@@ -44,7 +44,7 @@
 
         <div class="mx-auto max-w-[720px]">
 
-          <section class="rounded-2xl bg-white px-6 py-6">
+          <section class="rounded-2xl bg-white px-4 py-5 sm:px-6 sm:py-6">
 
             <div
               class="rounded-md border border-sky-500 bg-sky-50 px-4 py-4"
@@ -201,7 +201,7 @@
       <!-- NORMAL REGISTER + OTP FLOW -->
       <!-- ================================================= -->
 
-      <main class="mt-12">
+      <main class="mt-8 sm:mt-12">
 
         <div class="mb-5">
 
@@ -230,7 +230,7 @@
           <!-- =============================================== -->
 
           <section
-            class="rounded-2xl bg-white px-6 py-6"
+            class="rounded-2xl bg-white px-4 py-5 sm:px-6 sm:py-6"
           >
 
             <h2
@@ -379,7 +379,8 @@
                   <p
                     class="mt-2 text-xs text-slate-500"
                   >
-                    Tối thiểu 8 ký tự
+                    Tối thiểu 8 ký tự, gồm chữ hoa, chữ thường,
+                    số và ký tự đặc biệt.
                   </p>
                 </div>
 
@@ -492,7 +493,7 @@
               <!-- REGISTER BUTTON -->
               <!-- ------------------------------------------- -->
 
-              <div>
+              <div class="w-full sm:w-auto">
                 <app-button
                   type="submit"
                   [loading]="loading()"
@@ -520,7 +521,7 @@
           <!-- =============================================== -->
 
           <section
-            class="min-h-[420px] rounded-2xl bg-sky-100 px-6 py-8"
+            class="min-h-[420px] rounded-2xl bg-sky-100 px-4 py-6 sm:px-6 sm:py-8"
           >
 
             @if (step() === 1) {
@@ -596,7 +597,7 @@
 
               <!-- OTP boxes -->
               <div
-                class="mt-4 flex gap-2"
+                class="mt-4 grid max-w-[320px] grid-cols-6 gap-1.5 sm:gap-2"
               >
 
                 @for (
@@ -624,7 +625,7 @@
                       )
                     "
                     (paste)="onOtpPaste($event)"
-                    class="h-14 w-14 rounded-lg border border-sky-500 bg-white text-center text-xl font-semibold text-slate-900 outline-none transition focus:ring-2 focus:ring-sky-500 disabled:bg-slate-100"
+                    class="h-11 w-full min-w-0 rounded-lg border border-sky-500 bg-white text-center text-lg font-semibold text-slate-900 outline-none transition focus:ring-2 focus:ring-sky-500 sm:h-14 sm:text-xl disabled:bg-slate-100"
                     [attr.aria-label]="
                       'Số OTP thứ ' +
                       ($index + 1)
@@ -636,23 +637,23 @@
 
 
               <!-- Countdown -->
-<p class="mt-4 text-sm text-slate-600">
-  @if (resendCountdown() > 0) {
-    Gửi lại mã sau
-    <span class="font-medium">
-      {{ formatCountdown(resendCountdown()) }}
-    </span>
-  } @else {
-    <button
-      type="button"
-      (click)="resendOtp()"
-      [disabled]="loading()"
-      class="font-medium text-sky-600 hover:text-sky-700 disabled:opacity-50"
-    >
-      Gửi lại mã OTP
-    </button>
-  }
-</p>
+              <p class="mt-4 text-sm text-slate-600">
+                @if (resendCountdown() > 0) {
+                  Gửi lại mã sau
+                  <span class="font-medium">
+                    {{ formatCountdown(resendCountdown()) }}
+                  </span>
+                } @else {
+                  <button
+                    type="button"
+                    (click)="resendOtp()"
+                    [disabled]="loading()"
+                    class="font-medium text-sky-600 hover:text-sky-700 disabled:opacity-50"
+                  >
+                    Gửi lại mã OTP
+                  </button>
+                }
+              </p>
 
 
               <!-- Error -->
@@ -668,7 +669,7 @@
 
 
               <!-- Confirm OTP -->
-              <div class="mt-5">
+              <div class="mt-5 w-full sm:w-auto">
                 <app-button
                   type="button"
                   [loading]="loading()"
