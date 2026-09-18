@@ -1,4 +1,5 @@
 import { DataSource } from "typeorm";
+import { AddSrsAuth03PhrFields1789560000000 } from "./migrations/1789560000000-add-srs-auth03-phr-fields";
 import { CreateCatalogAndRbacTables1788834118637 } from "./migrations/1788834118637-create-catalog-and-rbac-tables";
 import { CreateDoctorSchedulesTable1788849768948 } from "./migrations/1788849768948-create-doctor-schedules-table";
 import { CreateAppointmentsTable1788851428977 } from "./migrations/1788851428977-create-appointments-table";
@@ -50,6 +51,7 @@ export function createDataSource(url: string): DataSource {
       CreateRegistrationOtpSendLimit1789477800000,
       CreateAuthSessionsAndGoogle1789478400000,
       AllowRegistrationWithBothContacts1789479000000,
+      AddSrsAuth03PhrFields1789560000000,
     ],
   });
 }

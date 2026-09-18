@@ -16,8 +16,42 @@ export class PersonalHealthProfileEntity {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ name: "user_id", type: "uuid" })
+  @Column({ name: "user_id", type: "uuid", unique: true })
   userId!: string;
+
+  @Column({ name: "blood_type", type: "varchar", length: 3, nullable: true })
+  bloodType!: string | null;
+
+  @Column({ name: "allergies", type: "text", nullable: true })
+  allergies!: string | null;
+
+  @Column({ name: "medical_history", type: "text", nullable: true })
+  medicalHistory!: string | null;
+
+  @Column({
+    name: "citizen_id",
+    type: "varchar",
+    length: 20,
+    nullable: true,
+  })
+  citizenId!: string | null;
+
+  @Column({ name: "address", type: "varchar", length: 255, nullable: true })
+  address!: string | null;
+
+  @Column({
+    name: "health_insurance",
+    type: "varchar",
+    length: 20,
+    nullable: true,
+  })
+  healthInsurance!: string | null;
+
+  @Column({ name: "chronic_diseases", type: "text", nullable: true })
+  chronicDiseases!: string | null;
+
+  @Column({ name: "surgery_history", type: "text", nullable: true })
+  surgeryHistory!: string | null;
 }
 
 @Entity("registration_sessions")

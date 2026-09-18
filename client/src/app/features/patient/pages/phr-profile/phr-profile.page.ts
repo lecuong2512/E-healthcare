@@ -1,8 +1,14 @@
-import { Component } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { PhrProfile } from '@shared/interfaces';
+
+import {
+  PhrProfile,
+  UpdatePhrProfileRequest,
+} from '@shared/interfaces';
 import { Gender } from '@shared/enums';
+
 import { ButtonComponent } from '../../../../shared/components/button/button.component';
+import { PhrService } from '../../../../core/services/phr.service';
 
 @Component({
   selector: 'app-phr-profile-page',
@@ -10,39 +16,98 @@ import { ButtonComponent } from '../../../../shared/components/button/button.com
   imports: [FormsModule, ButtonComponent],
   templateUrl: './phr-profile.page.html',
 })
-export class PhrProfilePage {
+export class PhrProfilePage implements OnInit {
+  private readonly phrService = inject(PhrService);
+
   protected readonly Gender = Gender;
 
-  protected readonly initialForm: PhrProfile = {
-    fullName: 'Nguyễn Tùng',
-    citizenId: '',
-    gender: Gender.MALE,
-    dateOfBirth: '1992-08-12',
-    address: '',
-    healthInsurance: 'DN 4 01 234567890',
-    bloodType: 'O+',
-    drugAllergy: 'Penicillin',
-    chronicDiseases: 'Hen phế quản',
-    surgeryHistory: 'Không có',
-  };
+  protected form: PhrProfile = this.emptyForm();
+  protected savedForm: PhrProfile = this.emptyForm();
 
-  protected form: PhrProfile = { ...this.initialForm };
-
+  protected isLoading = true;
+  protected isSaving = false;
   protected isSaved = false;
+  protected errorMessage = '';
+
+  ngOnInit(): void {
+    this.loadPhr();
+  }
 
   protected saveChanges(): void {
-    /*
-     * TODO(SRS-AUTH-03):
-     * Khi backend PHR API hoàn thiện, thay phần này bằng
-     * API update PHR.
-     *
-     * Hiện tại chỉ cập nhật state ở frontend để hoàn thiện UI.
-     */
-    this.isSaved = true;
+    this.isSaving = true;
+    this.isSaved = false;
+    this.errorMessage = '';
+
+    const request: UpdatePhrProfileRequest = {
+      fullName: this.form.fullName.trim(),
+      citizenId: this.form.citizenId?.trim() ?? '',
+      gender: this.form.gender,
+      dateOfBirth: this.form.dateOfBirth,
+      address: this.form.address?.trim() ?? '',
+      healthInsurance: this.form.healthInsurance?.trim() ?? '',
+      bloodType: this.form.bloodType ?? '',
+      allergies: this.form.allergies?.trim() ?? '',
+      chronicDiseases: this.form.chronicDiseases?.trim() ?? '',
+      surgeryHistory: this.form.surgeryHistory?.trim() ?? '',
+    };
+
+    this.phrService.updateMyPhr(request).subscribe({
+      next: (profile) => {
+        this.form = { ...profile };
+        this.savedForm = { ...profile };
+
+        this.isSaved = true;
+        this.isSaving = false;
+      },
+      error: (error) => {
+        this.errorMessage =
+          error?.error?.message ??
+          'Kh�ng th? c?p nh?t h? so s?c kh?e. Vui l�ng th? l?i.';
+
+        this.isSaving = false;
+      },
+    });
   }
 
   protected cancelChanges(): void {
-    this.form = { ...this.initialForm };
+    this.form = { ...this.savedForm };
     this.isSaved = false;
+    this.errorMessage = '';
+  }
+
+  private loadPhr(): void {
+    this.isLoading = true;
+    this.errorMessage = '';
+
+    this.phrService.getMyPhr().subscribe({
+      next: (profile) => {
+        this.form = { ...profile };
+        this.savedForm = { ...profile };
+
+        this.isLoading = false;
+      },
+      error: (error) => {
+        this.errorMessage =
+          error?.error?.message ??
+          'Kh�ng th? t?i h? so s?c kh?e. Vui l�ng th? l?i.';
+
+        this.isLoading = false;
+      },
+    });
+  }
+
+  private emptyForm(): PhrProfile {
+    return {
+      fullName: '',
+      citizenId: null,
+      gender: Gender.OTHER,
+      dateOfBirth: '',
+      address: null,
+      healthInsurance: null,
+      bloodType: null,
+      allergies: null,
+      chronicDiseases: null,
+      surgeryHistory: null,
+    };
   }
 }
