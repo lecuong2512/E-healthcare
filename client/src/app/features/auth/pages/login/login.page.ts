@@ -1,81 +1,57 @@
+// import { Component, inject, signal } from '@angular/core';
+// import { FormsModule } from '@angular/forms';
+// import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+// import { AuthService } from '../../../../core/services/auth.service';
+// import { ButtonComponent } from '../../../../shared/components/button/button.component';
+// import { TokenStoreService } from '../../../../core/services/token-store.service';
+// import { environment } from '../../../../../environments/environment';
+// import { HttpErrorResponse } from '@angular/common/http';
+// import { Role } from '@shared/enums/role.enum';
 import { Component, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { AuthService } from '../../../../core/services/auth.service';
-import { ButtonComponent } from '../../../../shared/components/button/button.component';
-import { TokenStoreService } from '../../../../core/services/token-store.service';
-import { environment } from '../../../../../environments/environment';
-import { HttpErrorResponse } from '@angular/common/http';
-import { Role } from '@shared/enums/role.enum';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 
-/**
- * Trang login thật (không phải stub) vì đây là nơi tốt nhất để kiểm chứng
- * toàn bộ luồng của task Base Architecture: gọi AuthService -> nhận access
- * token -> TokenStoreService lưu in-memory -> điều hướng theo role -> mọi
- * request sau đó tự có Authorization header nhờ authInterceptor.
- */
+export type UserRole = 'patient' | 'doctor' | 'receptionist' | 'admin';
+
+
 @Component({
-  selector: 'app-login-page',
+  selector: 'app-login',
   standalone: true,
-  imports: [FormsModule, ButtonComponent, RouterLink],
+  imports: [ReactiveFormsModule],
   templateUrl: './login.page.html',
+  styleUrl: './login.page.scss'
 })
 export class LoginPage {
-  protected readonly authService = inject(AuthService);
+  private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
-  private readonly tokenStore = inject(TokenStoreService);
-  private readonly route = inject(ActivatedRoute);
-  protected readonly isProd = environment.production;
 
-  showPassword = signal(false);
-  identifier = '';
-  password = '';
-  loading = signal(false);
-  errorMessage = signal<string | null>(null);
+  readonly showPass = signal(false);
+  readonly loading = signal(false);
 
-  private readonly roleHome: Record<Role, string> = {
-    [Role.PATIENT]: '/patient',
-    [Role.DOCTOR]: '/doctor',
-    [Role.RECEPTIONIST]: '/receptionist',
-    [Role.ADMIN]: '/admin',
-  };
+  readonly loginForm = this.fb.group({
+    email: ['', [Validators.required]],
+    password: ['', [Validators.required, Validators.minLength(6)]]
+  });
 
-  constructor() {
-    if (this.route.snapshot.queryParamMap.get('google') === 'success') {
-      const role = this.tokenStore.userRole() as Role | null;
-      if (role && this.roleHome[role])
-        void this.router.navigateByUrl(this.roleHome[role]);
-      else
-        this.errorMessage.set(
-          'Không thể phục hồi phiên Google. Vui lòng thử lại trên HTTPS.',
-        );
-    }
+
+  toggleShowPass(): void {
+    this.showPass.update(v => !v);
   }
 
-  submit(): void {
-    this.errorMessage.set(null);
+  onSubmit(): void {
+    if (this.loginForm.invalid || this.loading()) return;
+
     this.loading.set(true);
+    const { email, password } = this.loginForm.value;
 
-    this.authService.login(this.identifier, this.password).subscribe({
-      next: (res) => {
-        this.loading.set(false);
-        this.router.navigateByUrl(this.roleHome[res.role] ?? '/');
-      },
-      error: (err: HttpErrorResponse) => {
-        this.loading.set(false);
+    // // Giả lập authenticate & redirect phân hệ bệnh nhân
+    // setTimeout(() => {
+    //   this.loading.set(false);
+    //   this.navigateTo('patient');
+    // }, 1000);
+  }
 
-        if (err.status === 429) {
-          this.errorMessage.set(
-            err.error?.code === 'LOGIN_LOCKED'
-              ? `Tài khoản tạm khóa. Vui lòng chờ ${Math.ceil((err.error.retryAfter ?? 1800) / 60)} phút rồi thử lại.`
-              : 'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng chờ 1 phút rồi thử lại.',
-          );
-        } else if (err.status === 401) {
-          this.errorMessage.set('Tài khoản hoặc mật khẩu không chính xác.');
-        } else {
-          this.errorMessage.set('Có lỗi xảy ra, vui lòng thử lại sau.');
-        }
-      },
-    });
+  navigateTo(role: UserRole | 'register' | 'forgot-password'): void {
+    this.router.navigate([`/${role}`]);
   }
 }

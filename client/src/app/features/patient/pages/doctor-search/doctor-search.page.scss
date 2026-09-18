@@ -1,0 +1,13 @@
+// Tiện ích ẩn thanh cuộn ngang của tab chuyên khoa nhưng vẫn giữ thao tác vuốt mượt mà
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+// Custom style nếu cần tinh chỉnh thêm cho Radio và Checkbox
+input[type='radio'],
+input[type='checkbox'] {
+  cursor: pointer;
+}
