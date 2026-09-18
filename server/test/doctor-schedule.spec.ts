@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { ShiftType, SlotStatus } from '@shared/enums';
 import { DoctorScheduleService } from '../src/modules/doctor/doctor-schedule.service';
@@ -10,6 +10,20 @@ describe('DoctorScheduleService', () => {
   } as unknown as DoctorCacheService;
 
   beforeEach(() => jest.clearAllMocks());
+  afterEach(() => jest.useRealTimers());
+
+  it('blocks next-week registration at the configured Friday deadline', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-18T10:00:00.000Z'));
+    const service = new DoctorScheduleService({} as DataSource, cache);
+
+    await expect(
+      service.createSchedule('doctor-id', {
+        date: '2026-09-21',
+        shiftType: ShiftType.MORNING,
+        slotDurationMinutes: 30,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
 
   it('splits a morning shift into AVAILABLE 30-minute slots and returns the room', async () => {
     const doctorRepository = {

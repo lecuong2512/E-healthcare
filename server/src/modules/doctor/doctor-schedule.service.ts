@@ -9,6 +9,10 @@ import dayjs from "dayjs";
 import isoWeek from "dayjs/plugin/isoWeek";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
+import {
+  SCHEDULE_DEADLINE_DAY,
+  SCHEDULE_DEADLINE_HOUR,
+} from "@shared/constants/shift.constants";
 import { DoctorEntity } from "../../database/entities/doctor.entity";
 import { DoctorScheduleEntity } from "../../database/entities/doctor-schedule.entity";
 import { SlotStatus, SHIFT_TIME_RANGES } from "@shared/enums";
@@ -247,14 +251,14 @@ export class DoctorScheduleService {
 
     const deadline = now
       .startOf("isoWeek")
-      .add(4, "day")
-      .hour(17)
+      .isoWeekday(SCHEDULE_DEADLINE_DAY)
+      .hour(SCHEDULE_DEADLINE_HOUR)
       .minute(0)
       .second(0)
       .millisecond(0);
     if (!now.isBefore(deadline)) {
       throw new BadRequestException(
-        "Đã quá hạn đăng ký lịch cho tuần sau (trước 17:00 Thứ Sáu).",
+        `Đã quá hạn đăng ký lịch cho tuần sau (trước ${SCHEDULE_DEADLINE_HOUR}:00 Thứ Sáu).`,
       );
     }
   }
