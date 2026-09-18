@@ -1,8 +1,23 @@
-import { Component } from '@angular/core';
+import { Location } from '@angular/common';
+import { Component, inject } from '@angular/core';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-forbidden-page',
   standalone: true,
-  template: `<div class="p-6 text-center text-slate-500">403 — Bạn không có quyền truy cập trang này.</div>`,
+  imports: [],
+  templateUrl: './forbidden.page.html',
+  // styleUrl: './page-403.page.scss'
 })
-export class ForbiddenPage {}
+export class ForbiddenPage {
+  private readonly router = inject(Router);
+  private readonly location = inject(Location);
+
+  navigateToLogin(): void {
+    this.router.navigate(['/login']);
+  }
+
+  goBack(): void {
+    this.location.back();
+  }
+}

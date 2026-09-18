@@ -1,0 +1,172 @@
+<div class="min-h-[calc(100dvh-124px)] flex items-center justify-center p-4 bg-medical-surface">
+    <div class="w-full max-w-md">
+        <!-- Logo & Tiêu đề -->
+        <div class="text-center mb-8">
+            <div class="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center bg-sky-600 shadow-sm">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                </svg>
+            </div>
+            <h1 class="font-bold text-2xl text-slate-900">Tạo tài khoản</h1>
+            <p class="text-sm mt-1 text-slate-500">E-Healthcare Medical Portal</p>
+        </div>
+
+        <!-- Thanh tiến trình (Stepper Indicator) -->
+        <div class="flex items-center justify-center gap-3 mb-6">
+            @for (s of steps; track s; let i = $index) {
+            <div class="flex items-center gap-3">
+                <div class="flex flex-col items-center gap-1">
+                    <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all"
+                        [class.bg-sky-600]="step() >= i + 1" [class.border-sky-600]="step() >= i + 1"
+                        [class.text-white]="step() >= i + 1" [class.bg-white]="step() < i + 1"
+                        [class.border-slate-200]="step() < i + 1" [class.text-slate-400]="step() < i + 1">
+                        @if (step() > i + 1) {
+                        ✓
+                        } @else {
+                        {{ i + 1 }}
+                        }
+                    </div>
+                    <span class="text-[11px] font-medium" [class.text-sky-600]="step() === i + 1"
+                        [class.text-slate-400]="step() !== i + 1">
+                        {{ s }}
+                    </span>
+                </div>
+
+                @if (i < steps.length - 1) { <div class="w-8 h-0.5 mb-4 rounded transition-all"
+                    [class.bg-sky-600]="step() > i + 1" [class.bg-slate-200]="step() <= i + 1">
+            </div>
+            }
+        </div>
+        }
+    </div>
+
+    <!-- Nội dung thẻ tương tác chính -->
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_4px_16px_rgba(0,0,0,0.06)]">
+        <!-- BƯỚC 1: Chọn vai trò -->
+        @if (step() === 1) {
+        <div>
+            <h2 class="font-bold text-base text-slate-900 mb-1">Bạn là ai?</h2>
+            <p class="text-xs text-slate-500 mb-4">Chọn vai trò phù hợp để thiết lập hồ sơ khám chữa bệnh.</p>
+
+            <div class="space-y-3">
+                <button type="button" (click)="selectRole('patient')"
+                    class="w-full min-h-[56px] p-3.5 rounded-xl border border-slate-200 hover:border-sky-500 hover:bg-sky-50/50 flex items-center gap-3.5 text-left transition group">
+                    <div
+                        class="w-10 h-10 rounded-lg bg-sky-100 flex items-center justify-center text-sky-600 font-bold group-hover:bg-sky-600 group-hover:text-white transition">
+                        👤
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-slate-900">Bệnh nhân</p>
+                        <p class="text-xs text-slate-500">Đặt lịch khám, theo dõi hồ sơ bệnh án cá nhân</p>
+                    </div>
+                </button>
+
+                <button type="button" (click)="selectRole('doctor')"
+                    class="w-full min-h-[56px] p-3.5 rounded-xl border border-slate-200 hover:border-sky-500 hover:bg-sky-50/50 flex items-center gap-3.5 text-left transition group">
+                    <div
+                        class="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center text-purple-700 font-bold group-hover:bg-purple-700 group-hover:text-white transition">
+                        🩺
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-slate-900">Bác sĩ / Nhân viên y tế</p>
+                        <p class="text-xs text-slate-500">Quản lý buồng khám EMR, chỉ định xét nghiệm</p>
+                    </div>
+                </button>
+            </div>
+        </div>
+        }
+
+        <!-- BƯỚC 2: Thông tin cá nhân -->
+        @if (step() === 2) {
+        <form [formGroup]="profileForm" class="space-y-3.5">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="font-bold text-base text-slate-900">Thông tin {{ role() === 'patient' ? 'bệnh nhân' : 'bác
+                    sĩ' }}</h2>
+                <button type="button" (click)="prevStep()"
+                    class="text-xs font-semibold text-sky-600 hover:underline">Đổi vai trò</button>
+            </div>
+
+            <div>
+                <label for="fullName" class="block text-xs font-medium text-slate-700 mb-1">Họ và tên</label>
+                <input id="fullName" type="text" formControlName="fullName" placeholder="Nguyễn Văn A"
+                    class="w-full min-h-[44px] rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-200 transition" />
+            </div>
+
+            <div>
+                <label for="email" class="block text-xs font-medium text-slate-700 mb-1">Email</label>
+                <input id="email" type="email" formControlName="email" placeholder="example@email.com"
+                    class="w-full min-h-[44px] rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-200 transition" />
+            </div>
+
+            <div>
+                <label for="phone" class="block text-xs font-medium text-slate-700 mb-1">Số điện thoại</label>
+                <input id="phone" type="tel" formControlName="phone" placeholder="0912345678"
+                    class="w-full min-h-[44px] rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-200 transition" />
+            </div>
+
+            <div>
+                <label for="reg-pass" class="block text-xs font-medium text-slate-700 mb-1">Mật khẩu</label>
+                <input id="reg-pass" type="password" formControlName="password" placeholder="••••••••"
+                    class="w-full min-h-[44px] rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-200 transition" />
+            </div>
+
+            <div class="flex gap-2.5 pt-2">
+                <button type="button" (click)="prevStep()"
+                    class="w-1/3 min-h-[44px] rounded-xl border border-slate-200 font-semibold text-sm text-slate-700 hover:bg-slate-50 transition">
+                    Quay lại
+                </button>
+                <button type="button" (click)="nextStep()" [disabled]="profileForm.invalid"
+                    class="flex-1 min-h-[44px] rounded-xl bg-sky-600 hover:bg-sky-700 font-bold text-sm text-white transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    Tiếp tục
+                </button>
+            </div>
+        </form>
+        }
+
+        <!-- BƯỚC 3: Xác minh & Hoàn tất -->
+        @if (step() === 3) {
+        <div class="text-center py-2 space-y-4">
+            <div
+                class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-xl font-bold">
+                ✓
+            </div>
+            <div>
+                <h2 class="font-bold text-base text-slate-900">Xác nhận thông tin</h2>
+                <p class="text-xs text-slate-500 mt-0.5">Kiểm tra thông tin tài khoản trước khi hoàn tất đăng ký.</p>
+            </div>
+
+            <div
+                class="bg-slate-50 p-3.5 rounded-xl border border-slate-100 text-left text-xs space-y-2 text-slate-700">
+                <div class="flex justify-between"><span class="text-slate-500">Vai trò:</span> <span
+                        class="font-semibold capitalize">{{ role() }}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Họ tên:</span> <span
+                        class="font-semibold">{{ profileForm.value.fullName }}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Email:</span> <span
+                        class="font-semibold">{{ profileForm.value.email }}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">SĐT:</span> <span
+                        class="font-semibold">{{ profileForm.value.phone }}</span></div>
+            </div>
+
+            <div class="flex gap-2.5 pt-2">
+                <button type="button" (click)="prevStep()"
+                    class="w-1/3 min-h-[44px] rounded-xl border border-slate-200 font-semibold text-sm text-slate-700 hover:bg-slate-50 transition">
+                    Chỉnh sửa
+                </button>
+                <button type="button" (click)="submitRegistration()" [disabled]="loading()"
+                    class="flex-1 min-h-[44px] rounded-xl bg-sky-600 hover:bg-sky-700 font-bold text-sm text-white transition disabled:opacity-50">
+                    {{ loading() ? 'Đang kích hoạt...' : 'Tạo tài khoản' }}
+                </button>
+            </div>
+        </div>
+        }
+    </div>
+
+    <!-- Chuyển hướng sang đăng nhập -->
+    <p class="text-center text-xs text-slate-500 mt-5">
+        Đã có tài khoản?
+        <button type="button" (click)="navigateTo('login')" class="font-semibold text-sky-600 hover:underline ml-1">
+            Đăng nhập
+        </button>
+    </p>
+</div>
+</div>
