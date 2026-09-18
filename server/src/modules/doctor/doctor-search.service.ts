@@ -76,10 +76,10 @@ export class DoctorSearchService {
       const keyword = `%${normalized.q}%`;
       query.andWhere(
         `(
-          LOWER(user.full_name) LIKE :keyword OR
-          LOWER(COALESCE(doctor.academic_title, '')) LIKE :keyword OR
-          LOWER(COALESCE(doctor.bio_description, '')) LIKE :keyword OR
-          LOWER(doctor.room_number) LIKE :keyword
+          unaccent(LOWER(user.full_name)) LIKE unaccent(:keyword) OR
+          unaccent(LOWER(COALESCE(doctor.academic_title, ''))) LIKE unaccent(:keyword) OR
+          unaccent(LOWER(COALESCE(doctor.bio_description, ''))) LIKE unaccent(:keyword) OR
+          unaccent(LOWER(doctor.room_number)) LIKE unaccent(:keyword)
         )`,
         { keyword },
       );

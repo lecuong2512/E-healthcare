@@ -52,7 +52,7 @@ describe("DoctorSearchService", () => {
     const service = new DoctorSearchService(dataSource, cache);
 
     const result = await service.search({
-      q: "  CARDIO  ",
+      q: "  TIM MACH  ",
       specialtyId: "24d648df-61a9-48c7-adbf-2f6c601a7062",
       date: "2099-01-05",
       minPrice: 200000,
@@ -63,7 +63,7 @@ describe("DoctorSearchService", () => {
     });
 
     expect(cache.key).toHaveBeenCalledWith("list", {
-      q: "cardio",
+      q: "tim mach",
       specialtyId: "24d648df-61a9-48c7-adbf-2f6c601a7062",
       date: "2099-01-05",
       minPrice: 200000,
@@ -73,8 +73,10 @@ describe("DoctorSearchService", () => {
       limit: 5,
     });
     expect(query.andWhere).toHaveBeenCalledWith(
-      expect.stringContaining("LOWER(user.full_name) LIKE :keyword"),
-      { keyword: "%cardio%" },
+      expect.stringContaining(
+        "unaccent(LOWER(user.full_name)) LIKE unaccent(:keyword)",
+      ),
+      { keyword: "%tim mach%" },
     );
     expect(query.andWhere).toHaveBeenCalledWith(
       "doctor.specialty_id = :specialtyId",
