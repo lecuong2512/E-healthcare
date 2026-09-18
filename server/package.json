@@ -6,9 +6,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server/src/main.js",
-    "start:dev": "ts-node src/main.ts",
-    "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
-    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
+    "start:dev": "ts-node -r tsconfig-paths/register src/main.ts",
+    "migration:run": "node -r ts-node/register -r tsconfig-paths/register ../node_modules/typeorm/cli.js migration:run -d src/database/data-source.ts",
+    "migration:revert": "node -r ts-node/register -r tsconfig-paths/register ../node_modules/typeorm/cli.js migration:revert -d src/database/data-source.ts",
     "test": "jest --runInBand",
     "test:integration": "jest --runInBand --config jest.integration.config.cjs"
   },
@@ -46,6 +46,7 @@
     "supertest": "^7.1.0",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "~5.5.2"
   },
   "engines": {
