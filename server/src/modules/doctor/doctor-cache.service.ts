@@ -32,8 +32,8 @@ export class DoctorCacheService implements OnModuleInit, OnApplicationShutdown {
       );
   }
 
-  async onApplicationShutdown(): Promise<void> {
-    if (this.client.isOpen) await this.client.quit();
+  onApplicationShutdown(): void {
+    if (this.client.isOpen) this.client.destroy();
   }
 
   key(namespace: string, value: unknown): string {

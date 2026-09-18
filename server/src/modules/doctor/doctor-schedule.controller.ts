@@ -15,16 +15,14 @@ import {
 import { Role } from "@shared/enums";
 import { Roles } from "../../common/decorators/auth.decorators";
 import { OwnDoctor } from "../../common/decorators/own-doctor.decorator";
-import { AccessTokenGuard } from "../../common/guards/access-token.guard";
 import { OwnDoctorGuard } from "../../common/guards/own-doctor.guard";
-import { RolesGuard } from "../../common/guards/roles.guard";
 import { DoctorScheduleService } from "./doctor-schedule.service";
 import { CreateDoctorScheduleDto } from "./dto/create-schedule.dto";
 import { ScheduleRangeDto } from "./dto/schedule-range.dto";
 import { UpdateDoctorScheduleDto } from "./dto/update-schedule.dto";
 
 @Controller("doctors/:doctorId/schedules")
-@UseGuards(AccessTokenGuard, RolesGuard, OwnDoctorGuard)
+@UseGuards(OwnDoctorGuard)
 @OwnDoctor("doctorId")
 export class DoctorScheduleController {
   constructor(private readonly service: DoctorScheduleService) {}
