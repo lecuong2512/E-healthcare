@@ -1,0 +1,59 @@
+name: ehealth-card26
+
+services:
+  postgres:
+    image: postgres:${POSTGRES_IMAGE_TAG:-16-alpine}
+    container_name: ehealth-card26-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ehealth_db}
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - card26_postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ehealth_db}
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - card26_network
+
+  redis:
+    image: redis/redis-stack:${REDIS_IMAGE_TAG:-7.2.0-v10}
+    container_name: ehealth-card26-redis
+    restart: unless-stopped
+    environment:
+      REDIS_ARGS: "${REDIS_ARGS:-}"
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "${REDIS_PORT:-56379}:6379"
+      - "${REDIS_INSIGHT_PORT:-58001}:8001"
+    volumes:
+      - card26_redis_data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli ping | grep PONG
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - card26_network
+
+networks:
+  card26_network:
+    name: ehealth-card26-network
+    driver: bridge
+
+volumes:
+  card26_postgres_data:
+    name: ehealth-card26-postgres-data
+  card26_redis_data:
+    name: ehealth-card26-redis-data
