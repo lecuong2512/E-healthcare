@@ -7,6 +7,7 @@ import { CreateRegistrationAndPhr1789477200000 } from "./migrations/178947720000
 import { CreateRegistrationOtpSendLimit1789477800000 } from "./migrations/1789477800000-create-registration-otp-send-limit";
 import { CreateAuthSessionsAndGoogle1789478400000 } from "./migrations/1789478400000-create-auth-sessions-and-google";
 import { AllowRegistrationWithBothContacts1789479000000 } from "./migrations/1789479000000-allow-registration-with-both-contacts";
+import { AddDoctorScheduleAndSearchIndexes1789565400000 } from "./migrations/1789565400000-add-doctor-schedule-and-search-indexes";
 import {
   AuthSessionEntity,
   GoogleOAuthFlowEntity,
@@ -52,6 +53,7 @@ export function createDataSource(url: string): DataSource {
       CreateAuthSessionsAndGoogle1789478400000,
       AllowRegistrationWithBothContacts1789479000000,
       AddSrsAuth03PhrFields1789560000000,
+      AddDoctorScheduleAndSearchIndexes1789565400000,
     ],
   });
 }

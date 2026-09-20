@@ -3,6 +3,7 @@
     "paths": {
       "@shared/*": ["../shared/src/*"]
     },
+    "types": ["node"],
     "module": "commonjs",
     "target": "ES2022",
     "lib": ["ES2022"],

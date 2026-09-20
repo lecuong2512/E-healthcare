@@ -6,9 +6,12 @@ import { APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AccessTokenGuard } from "./common/guards/access-token.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
+import { DoctorModule } from "./modules/doctor/doctor.module";
+
 @Module({
   imports: [
     AuthModule,
+    DoctorModule,
     BookingModule,
     PhrModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),

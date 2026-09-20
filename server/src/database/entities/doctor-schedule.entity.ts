@@ -17,7 +17,10 @@ export class DoctorScheduleEntity {
   @Column({ name: 'doctor_id', type: 'uuid' })
   doctorId!: string;
 
-  @ManyToOne(() => DoctorEntity)
+  @ManyToOne(() => DoctorEntity, {
+    onDelete: 'RESTRICT',
+    onUpdate: 'CASCADE',
+  })
   @JoinColumn({ name: 'doctor_id' })
   doctor!: DoctorEntity;
 
