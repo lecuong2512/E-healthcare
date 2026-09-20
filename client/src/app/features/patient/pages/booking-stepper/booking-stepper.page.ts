@@ -1,13 +1,13 @@
 import { Component, computed, inject, signal, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 // ─── Constants (SRS-PAT-02 §5.1) ────────────────────────────
 const TOTAL_SECONDS = 10 * 60; // 600s TTL
 
 export interface Doctor {
-  id: number;
+  id: string | number;
   title: string;
   name: string;
   specialty: string;
@@ -27,6 +27,7 @@ export interface SlotItem {
   id: string;
   time: string;
   status: 'available' | 'holding' | 'booked';
+  date?: string;
 }
 
 @Component({
@@ -38,6 +39,7 @@ export interface SlotItem {
 export class BookingStepperPage implements OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   // ─── Stepper ─────────────────────────────────────────────
   readonly step = signal<number>(1);
@@ -56,7 +58,7 @@ export class BookingStepperPage implements OnDestroy {
     { id: 6, title: 'PGS.TS.BS', name: 'Võ Đình Phúc',    specialty: 'Tai Mũi Họng',   hospital: 'BV TMH TW',            fee: 550000, rating: 4.9 },
   ];
 
-  readonly selectedDoctorId = signal<number | null>(null);
+  readonly selectedDoctorId = signal<string | number | null>(null);
 
   readonly filteredDoctors = computed(() => {
     const q = this.searchQuery().toLowerCase();
@@ -120,7 +122,7 @@ export class BookingStepperPage implements OnDestroy {
     phone:    ['', [Validators.required, Validators.pattern(/^[0-9]{10}$/)]],
     dob:      ['', Validators.required],
     gender:   [''],
-    reason:   [''],
+    reason:   ['', Validators.required],
   });
 
   // ─── Step 4: Payment method ───────────────────────────────
@@ -134,6 +136,9 @@ export class BookingStepperPage implements OnDestroy {
 
   // ─── Countdown timer ─────────────────────────────────────
   readonly countdownSeconds = signal<number>(TOTAL_SECONDS);
+  readonly loading = signal(false);
+  readonly errorMessage = signal<string | null>(null);
+  readonly selectedFileName = signal<string | null>(null);
   private timerInterval: ReturnType<typeof setInterval> | null = null;
 
   readonly formattedCountdown = computed(() => {
@@ -148,11 +153,18 @@ export class BookingStepperPage implements OnDestroy {
   );
 
   constructor() {
-    this.startTimer();
+    const doctorId = this.route.snapshot.queryParamMap.get('doctorId');
+    const doctor = this.doctors.find(item => String(item.id) === doctorId);
+    if (doctor) {
+      this.selectedDoctorId.set(doctor.id);
+      this.step.set(2);
+    }
   }
 
   // ─── Timer helpers ────────────────────────────────────────
   startTimer() {
+    if (this.timerInterval) clearInterval(this.timerInterval);
+    this.countdownSeconds.set(TOTAL_SECONDS);
     this.timerInterval = setInterval(() => {
       this.countdownSeconds.update(v => {
         if (v <= 1) { this.handleTimeout(); return 0; }
@@ -168,7 +180,7 @@ export class BookingStepperPage implements OnDestroy {
     this.selectedSlotId.set(null);
     this.patientForm.reset();
     this.countdownSeconds.set(TOTAL_SECONDS);
-    this.startTimer();
+    this.timerInterval = null;
   }
 
   ngOnDestroy() {
@@ -178,6 +190,11 @@ export class BookingStepperPage implements OnDestroy {
   // ─── Step 1 ───────────────────────────────────────────────
   selectDoctor(d: Doctor) {
     this.selectedDoctorId.set(d.id);
+  }
+
+  selectDoctorAndContinue(d: Doctor): void {
+    this.selectDoctor(d);
+    this.goToStep(2);
   }
 
   setSearchQuery(q: string) {
@@ -200,7 +217,22 @@ export class BookingStepperPage implements OnDestroy {
   }
 
   chooseSlot(slot: SlotItem) {
-    if (slot.status === 'available') this.selectedSlotId.set(slot.id);
+    if (slot.status === 'available') {
+      this.selectedSlotId.set(slot.id);
+      this.startTimer();
+    }
+  }
+
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      this.errorMessage.set('Tệp không được vượt quá 10MB.');
+      input.value = '';
+      return;
+    }
+    this.selectedFileName.set(file.name);
   }
 
   private calcEndTime(start: string): string {
@@ -215,8 +247,9 @@ export class BookingStepperPage implements OnDestroy {
   }
 
   submitBooking() {
-    alert('🎉 Đặt khám thành công! Mã đặt khám: #BK' + Math.floor(Math.random() * 100000));
-    this.router.navigate(['/']);
+    if (this.selectedSlotId() === null || this.patientForm.invalid) return;
+    alert('Đặt khám thành công!');
+    this.router.navigate(['/patient/history']);
   }
 
   // ─── Navigation ───────────────────────────────────────────

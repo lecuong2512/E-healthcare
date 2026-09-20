@@ -12,9 +12,10 @@
 import { Component, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 
 export interface Doctor {
-  id: number;
+  id: string | number;
   degree: string;
   name: string;
   specialty: string;
@@ -32,7 +33,7 @@ export interface Doctor {
 @Component({
   selector: 'app-doctor-search-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './doctor-search.page.html',
   styleUrl: './doctor-search.page.scss'
 })
