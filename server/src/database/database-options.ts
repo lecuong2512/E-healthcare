@@ -1,4 +1,5 @@
 import { DataSource } from "typeorm";
+import { AddSrsAuth03PhrFields1789560000000 } from "./migrations/1789560000000-add-srs-auth03-phr-fields";
 import { CreateCatalogAndRbacTables1788834118637 } from "./migrations/1788834118637-create-catalog-and-rbac-tables";
 import { CreateDoctorSchedulesTable1788849768948 } from "./migrations/1788849768948-create-doctor-schedules-table";
 import { CreateAppointmentsTable1788851428977 } from "./migrations/1788851428977-create-appointments-table";
@@ -17,9 +18,10 @@ import {
   UserRoleEntity,
 } from "./entities/auth.entity";
 import { UserEntity } from "./entities/user.entity";
+import { SpecialtyEntity } from "./entities/specialty.entity";
 import { DoctorEntity } from "./entities/doctor.entity";
 import { DoctorScheduleEntity } from "./entities/doctor-schedule.entity";
-import { SpecialtyEntity } from "./entities/specialty.entity";
+import { AppointmentEntity } from "./entities/appointment.entity";
 
 export function createDataSource(url: string): DataSource {
   return new DataSource({
@@ -29,9 +31,6 @@ export function createDataSource(url: string): DataSource {
     logging: false,
     entities: [
       UserEntity,
-      DoctorEntity,
-      DoctorScheduleEntity,
-      SpecialtyEntity,
       UserRoleEntity,
       PersonalHealthProfileEntity,
       RegistrationSessionEntity,
@@ -39,6 +38,10 @@ export function createDataSource(url: string): DataSource {
       AuthSessionEntity,
       GoogleOAuthFlowEntity,
       GoogleRegistrationSessionEntity,
+      SpecialtyEntity,
+      DoctorEntity,
+      DoctorScheduleEntity,
+      AppointmentEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -49,6 +52,7 @@ export function createDataSource(url: string): DataSource {
       CreateRegistrationOtpSendLimit1789477800000,
       CreateAuthSessionsAndGoogle1789478400000,
       AllowRegistrationWithBothContacts1789479000000,
+      AddSrsAuth03PhrFields1789560000000,
       AddDoctorScheduleAndSearchIndexes1789565400000,
     ],
   });

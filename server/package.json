@@ -5,10 +5,10 @@
   "description": "NestJS Backend API for E-Healthcare Portal",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node server/dist/server/src/main.js",
-    "start:dev": "ts-node server/src/main.ts",
-    "migration:run": "typeorm-ts-node-commonjs migration:run -d server/src/database/data-source.ts",
-    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d server/src/database/data-source.ts",
+    "start": "node dist/server/src/main.js",
+    "start:dev": "ts-node -r tsconfig-paths/register src/main.ts",
+    "migration:run": "node -r ts-node/register -r tsconfig-paths/register ../node_modules/typeorm/cli.js migration:run -d src/database/data-source.ts",
+    "migration:revert": "node -r ts-node/register -r tsconfig-paths/register ../node_modules/typeorm/cli.js migration:revert -d src/database/data-source.ts",
     "test": "jest --runInBand",
     "test:integration": "jest --runInBand --config jest.integration.config.cjs"
   },
@@ -23,6 +23,7 @@
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.2.0",
     "google-auth-library": "^10.0.0",
+    "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^10.0.10",
     "pg": "^8.16.0",
@@ -36,6 +37,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/cookie-parser": "^1.4.9",
     "@types/express": "^5.0.0",
+    "@types/ioredis": "^4.28.10",
     "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.0",
     "@types/node": "^22.20.3",
@@ -47,6 +49,7 @@
     "supertest": "^7.1.0",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "~5.5.2"
   },
   "engines": {

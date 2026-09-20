@@ -33,7 +33,7 @@ export class DoctorScheduleEntity {
   @Column({ name: 'end_time', type: 'time' })
   endTime!: string;
 
-  @Column({ type: 'varchar', length: 20 })
+  @Column({ type: 'varchar', length: 20, default: SlotStatus.AVAILABLE })
   status!: SlotStatus;
 
   @VersionColumn({ default: 0 })
