@@ -62,7 +62,7 @@ export class PhrProfilePage implements OnInit {
       error: (error) => {
         this.errorMessage =
           error?.error?.message ??
-          'Kh�ng th? c?p nh?t h? so s?c kh?e. Vui l�ng th? l?i.';
+          'Không thể cập nhật hồ sơ sức khỏe. Vui lòng thử lại.';
 
         this.isSaving = false;
       },
@@ -89,7 +89,7 @@ export class PhrProfilePage implements OnInit {
       error: (error) => {
         this.errorMessage =
           error?.error?.message ??
-          'Kh�ng th? t?i h? so s?c kh?e. Vui l�ng th? l?i.';
+  'Không thể cập nhật hồ sơ sức khỏe. Vui lòng thử lại.';
 
         this.isLoading = false;
       },
