@@ -61,6 +61,7 @@ export class DoctorSearchPage {
   readonly selectedFee = signal<string | null>(null);
   readonly filterHighRating = signal(false);
   readonly filterAvailableToday = signal(false);
+  readonly filterOpen = signal(false);
 
   // Mock data chuẩn xác theo hình
   readonly doctors = signal<Doctor[]>([
@@ -187,5 +188,13 @@ export class DoctorSearchPage {
 
   toggleFee(value: string) {
     this.selectedFee.update(curr => (curr === value ? null : value));
+  }
+
+  toggleFilters(): void {
+    this.filterOpen.update(open => !open);
+  }
+
+  closeFilters(): void {
+    this.filterOpen.set(false);
   }
 }

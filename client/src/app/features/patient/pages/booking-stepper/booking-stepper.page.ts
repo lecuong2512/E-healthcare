@@ -122,7 +122,7 @@ export class BookingStepperPage implements OnDestroy {
     phone:    ['', [Validators.required, Validators.pattern(/^[0-9]{10}$/)]],
     dob:      ['', Validators.required],
     gender:   [''],
-    reason:   ['', Validators.required],
+    reason:   [''],
   });
 
   // ─── Step 4: Payment method ───────────────────────────────
