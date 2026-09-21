@@ -10,6 +10,7 @@ import { AllowRegistrationWithBothContacts1789479000000 } from "./migrations/178
 import { AddDoctorScheduleAndSearchIndexes1789565400000 } from "./migrations/1789565400000-add-doctor-schedule-and-search-indexes";
 import { AddReceptionQueueAndCounterPayment1789923600000 } from "./migrations/1789923600000-add-reception-queue-and-counter-payment";
 import { AddWalkInPatientAndIdempotency1789927200000 } from "./migrations/1789927200000-add-walk-in-patient-and-idempotency";
+import { AddReceptionAuditLogs1789930800000 } from "./migrations/1789930800000-add-reception-audit-logs";
 import {
   AuthSessionEntity,
   GoogleOAuthFlowEntity,
@@ -26,6 +27,7 @@ import { DoctorScheduleEntity } from "./entities/doctor-schedule.entity";
 import { AppointmentEntity } from "./entities/appointment.entity";
 import { DoctorQueueCounterEntity } from "./entities/doctor-queue-counter.entity";
 import { CounterPaymentTransactionEntity } from "./entities/counter-payment-transaction.entity";
+import { ReceptionAuditLogEntity } from "./entities/reception-audit-log.entity";
 
 export function createDataSource(url: string): DataSource {
   return new DataSource({
@@ -48,6 +50,7 @@ export function createDataSource(url: string): DataSource {
       AppointmentEntity,
       DoctorQueueCounterEntity,
       CounterPaymentTransactionEntity,
+      ReceptionAuditLogEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -62,6 +65,7 @@ export function createDataSource(url: string): DataSource {
       AddDoctorScheduleAndSearchIndexes1789565400000,
       AddReceptionQueueAndCounterPayment1789923600000,
       AddWalkInPatientAndIdempotency1789927200000,
+      AddReceptionAuditLogs1789930800000,
     ],
   });
 }
