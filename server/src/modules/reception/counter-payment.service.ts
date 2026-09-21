@@ -13,6 +13,7 @@ import {
   CounterPaymentStatus,
   PaymentMethod,
   PaymentStatus,
+  ReceptionAuditAction,
 } from '@shared/enums';
 import { CounterPaymentReceipt } from '@shared/interfaces';
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
@@ -20,6 +21,7 @@ import { CounterPaymentTransactionEntity } from '../../database/entities/counter
 import { DoctorEntity } from '../../database/entities/doctor.entity';
 import { UserEntity } from '../../database/entities/user.entity';
 import { CollectPaymentDto } from './dto/collect-payment.dto';
+import { ReceptionAuditContext, ReceptionAuditService } from './reception-audit.service';
 
 function toMinorUnits(value: number): number {
   const minorUnits = Math.round(value * 100);
@@ -57,14 +59,17 @@ function receiptFrom(transaction: CounterPaymentTransactionEntity): CounterPayme
 
 @Injectable()
 export class CounterPaymentService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly audit: ReceptionAuditService,
+  ) {}
 
   async collect(
     appointmentId: string,
-    collectorId: string | undefined,
+    context: ReceptionAuditContext,
     dto: CollectPaymentDto,
   ): Promise<CounterPaymentReceipt> {
-    if (!collectorId) throw new UnauthorizedException();
+    if (!context.actorId) throw new UnauthorizedException();
     if (dto.method !== CounterPaymentMethod.CASH) {
       throw new BadRequestException('Quầy hiện chỉ hỗ trợ thu tiền mặt.');
     }
@@ -90,7 +95,7 @@ export class CounterPaymentService {
       return this.recordCashPayment(
         manager,
         appointment,
-        collectorId,
+        context,
         dto.amountTendered,
       );
     });
@@ -99,9 +104,10 @@ export class CounterPaymentService {
   async recordCashPayment(
     manager: EntityManager,
     appointment: AppointmentEntity,
-    collectorId: string,
+    context: ReceptionAuditContext,
     amountTendered: number,
   ): Promise<CounterPaymentReceipt> {
+    const collectorId = context.actorId;
     if (
       appointment.paymentMethod !== PaymentMethod.PAY_AT_CLINIC ||
       appointment.paymentStatus !== PaymentStatus.UNPAID
@@ -152,6 +158,12 @@ export class CounterPaymentService {
     appointment.collectedBy = collectorId;
     await manager.save(AppointmentEntity, appointment);
 
+    await this.audit.record(
+      manager, context, ReceptionAuditAction.COUNTER_PAYMENT_COLLECTED,
+      appointment.id, appointment.patientId,
+      { transactionId: transaction.id, amount: Number(transaction.amount) },
+    );
+
     return receiptFrom(transaction);
   }
 
@@ -164,5 +176,21 @@ export class CounterPaymentService {
       });
     if (!transaction) throw new NotFoundException('Không tìm thấy phiếu thu tại quầy.');
     return receiptFrom(transaction);
+  }
+
+  async reprintReceipt(
+    appointmentId: string,
+    context: ReceptionAuditContext,
+  ): Promise<CounterPaymentReceipt> {
+    const receipt = await this.getReceipt(appointmentId);
+    const appointment = await this.dataSource.getRepository(AppointmentEntity)
+      .findOneBy({ id: appointmentId });
+    if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn.');
+    await this.audit.record(
+      this.dataSource.manager, context, ReceptionAuditAction.RECEIPT_REPRINTED,
+      appointmentId, appointment.patientId,
+      { receiptCode: receipt.receiptCode },
+    );
+    return receipt;
   }
 }

@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { DataSource, QueryFailedError } from 'typeorm';
 import { CounterPaymentMethod, Gender, Role, SlotStatus } from '@shared/enums';
 import { AppointmentEntity } from '../src/database/entities/appointment.entity';
@@ -12,6 +12,7 @@ import { QueueNumberService } from '../src/modules/reception/queue-number.servic
 import { WalkInService } from '../src/modules/reception/walk-in.service';
 import { RedisService } from '../src/common/redis/redis.service';
 import { QueueEventsService } from '../src/modules/realtime/queue-events.service';
+import { ReceptionAuditContext, ReceptionAuditService } from '../src/modules/reception/reception-audit.service';
 
 jest.mock('../src/common/utils/vn-time.util', () => ({
   vietnamNow: () => ({ date: '2026-09-21', time: '09:00:00' }),
@@ -21,6 +22,7 @@ describe('WalkInService', () => {
   const doctorId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   const scheduleId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   const receptionistId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const auditContext: ReceptionAuditContext = { actorId: receptionistId, ip: '127.0.0.1', userAgent: 'jest' };
   const key = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
   const slot = {
     id: scheduleId,
@@ -171,6 +173,7 @@ describe('WalkInService', () => {
       { allocate: jest.fn(async () => 7) } as unknown as QueueNumberService,
       payments as unknown as CounterPaymentService,
       queueEvents as unknown as QueueEventsService,
+      { record: jest.fn(async () => undefined) } as unknown as ReceptionAuditService,
     );
   });
 
@@ -182,9 +185,22 @@ describe('WalkInService', () => {
     );
   });
 
+  it('báo lỗi khi Redis không kiểm tra được slot đang giữ', async () => {
+    redis.get.mockRejectedValue(new Error('Redis unavailable'));
+    await expect(service.availableDoctors({})).rejects.toThrow(ServiceUnavailableException);
+  });
+
+  it('không mở giao dịch nếu Redis không khóa được slot walk-in', async () => {
+    redis.setNxEx.mockRejectedValue(new Error('Redis unavailable'));
+    await expect(service.book(request, auditContext, key)).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
   it('trả kết quả cũ khi gửi lại cùng Idempotency-Key', async () => {
-    const first = await service.book(request, receptionistId, key);
-    const second = await service.book(request, receptionistId, key);
+    const first = await service.book(request, auditContext, key);
+    const second = await service.book(request, auditContext, key);
 
     expect(first).toEqual(second);
     expect(first.queueNumber).toBe(7);
@@ -201,16 +217,16 @@ describe('WalkInService', () => {
 
   it('từ chối slot đang được giữ mà không mở giao dịch DB', async () => {
     redis.setNxEx.mockResolvedValue(false);
-    await expect(service.book(request, receptionistId, key)).rejects.toThrow(
+    await expect(service.book(request, auditContext, key)).rejects.toThrow(
       ConflictException,
     );
     expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
   it('từ chối dùng lại Idempotency-Key với dữ liệu khác', async () => {
-    await service.book(request, receptionistId, key);
+    await service.book(request, auditContext, key);
     await expect(service.book(
-      { ...request, amountTendered: 600000 }, receptionistId, key,
+      { ...request, amountTendered: 600000 }, auditContext, key,
     )).rejects.toThrow(ConflictException);
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
   });
@@ -222,7 +238,7 @@ describe('WalkInService', () => {
       gender: Gender.MALE,
       dateOfBirth: '1989-01-01',
     } as UserEntity];
-    await expect(service.book(request, receptionistId, key)).rejects.toThrow(
+    await expect(service.book(request, auditContext, key)).rejects.toThrow(
       ConflictException,
     );
     expect(payments.recordCashPayment).not.toHaveBeenCalled();
@@ -232,7 +248,7 @@ describe('WalkInService', () => {
 
   it('giải phóng Redis lock khi giao dịch thất bại', async () => {
     payments.recordCashPayment.mockRejectedValue(new Error('payment failed'));
-    await expect(service.book(request, receptionistId, key)).rejects.toThrow(
+    await expect(service.book(request, auditContext, key)).rejects.toThrow(
       'payment failed',
     );
     expect(redis.releaseLockIfOwner).toHaveBeenCalledTimes(1);
@@ -240,7 +256,7 @@ describe('WalkInService', () => {
 
   it('thử mã lịch hẹn khác khi mã đầu bị trùng', async () => {
     remainingCodeCollisions = 1;
-    const response = await service.book(request, receptionistId, key);
+    const response = await service.book(request, auditContext, key);
     expect(response.appointmentId).toBe('appointment-1');
     expect(payments.recordCashPayment).toHaveBeenCalledTimes(1);
   });

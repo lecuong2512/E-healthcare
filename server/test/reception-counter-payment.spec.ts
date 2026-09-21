@@ -11,12 +11,14 @@ import { CounterPaymentTransactionEntity } from '../src/database/entities/counte
 import { DoctorEntity } from '../src/database/entities/doctor.entity';
 import { UserEntity } from '../src/database/entities/user.entity';
 import { CounterPaymentService } from '../src/modules/reception/counter-payment.service';
+import { ReceptionAuditContext, ReceptionAuditService } from '../src/modules/reception/reception-audit.service';
 
 describe('CounterPaymentService', () => {
   const appointmentId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   const patientId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
   const doctorId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
   const collectorId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  const auditContext: ReceptionAuditContext = { actorId: collectorId, ip: '127.0.0.1', userAgent: 'jest' };
 
   let service: CounterPaymentService;
   let appointment: AppointmentEntity;
@@ -79,11 +81,14 @@ describe('CounterPaymentService', () => {
         findOne: async () => transactions[0] ?? null,
       })),
     } as unknown as DataSource;
-    service = new CounterPaymentService(dataSource);
+    service = new CounterPaymentService(
+      dataSource,
+      { record: jest.fn(async () => undefined) } as unknown as ReceptionAuditService,
+    );
   });
 
   it('ghi một giao dịch và giữ nguyên dữ liệu phiếu thu khi in lại', async () => {
-    const firstReceipt = await service.collect(appointmentId, collectorId, {
+    const firstReceipt = await service.collect(appointmentId, auditContext, {
       method: CounterPaymentMethod.CASH,
       amountTendered: 500000,
     });
@@ -108,9 +113,9 @@ describe('CounterPaymentService', () => {
       method: CounterPaymentMethod.CASH,
       amountTendered: 300000,
     };
-    await service.collect(appointmentId, collectorId, request);
+    await service.collect(appointmentId, auditContext, request);
 
-    await expect(service.collect(appointmentId, collectorId, request)).rejects.toThrow(
+    await expect(service.collect(appointmentId, auditContext, request)).rejects.toThrow(
       ConflictException,
     );
     expect(transactions).toHaveLength(1);
@@ -118,7 +123,7 @@ describe('CounterPaymentService', () => {
 
   it('không ghi giao dịch khi khách đưa thiếu tiền', async () => {
     await expect(
-      service.collect(appointmentId, collectorId, {
+      service.collect(appointmentId, auditContext, {
         method: CounterPaymentMethod.CASH,
         amountTendered: 299999,
       }),

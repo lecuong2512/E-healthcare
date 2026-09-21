@@ -11,6 +11,7 @@ import { AddDoctorScheduleAndSearchIndexes1789565400000 } from "./migrations/178
 import { EnableUnaccentDoctorSearch1789707600000 } from './migrations/1789707600000-enable-unaccent-doctor-search';
 import { AddReceptionQueueAndCounterPayment1789923600000 } from "./migrations/1789923600000-add-reception-queue-and-counter-payment";
 import { AddWalkInPatientAndIdempotency1789927200000 } from "./migrations/1789927200000-add-walk-in-patient-and-idempotency";
+import { AddReceptionAuditLogs1789930800000 } from "./migrations/1789930800000-add-reception-audit-logs";
 import {
   AuthSessionEntity,
   GoogleOAuthFlowEntity,
@@ -33,6 +34,7 @@ import { AddClinicCancellationOutbox1789801200000 } from './migrations/178980120
 import { AddAppointmentCreatedAt1789801800000 } from './migrations/1789801800000-add-appointment-created-at';
 import { DoctorQueueCounterEntity } from "./entities/doctor-queue-counter.entity";
 import { CounterPaymentTransactionEntity } from "./entities/counter-payment-transaction.entity";
+import { ReceptionAuditLogEntity } from "./entities/reception-audit-log.entity";
 
 import { MedicalRecordEntity } from "./entities/medical-record.entity";
 import { PrescriptionEntity } from "./entities/prescription.entity";
@@ -65,6 +67,7 @@ export function createDataSource(url: string): DataSource {
       PrescriptionItemEntity,
       DoctorQueueCounterEntity,
       CounterPaymentTransactionEntity,
+      ReceptionAuditLogEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -84,6 +87,7 @@ export function createDataSource(url: string): DataSource {
       AddEmrPrescriptionTables1790065218000,
       AddReceptionQueueAndCounterPayment1789923600000,
       AddWalkInPatientAndIdempotency1789927200000,
+      AddReceptionAuditLogs1789930800000,
     ],
   });
 }
