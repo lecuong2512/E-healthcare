@@ -20,6 +20,7 @@ import {
   Role,
   SlotStatus,
   UserStatus,
+  ReceptionAuditAction,
 } from '@shared/enums';
 import {
   AvailableWalkInDoctor,
@@ -39,6 +40,7 @@ import { AvailableDoctorsDto } from './dto/available-doctors.dto';
 import { WalkInDto } from './dto/walk-in.dto';
 import { QueueNumberService } from './queue-number.service';
 import { QueueEventsService } from '../realtime/queue-events.service';
+import { ReceptionAuditContext, ReceptionAuditService } from './reception-audit.service';
 
 const ACTIVE_STATUSES = [
   AppointmentStatus.PENDING_PAYMENT,
@@ -69,6 +71,7 @@ export class WalkInService {
     private readonly queueNumbers: QueueNumberService,
     private readonly payments: CounterPaymentService,
     private readonly queueEvents: QueueEventsService,
+    private readonly audit: ReceptionAuditService,
   ) {}
 
   async availableDoctors(query: AvailableDoctorsDto): Promise<AvailableWalkInDoctor[]> {
@@ -130,9 +133,10 @@ export class WalkInService {
 
   async book(
     dto: WalkInDto,
-    receptionistId: string | undefined,
+    context: ReceptionAuditContext,
     idempotencyKey: string | undefined,
   ): Promise<WalkInBookingResponse> {
+    const receptionistId = context.actorId;
     if (!receptionistId) throw new UnauthorizedException();
     if (!idempotencyKey || !isUUID(idempotencyKey, '4')) {
       throw new BadRequestException('Idempotency-Key phải là UUID v4.');
@@ -231,7 +235,12 @@ export class WalkInService {
           },
         );
         const receipt = await this.payments.recordCashPayment(
-          manager, appointment, receptionistId, dto.amountTendered,
+          manager, appointment, context, dto.amountTendered,
+        );
+        await this.audit.record(
+          manager, context, ReceptionAuditAction.WALK_IN_BOOKED,
+          appointment.id, patient.id,
+          { scheduleId: lockedSlot.id, queueNumber },
         );
         return {
           appointmentId: appointment.id,

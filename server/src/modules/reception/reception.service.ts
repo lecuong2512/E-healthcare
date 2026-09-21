@@ -5,7 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { AppointmentStatus, PaymentMethod, PaymentStatus, QueueSource } from '@shared/enums';
+import {
+  AppointmentStatus, PaymentMethod, PaymentStatus, QueueSource, ReceptionAuditAction,
+} from '@shared/enums';
 import { CheckInResponse, ReceptionAppointment } from '@shared/interfaces';
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
 import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
@@ -16,6 +18,7 @@ import { vietnamNow } from '../../common/utils/vn-time.util';
 import { LookupAppointmentDto } from './dto/lookup-appointment.dto';
 import { QueueNumberService } from './queue-number.service';
 import { QueueEventsService } from '../realtime/queue-events.service';
+import { ReceptionAuditContext, ReceptionAuditService } from './reception-audit.service';
 
 @Injectable()
 export class ReceptionService {
@@ -23,9 +26,13 @@ export class ReceptionService {
     private readonly dataSource: DataSource,
     private readonly queueNumbers: QueueNumberService,
     private readonly queueEvents: QueueEventsService,
+    private readonly audit: ReceptionAuditService,
   ) {}
 
-  async lookup(query: LookupAppointmentDto): Promise<ReceptionAppointment[]> {
+  async lookup(
+    query: LookupAppointmentDto,
+    context: ReceptionAuditContext,
+  ): Promise<ReceptionAppointment[]> {
     if (Number(Boolean(query.code)) + Number(Boolean(query.phone)) !== 1) {
       throw new BadRequestException('Cần truyền đúng một trong code hoặc phone.');
     }
@@ -54,6 +61,14 @@ export class ReceptionService {
     }
 
     const appointments = await builder.getMany();
+    await this.audit.record(
+      this.dataSource.manager,
+      context,
+      ReceptionAuditAction.RECEPTION_LOOKUP,
+      appointments.length === 1 ? appointments[0].id : null,
+      appointments.length === 1 ? appointments[0].patientId : null,
+      { lookupBy: query.code ? 'CODE' : 'PHONE', resultCount: appointments.length },
+    );
     return appointments.map((appointment) => {
       const requiresPayment =
         appointment.paymentMethod === PaymentMethod.PAY_AT_CLINIC &&
@@ -95,7 +110,10 @@ export class ReceptionService {
     });
   }
 
-  async checkIn(appointmentId: string): Promise<CheckInResponse> {
+  async checkIn(
+    appointmentId: string,
+    context: ReceptionAuditContext,
+  ): Promise<CheckInResponse> {
     const result = await this.dataSource.transaction('READ COMMITTED', async (manager): Promise<CheckInResponse> => {
       const appointment = await manager
         .getRepository(AppointmentEntity)
@@ -144,6 +162,11 @@ export class ReceptionService {
         relations: { user: true },
       });
       if (!doctor) throw new NotFoundException('Không tìm thấy bác sĩ.');
+      await this.audit.record(
+        manager, context, ReceptionAuditAction.PATIENT_CHECKED_IN,
+        appointment.id, appointment.patientId,
+        { queueNumber, queueDate: today, previousStatus: AppointmentStatus.CONFIRMED },
+      );
       return {
         appointmentId: appointment.id,
         appointmentCode: appointment.appointmentCode,
