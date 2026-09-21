@@ -10,6 +10,7 @@ import { AllowRegistrationWithBothContacts1789479000000 } from "./migrations/178
 import { AddDoctorScheduleAndSearchIndexes1789565400000 } from "./migrations/1789565400000-add-doctor-schedule-and-search-indexes";
 import { EnableUnaccentDoctorSearch1789707600000 } from './migrations/1789707600000-enable-unaccent-doctor-search';
 import { AddReceptionQueueAndCounterPayment1789923600000 } from "./migrations/1789923600000-add-reception-queue-and-counter-payment";
+import { AddWalkInPatientAndIdempotency1789927200000 } from "./migrations/1789927200000-add-walk-in-patient-and-idempotency";
 import {
   AuthSessionEntity,
   GoogleOAuthFlowEntity,
@@ -82,6 +83,7 @@ export function createDataSource(url: string): DataSource {
       AddAppointmentCreatedAt1789801800000,
       AddEmrPrescriptionTables1790065218000,
       AddReceptionQueueAndCounterPayment1789923600000,
+      AddWalkInPatientAndIdempotency1789927200000,
     ],
   });
 }

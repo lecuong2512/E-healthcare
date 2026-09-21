@@ -3,6 +3,7 @@
   NotFoundException,
 } from "@nestjs/common";
 import { DataSource } from "typeorm";
+import { DateOfBirthPrecision } from "@shared/enums";
 
 import {
   PhrProfile,
@@ -81,6 +82,7 @@ export class PhrService {
     user.fullName = request.fullName;
     user.gender = request.gender;
     user.dateOfBirth = request.dateOfBirth;
+    user.dateOfBirthPrecision = DateOfBirthPrecision.FULL_DATE;
 
     phr.citizenId = request.citizenId;
     phr.address = request.address;
@@ -107,6 +109,7 @@ export class PhrService {
       citizenId: phr.citizenId,
       gender: user.gender,
       dateOfBirth: user.dateOfBirth,
+      dateOfBirthPrecision: user.dateOfBirthPrecision,
       address: phr.address,
       healthInsurance: phr.healthInsurance,
       bloodType: phr.bloodType,

@@ -11,31 +11,10 @@ import { AppointmentEntity } from '../../database/entities/appointment.entity';
 import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
 import { DoctorEntity } from '../../database/entities/doctor.entity';
 import { UserEntity } from '../../database/entities/user.entity';
+import { vietnamesePhoneVariants } from '../../common/utils/vn-phone.util';
+import { vietnamNow } from '../../common/utils/vn-time.util';
 import { LookupAppointmentDto } from './dto/lookup-appointment.dto';
 import { QueueNumberService } from './queue-number.service';
-
-function todayInVietnam(): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date());
-  const part = (type: string): string => parts.find((item) => item.type === type)!.value;
-  return `${part('year')}-${part('month')}-${part('day')}`;
-}
-
-function phoneVariants(input: string): string[] {
-  const compact = input.replace(/[\s.-]/g, '');
-  const withCountryCode = compact.startsWith('84') ? `+${compact}` : compact;
-  if (!/^(?:0[35789]\d{8}|\+84[35789]\d{8})$/.test(withCountryCode)) {
-    throw new BadRequestException('Số điện thoại không hợp lệ.');
-  }
-  const canonical = withCountryCode.startsWith('0')
-    ? `+84${withCountryCode.slice(1)}`
-    : withCountryCode;
-  return [canonical, `0${canonical.slice(3)}`];
-}
 
 @Injectable()
 export class ReceptionService {
@@ -49,7 +28,7 @@ export class ReceptionService {
       throw new BadRequestException('Cần truyền đúng một trong code hoặc phone.');
     }
 
-    const today = todayInVietnam();
+    const today = vietnamNow().date;
     const builder = this.dataSource
       .getRepository(AppointmentEntity)
       .createQueryBuilder('appointment')
@@ -68,7 +47,7 @@ export class ReceptionService {
       });
     } else {
       builder.andWhere('patient.phone_number IN (:...phones)', {
-        phones: phoneVariants(query.phone!),
+        phones: vietnamesePhoneVariants(query.phone!),
       });
     }
 
@@ -137,7 +116,7 @@ export class ReceptionService {
       if (schedule.doctorId !== appointment.doctorId) {
         throw new ConflictException('Lịch hẹn và khung khám không cùng bác sĩ.');
       }
-      const today = todayInVietnam();
+      const today = vietnamNow().date;
       if (schedule.date !== today) {
         throw new ConflictException('Chỉ được check-in lịch hẹn trong ngày.');
       }

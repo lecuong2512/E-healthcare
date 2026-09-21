@@ -4,6 +4,7 @@ import {
   PaymentMethod,
   PaymentStatus,
   QueueSource,
+  Gender,
 } from '../enums';
 
 export interface LookupAppointmentRequest {
@@ -66,4 +67,46 @@ export interface CounterPaymentReceipt {
   paymentMethod: CounterPaymentMethod;
   collectedBy: string;
   paidAt: string;
+}
+
+export interface AvailableWalkInDoctorsRequest {
+  specialtyId?: string;
+  doctorName?: string;
+}
+
+export interface AvailableWalkInDoctor {
+  doctorId: string;
+  doctorName: string;
+  specialtyName: string;
+  roomNumber: string;
+  consultationFee: number;
+  availableSlots: Array<{
+    scheduleId: string;
+    startTime: string;
+    endTime: string;
+  }>;
+}
+
+export interface WalkInBookingRequest {
+  scheduleId: string;
+  fullName: string;
+  phone: string;
+  birthYear: number;
+  gender: Gender;
+  reasonForVisit: string;
+  paymentMethod: CounterPaymentMethod;
+  amountTendered: number;
+}
+
+export interface WalkInBookingResponse {
+  appointmentId: string;
+  appointmentCode: string;
+  patientId: string;
+  doctorId: string;
+  scheduleId: string;
+  status: AppointmentStatus.CHECKED_IN;
+  paymentStatus: PaymentStatus.PAID;
+  queueNumber: number;
+  checkedInAt: string;
+  receipt: CounterPaymentReceipt;
 }
