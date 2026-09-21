@@ -248,8 +248,9 @@ export class BookingStepperPage implements OnDestroy {
 
   submitBooking() {
     if (this.selectedSlotId() === null || this.patientForm.invalid) return;
-    alert('Đặt khám thành công!');
-    this.router.navigate(['/patient/history']);
+
+    const method = this.paymentMethod();
+    this.router.navigate(['/patient/payment-qr', method]);
   }
 
   // ─── Navigation ───────────────────────────────────────────

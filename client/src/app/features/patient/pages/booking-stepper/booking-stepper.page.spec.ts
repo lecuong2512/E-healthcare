@@ -48,6 +48,23 @@ describe('BookingStepperPage', () => {
     fixture.destroy();
   }));
 
+  it('redirects to the payment QR page based on selected method', () => {
+    component.selectedDoctorId.set(component.doctors[0].id);
+    component.selectedSlotId.set('m1');
+    component.selectPayment('momo');
+    component.patientForm.setValue({
+      fullName: 'Nguyễn Văn A',
+      phone: '0912345678',
+      dob: '2000-01-01',
+      gender: 'Nam',
+      reason: 'Khám định kỳ',
+    });
+
+    component.submitBooking();
+
+    expect(router.navigate).toHaveBeenCalledWith(['/patient/payment-qr', 'momo']);
+  });
+
   it('rejects oversized upload files', () => {
     const input = document.createElement('input');
     Object.defineProperty(input, 'files', {
