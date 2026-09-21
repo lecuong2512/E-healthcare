@@ -99,4 +99,13 @@ export class AppointmentEntity {
 
   @Column({ name: 'collected_by', type: 'uuid', nullable: true })
   collectedBy!: string | null;
+
+  @Column({ name: 'created_by', type: 'uuid', nullable: true })
+  createdBy!: string | null;
+
+  @Column({ name: 'walk_in_idempotency_key', type: 'uuid', nullable: true })
+  walkInIdempotencyKey!: string | null;
+
+  @Column({ name: 'walk_in_request_hash', type: 'char', length: 64, nullable: true })
+  walkInRequestHash!: string | null;
 }

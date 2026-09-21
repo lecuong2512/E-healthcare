@@ -11,3 +11,4 @@ export * from "./job-name.enum";
 export * from "./queue-source.enum";
 export * from "./counter-payment-method.enum";
 export * from "./counter-payment-status.enum";
+export * from "./date-of-birth-precision.enum";

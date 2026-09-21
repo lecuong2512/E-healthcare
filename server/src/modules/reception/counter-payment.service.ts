@@ -6,7 +6,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import {
   AppointmentStatus,
   CounterPaymentMethod,
@@ -87,51 +87,72 @@ export class CounterPaymentService {
         throw new ConflictException('Lịch hẹn đã thanh toán hoặc không thể thu tiền.');
       }
 
-      const amount = toMinorUnits(Number(appointment.totalAmount));
-      const tendered = toMinorUnits(dto.amountTendered);
-      if (tendered < amount) {
-        throw new BadRequestException('Số tiền khách đưa chưa đủ viện phí.');
-      }
-
-      const users = manager.getRepository(UserEntity);
-      const patient = await users.findOneBy({ id: appointment.patientId });
-      const collector = await users.findOneBy({ id: collectorId });
-      const doctor = await manager.getRepository(DoctorEntity).findOne({
-        where: { id: appointment.doctorId },
-        relations: { user: true },
-      });
-      if (!patient || !doctor || !collector) {
-        throw new NotFoundException('Thiếu thông tin bệnh nhân, bác sĩ hoặc người thu.');
-      }
-
-      const id = randomUUID();
-      const paidAt = new Date();
-      const transaction = manager.getRepository(CounterPaymentTransactionEntity).create({
-        id,
-        appointmentId,
-        transactionCode: `TX-${id}`,
-        receiptCode: `RC-${id}`,
-        amount: money(amount),
-        amountTendered: money(tendered),
-        changeAmount: money(tendered - amount),
-        method: CounterPaymentMethod.CASH,
-        status: CounterPaymentStatus.SUCCESS,
-        collectedBy: collectorId,
-        appointmentCode: appointment.appointmentCode,
-        patientName: patient.fullName,
-        doctorName: doctor.user.fullName,
-        collectorName: collector.fullName,
-        paidAt,
-      });
-      await manager.save(CounterPaymentTransactionEntity, transaction);
-
-      appointment.paymentStatus = PaymentStatus.PAID;
-      appointment.paidAt = paidAt;
-      appointment.collectedBy = collectorId;
-      await manager.save(AppointmentEntity, appointment);
-
-      return receiptFrom(transaction);
+      return this.recordCashPayment(
+        manager,
+        appointment,
+        collectorId,
+        dto.amountTendered,
+      );
     });
+  }
+
+  async recordCashPayment(
+    manager: EntityManager,
+    appointment: AppointmentEntity,
+    collectorId: string,
+    amountTendered: number,
+  ): Promise<CounterPaymentReceipt> {
+    if (
+      appointment.paymentMethod !== PaymentMethod.PAY_AT_CLINIC ||
+      appointment.paymentStatus !== PaymentStatus.UNPAID
+    ) {
+      throw new ConflictException('Lịch hẹn không thể thu tiền tại quầy.');
+    }
+
+    const amount = toMinorUnits(Number(appointment.totalAmount));
+    const tendered = toMinorUnits(amountTendered);
+    if (tendered < amount) {
+      throw new BadRequestException('Số tiền khách đưa chưa đủ viện phí.');
+    }
+
+    const users = manager.getRepository(UserEntity);
+    const patient = await users.findOneBy({ id: appointment.patientId });
+    const collector = await users.findOneBy({ id: collectorId });
+    const doctor = await manager.getRepository(DoctorEntity).findOne({
+      where: { id: appointment.doctorId },
+      relations: { user: true },
+    });
+    if (!patient || !doctor || !collector) {
+      throw new NotFoundException('Thiếu thông tin bệnh nhân, bác sĩ hoặc người thu.');
+    }
+
+    const id = randomUUID();
+    const paidAt = new Date();
+    const transaction = manager.getRepository(CounterPaymentTransactionEntity).create({
+      id,
+      appointmentId: appointment.id,
+      transactionCode: `TX-${id}`,
+      receiptCode: `RC-${id}`,
+      amount: money(amount),
+      amountTendered: money(tendered),
+      changeAmount: money(tendered - amount),
+      method: CounterPaymentMethod.CASH,
+      status: CounterPaymentStatus.SUCCESS,
+      collectedBy: collectorId,
+      appointmentCode: appointment.appointmentCode,
+      patientName: patient.fullName,
+      doctorName: doctor.user.fullName,
+      collectorName: collector.fullName,
+      paidAt,
+    });
+    await manager.save(CounterPaymentTransactionEntity, transaction);
+
+    appointment.paymentStatus = PaymentStatus.PAID;
+    appointment.paidAt = paidAt;
+    appointment.collectedBy = collectorId;
+    await manager.save(AppointmentEntity, appointment);
+
+    return receiptFrom(transaction);
   }
 
   async getReceipt(appointmentId: string): Promise<CounterPaymentReceipt> {
