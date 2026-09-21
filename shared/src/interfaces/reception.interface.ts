@@ -1,4 +1,10 @@
-import { AppointmentStatus, PaymentMethod, PaymentStatus, QueueSource } from '../enums';
+import {
+  AppointmentStatus,
+  CounterPaymentMethod,
+  PaymentMethod,
+  PaymentStatus,
+  QueueSource,
+} from '../enums';
 
 export interface LookupAppointmentRequest {
   code?: string;
@@ -41,4 +47,23 @@ export interface CheckInResponse {
   roomNumber: string;
   patientName: string;
   checkedInAt: string;
+}
+
+export interface CollectCounterPaymentRequest {
+  method: CounterPaymentMethod;
+  amountTendered: number;
+}
+
+export interface CounterPaymentReceipt {
+  receiptCode: string;
+  transactionCode: string;
+  appointmentCode: string;
+  patientName: string;
+  doctorName: string;
+  amount: number;
+  amountTendered: number;
+  changeAmount: number;
+  paymentMethod: CounterPaymentMethod;
+  collectedBy: string;
+  paidAt: string;
 }
