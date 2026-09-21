@@ -9,6 +9,7 @@ import { CreateAuthSessionsAndGoogle1789478400000 } from "./migrations/178947840
 import { AllowRegistrationWithBothContacts1789479000000 } from "./migrations/1789479000000-allow-registration-with-both-contacts";
 import { AddDoctorScheduleAndSearchIndexes1789565400000 } from "./migrations/1789565400000-add-doctor-schedule-and-search-indexes";
 import { AddReceptionQueueAndCounterPayment1789923600000 } from "./migrations/1789923600000-add-reception-queue-and-counter-payment";
+import { AddWalkInPatientAndIdempotency1789927200000 } from "./migrations/1789927200000-add-walk-in-patient-and-idempotency";
 import {
   AuthSessionEntity,
   GoogleOAuthFlowEntity,
@@ -60,6 +61,7 @@ export function createDataSource(url: string): DataSource {
       AddSrsAuth03PhrFields1789560000000,
       AddDoctorScheduleAndSearchIndexes1789565400000,
       AddReceptionQueueAndCounterPayment1789923600000,
+      AddWalkInPatientAndIdempotency1789927200000,
     ],
   });
 }

@@ -5,7 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Gender, UserStatus } from '@shared/enums';
+import { DateOfBirthPrecision, Gender, UserStatus } from '@shared/enums';
 
 @Entity('users')
 export class UserEntity {
@@ -29,6 +29,14 @@ export class UserEntity {
 
   @Column({ name: 'date_of_birth', type: 'date' })
   dateOfBirth!: string;
+
+  @Column({
+    name: 'date_of_birth_precision',
+    type: 'varchar',
+    length: 10,
+    default: DateOfBirthPrecision.FULL_DATE,
+  })
+  dateOfBirthPrecision!: DateOfBirthPrecision;
 
   @Column({
     type: 'enum',
