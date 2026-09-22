@@ -10,6 +10,9 @@
 
 ## Hàng đợi realtime
 
+- Lễ tân và bác sĩ kết nối namespace `/queue` bằng `auth: { token: accessToken }`. Gateway xác thực token bằng cùng `SessionService` với REST, kiểm tra vai trò và chỉ cho bác sĩ vào room của hồ sơ bác sĩ gắn với tài khoản.
+- Lễ tân có thể cấp token TV bằng `POST /api/v1/reception/queue/board-token`. TV kết nối `/queue` bằng `auth: { boardToken: token }`; token này chỉ có quyền đọc, hết hạn sau 8 giờ và chỉ vào room `queue:public`. Cấu hình `QUEUE_BOARD_SECRET` riêng, dài ít nhất 32 byte, giống nhau trên mọi backend instance. Không đưa cả `token` và `boardToken` trong một handshake.
+- TV nhận `queue.snapshot` có `scope: PUBLIC` và `queue.public_status_changed`. Payload công cộng chỉ chứa số thứ tự, ngày, tên bệnh nhân đã che, tên bác sĩ, phòng, trạng thái và `doctorId` để ghép số thứ tự; không có mã lịch hẹn, ID bệnh nhân, SĐT hay CCCD. Token TV không truy cập được REST API nội bộ.
 - Socket.IO gửi `appointment.status.changed` sau khi giao dịch DB commit. Nếu gửi tới một room lỗi, room còn lại vẫn được thử gửi.
 - Mỗi socket đã xác thực nhận `queue.snapshot` khi kết nối và sau mỗi 30 giây. Snapshot lấy từ DB, giúp tự khôi phục trạng thái hàng đợi khi mất event hoặc Redis tạm gián đoạn. `queue.sync` vẫn cho phép yêu cầu snapshot thủ công, tối đa một lần mỗi giây trên mỗi socket.
 - Gateway giới hạn 5 socket cho mỗi tài khoản trên **mỗi backend instance**. Cần giới hạn kết nối ở proxy nếu muốn giới hạn chung trên toàn cụm hoặc chặn lưu lượng trước bước xác thực. Giới hạn theo IP nên đặt ở proxy vì nhiều người dùng có thể cùng đi qua một IP proxy nội bộ.

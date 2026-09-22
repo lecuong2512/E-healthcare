@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { AppointmentStatus } from '@shared/enums';
-import { QueueSnapshot, QueueTicket } from '@shared/interfaces';
+import { PublicQueueSnapshot, QueueSnapshot, QueueTicket } from '@shared/interfaces';
 import { DataSource } from 'typeorm';
 import { vietnamNow } from '../../common/utils/vn-time.util';
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
+import { toPublicQueueTicket } from './public-queue.mapper';
 
 @Injectable()
 export class QueueQueryService {
@@ -37,6 +38,15 @@ export class QueueQueryService {
       appointment.queueSource && appointment.checkedInAt
       ? this.toTicket(appointment)
       : null;
+  }
+
+  async publicSnapshot(): Promise<PublicQueueSnapshot> {
+    const snapshot = await this.snapshot('RECEPTION');
+    return {
+      scope: 'PUBLIC',
+      date: snapshot.date,
+      items: snapshot.items.map(toPublicQueueTicket),
+    };
   }
 
   private ticketQuery() {

@@ -1,13 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AppointmentStatus } from '@shared/enums';
-import { QueueStatusChanged } from '@shared/interfaces';
+import { PublicQueueStatusChanged, QueueStatusChanged } from '@shared/interfaces';
 import {
   APPOINTMENT_STATUS_CHANGED_EVENT,
   QUEUE_DOCTOR_ROOM,
   QUEUE_RECEPTION_ROOM,
+  QUEUE_PUBLIC_ROOM,
+  QUEUE_PUBLIC_STATUS_CHANGED_EVENT,
 } from '../../../../shared/src/constants/queue-socket.constants';
 import { QueueGateway } from './queue.gateway';
 import { QueueQueryService } from './queue-query.service';
+import { toPublicQueueTicket } from './public-queue.mapper';
 
 @Injectable()
 export class QueueEventsService {
@@ -43,6 +46,19 @@ export class QueueEventsService {
         } catch (error) {
           this.logger.warn(`Queue event failed for appointment ${appointmentId}, room ${room}: ${String(error)}`);
         }
+      }
+      const publicEvent: PublicQueueStatusChanged = {
+        doctorId: ticket.doctorId,
+        queueNumber: ticket.queueNumber,
+        previousStatus,
+        status: ticket.status,
+        occurredAt: event.occurredAt,
+        ticket: toPublicQueueTicket(ticket),
+      };
+      try {
+        this.gateway.emitToRoom(QUEUE_PUBLIC_ROOM, QUEUE_PUBLIC_STATUS_CHANGED_EVENT, publicEvent);
+      } catch (error) {
+        this.logger.warn(`Public queue event failed for appointment ${appointmentId}: ${String(error)}`);
       }
     } catch (error) {
       this.logger.warn(`Queue event failed for appointment ${appointmentId}: ${String(error)}`);
