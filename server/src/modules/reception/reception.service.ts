@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import {
-  AppointmentStatus, PaymentMethod, PaymentStatus, QueueSource, ReceptionAuditAction,
+  AppointmentStatus, PaymentMethod, PaymentStatus, QueueSource, ReceptionAuditAction, SlotStatus,
 } from '@shared/enums';
 import { CheckInResponse, ReceptionAppointment } from '@shared/interfaces';
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
@@ -75,11 +75,14 @@ export class ReceptionService {
         appointment.paymentStatus === PaymentStatus.UNPAID;
       const canCheckIn =
         appointment.status === AppointmentStatus.CONFIRMED &&
-        appointment.paymentStatus === PaymentStatus.PAID;
+        appointment.paymentStatus === PaymentStatus.PAID &&
+        appointment.schedule.status === SlotStatus.BOOKED;
       const blockedReason = canCheckIn
         ? null
         : appointment.status !== AppointmentStatus.CONFIRMED
           ? 'Lịch hẹn không ở trạng thái xác nhận.'
+          : appointment.schedule.status !== SlotStatus.BOOKED
+            ? 'Khung khám đã ngừng nhận bệnh nhân; cần lễ tân xử lý.'
           : requiresPayment
             ? 'Cần thu viện phí tại quầy trước khi check-in.'
             : 'Lịch hẹn chưa được xác nhận thanh toán.';
@@ -135,6 +138,9 @@ export class ReceptionService {
       if (!schedule) throw new NotFoundException('Không tìm thấy khung khám.');
       if (schedule.doctorId !== appointment.doctorId) {
         throw new ConflictException('Lịch hẹn và khung khám không cùng bác sĩ.');
+      }
+      if (schedule.status !== SlotStatus.BOOKED) {
+        throw new ConflictException('Khung khám đã ngừng nhận bệnh nhân; cần lễ tân xử lý.');
       }
       const today = vietnamNow().date;
       if (schedule.date !== today) {

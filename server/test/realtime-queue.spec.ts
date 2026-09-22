@@ -42,10 +42,10 @@ describe('Realtime queue', () => {
   const database = { getRepository: jest.fn() };
   let gateway: QueueGateway;
 
-  function client(authToken: unknown = token) {
+  function client(authToken: unknown = token, id = 'socket-1') {
     return {
-      id: 'socket-1',
-      handshake: { auth: { token: authToken } },
+      id,
+      handshake: { auth: { token: authToken }, address: '127.0.0.1' },
       data: {},
       join: jest.fn(async () => undefined),
       emit: jest.fn(),
@@ -184,6 +184,62 @@ describe('Realtime queue', () => {
       status: AppointmentStatus.CHECKED_IN,
       ticket,
     }));
+  });
+
+  it('still publishes to the doctor room if reception publish fails', async () => {
+    const doctorEmit = jest.fn();
+    gateway.server = {
+      to: jest.fn((room: string) => {
+        if (room === QUEUE_RECEPTION_ROOM) throw new Error('reception room failed');
+        return { emit: doctorEmit };
+      }),
+    } as unknown as typeof gateway.server;
+    const events = new QueueEventsService(queries as unknown as QueueQueryService, gateway);
+
+    await events.statusChanged(ticket.appointmentId, null, 'WALK_IN');
+
+    expect(gateway.server.to).toHaveBeenCalledWith(QUEUE_DOCTOR_ROOM(doctorId));
+    expect(doctorEmit).toHaveBeenCalledWith(APPOINTMENT_STATUS_CHANGED_EVENT,
+      expect.objectContaining({ appointmentId: ticket.appointmentId }));
+  });
+
+  it('reconciles a missed event with a fresh snapshot every 30 seconds', async () => {
+    jest.useFakeTimers();
+    try {
+      const socket = client();
+      await gateway.handleConnection(socket as unknown as Socket);
+      queries.snapshot.mockClear();
+
+      await jest.advanceTimersByTimeAsync(30_000);
+
+      expect(queries.snapshot).toHaveBeenCalledTimes(1);
+      expect(socket.emit).toHaveBeenLastCalledWith(QUEUE_SNAPSHOT_EVENT,
+        expect.objectContaining({ doctorId }));
+      gateway.handleDisconnect(socket as unknown as Socket);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('caps simultaneous sockets for one account', async () => {
+    const sockets = Array.from({ length: 6 }, (_, index) => client(token, `socket-${index}`));
+    for (const socket of sockets) await gateway.handleConnection(socket as unknown as Socket);
+
+    expect(sockets[5].join).not.toHaveBeenCalled();
+    expect(sockets[5].disconnect).toHaveBeenCalledWith(true);
+    for (const socket of sockets) gateway.handleDisconnect(socket as unknown as Socket);
+  });
+
+  it('limits repeated manual queue.sync requests from one socket', async () => {
+    const socket = client();
+    await gateway.handleConnection(socket as unknown as Socket);
+    queries.snapshot.mockClear();
+
+    await gateway.sync(socket as unknown as Socket);
+    await gateway.sync(socket as unknown as Socket);
+
+    expect(queries.snapshot).toHaveBeenCalledTimes(1);
+    gateway.handleDisconnect(socket as unknown as Socket);
   });
 
   it('queries the doctor queue by date, active status, and doctor identity', async () => {
