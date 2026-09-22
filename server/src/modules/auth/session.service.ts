@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { createHash, randomUUID } from "node:crypto";
-import { sign, verify, JwtPayload } from "jsonwebtoken";
+import { sign, verify, JwtPayload, TokenExpiredError } from "jsonwebtoken";
 import { DataSource, EntityManager } from "typeorm";
 import { Role } from "../../../../shared/src/enums/role.enum";
 import { requiredEnvironment } from "../../config/environment";
@@ -242,7 +242,13 @@ export class SessionService {
       )
         throw new Error();
       return claims;
-    } catch {
+    } catch (error) {
+      if (error instanceof TokenExpiredError) {
+        throw new UnauthorizedException({
+          code: "SESSION_EXPIRED",
+          message: "Phiên đăng nhập đã hết hạn.",
+        });
+      }
       throw this.unauthorized();
     }
   }

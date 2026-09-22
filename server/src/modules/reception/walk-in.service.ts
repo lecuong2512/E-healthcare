@@ -25,6 +25,7 @@ import {
 import {
   AvailableWalkInDoctor,
   WalkInBookingResponse,
+  WalkInPatientSelectionError,
 } from '@shared/interfaces';
 import { RedisService } from '../../common/redis/redis.service';
 import { normalizeVietnamesePhone, vietnamesePhoneVariants } from '../../common/utils/vn-phone.util';
@@ -51,7 +52,8 @@ const ACTIVE_STATUSES = [
 
 function sameName(left: string, right: string): boolean {
   const normalize = (value: string): string =>
-    value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('vi-VN');
+    value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('vi-VN')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
   return normalize(left) === normalize(right);
 }
 
@@ -148,10 +150,13 @@ export class WalkInService {
       throw new BadRequestException('Năm sinh không hợp lệ.');
     }
     const phone = normalizeVietnamesePhone(dto.phone);
+    const citizenId = dto.citizenId?.trim() || null;
     const requestHash = createHash('sha256').update(JSON.stringify({
       scheduleId: dto.scheduleId,
       fullName: dto.fullName.trim().replace(/\s+/g, ' '),
       phone,
+      citizenId,
+      patientId: dto.patientId ?? null,
       birthYear: dto.birthYear,
       gender: dto.gender,
       reasonForVisit: dto.reasonForVisit,
@@ -263,10 +268,12 @@ export class WalkInService {
         if (committed) return committed;
       }
       if (
-        uniqueConstraint(error, 'idx_appointments_active_schedule') ||
-        uniqueConstraint(error, 'idx_users_phone_number')
+        uniqueConstraint(error, 'idx_appointments_active_schedule')
       ) {
-        throw new ConflictException('Slot hoặc số điện thoại vừa được sử dụng.');
+        throw new ConflictException('Khung khám vừa được sử dụng.');
+      }
+      if (uniqueConstraint(error, 'uq_phr_citizen_id')) {
+        throw new ConflictException('CCCD/CMND vừa được ghi vào hồ sơ khác, vui lòng tìm lại bệnh nhân.');
       }
       throw error;
     } finally {
@@ -283,33 +290,120 @@ export class WalkInService {
     dto: WalkInDto,
     phone: string,
   ): Promise<UserEntity> {
-    const matches = await manager.getRepository(UserEntity)
-      .createQueryBuilder('user')
+    await manager.query(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      [`register:phone:${phone}`],
+    );
+    const users = manager.getRepository(UserEntity);
+    const profiles = manager.getRepository(PersonalHealthProfileEntity);
+    const citizenId = dto.citizenId?.trim();
+
+    if (citizenId) {
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [`patient:citizen-id:${citizenId}`],
+      );
+      const profile = await profiles.findOneBy({ citizenId });
+      if (profile) {
+        if (dto.patientId && dto.patientId !== profile.userId) {
+          throw new ConflictException('patientId không khớp hồ sơ có CCCD/CMND này.');
+        }
+        const patient = await users.createQueryBuilder('user')
+          .setLock('pessimistic_write')
+          .where('user.id = :id', { id: profile.userId })
+          .getOne();
+        if (!patient || !this.matchesIdentity(patient, dto)) {
+          throw new ConflictException('CCCD/CMND đã có nhưng thông tin bệnh nhân không khớp.');
+        }
+        const currentProfile = await profiles.findOneBy({ userId: patient.id, citizenId });
+        if (!currentProfile) {
+          throw new ConflictException('CCCD/CMND vừa được thay đổi, vui lòng tìm lại bệnh nhân.');
+        }
+        await this.assertPatientRole(manager, patient.id);
+        return patient;
+      }
+    }
+
+    if (dto.patientId) {
+      const patient = await users.createQueryBuilder('user')
+        .setLock('pessimistic_write')
+        .where('user.id = :id', { id: dto.patientId })
+        .getOne();
+      if (!patient || !this.matchesIdentity(patient, dto)) {
+        throw new ConflictException('Hồ sơ bệnh nhân được chọn không khớp thông tin walk-in.');
+      }
+      await this.assertPatientRole(manager, patient.id);
+      if (citizenId) {
+        const profile = await profiles.findOneBy({ userId: patient.id });
+        if (!profile) throw new ConflictException('Hồ sơ bệnh nhân chưa có PHR để gắn CCCD/CMND.');
+        if (profile.citizenId && profile.citizenId !== citizenId) {
+          throw new ConflictException('Hồ sơ đã có CCCD/CMND khác, cần xác minh thủ công.');
+        }
+        if (!profile.citizenId) {
+          profile.citizenId = citizenId;
+          await profiles.save(profile);
+        }
+      }
+      return patient;
+    }
+
+    const matches = await users.createQueryBuilder('user')
       .setLock('pessimistic_write')
       .where('user.phone_number IN (:...phones)', {
         phones: vietnamesePhoneVariants(phone),
       })
       .getMany();
-    if (matches.length > 1) {
-      throw new ConflictException('Số điện thoại khớp nhiều hồ sơ, cần kiểm tra thủ công.');
-    }
-    if (matches.length === 1) {
-      const patient = matches[0];
+    const candidates: UserEntity[] = [];
+    for (const patient of matches) {
+      if (!this.matchesIdentity(patient, dto)) continue;
       const role = await manager.getRepository(UserRoleEntity).findOneBy({
         userId: patient.id,
         role: Role.PATIENT,
       });
-      if (
-        !role ||
-        !sameName(patient.fullName, dto.fullName) ||
-        patient.gender !== dto.gender ||
-        Number(patient.dateOfBirth.slice(0, 4)) !== dto.birthYear
-      ) {
-        throw new ConflictException('Thông tin bệnh nhân không khớp số điện thoại đã có.');
+      if (!role) continue;
+      if (citizenId) {
+        const profile = await profiles.findOneBy({ userId: patient.id });
+        if (profile?.citizenId) continue;
       }
-      return patient;
+      candidates.push(patient);
     }
+    if (candidates.length) {
+      const selection: WalkInPatientSelectionError = {
+        code: 'PATIENT_SELECTION_REQUIRED',
+        message: 'Tìm thấy hồ sơ có thể khớp. Lễ tân cần xác nhận patientId trước khi đặt lịch.',
+        candidates: candidates.map((patient) => ({
+          patientId: patient.id,
+          fullName: patient.fullName,
+          gender: patient.gender,
+          dateOfBirth: patient.dateOfBirth,
+          dateOfBirthPrecision: patient.dateOfBirthPrecision,
+        })),
+      };
+      throw new ConflictException(selection);
+    }
+    return this.createPatient(manager, dto, phone, citizenId ?? null);
+  }
 
+  private matchesIdentity(patient: UserEntity, dto: WalkInDto): boolean {
+    return sameName(patient.fullName, dto.fullName) &&
+      patient.gender === dto.gender &&
+      Number(patient.dateOfBirth.slice(0, 4)) === dto.birthYear;
+  }
+
+  private async assertPatientRole(manager: EntityManager, userId: string): Promise<void> {
+    const role = await manager.getRepository(UserRoleEntity).findOneBy({
+      userId,
+      role: Role.PATIENT,
+    });
+    if (!role) throw new ConflictException('Tài khoản không có hồ sơ bệnh nhân.');
+  }
+
+  private async createPatient(
+    manager: EntityManager,
+    dto: WalkInDto,
+    phone: string,
+    citizenId: string | null,
+  ): Promise<UserEntity> {
     const users = manager.getRepository(UserEntity);
     const patient = await users.save(users.create({
       phoneNumber: phone,
@@ -321,12 +415,10 @@ export class WalkInService {
       dateOfBirthPrecision: DateOfBirthPrecision.YEAR,
       status: UserStatus.PENDING_VERIFY,
     }));
-    await manager.getRepository(UserRoleEntity).save({
-      userId: patient.id,
-      role: Role.PATIENT,
-    });
+    await manager.getRepository(UserRoleEntity).save({ userId: patient.id, role: Role.PATIENT });
     await manager.getRepository(PersonalHealthProfileEntity).save({
       userId: patient.id,
+      citizenId,
     });
     return patient;
   }

@@ -1,9 +1,10 @@
 ﻿import {
+  ConflictException,
   Injectable,
   BadRequestException,
   NotFoundException,
 } from "@nestjs/common";
-import { DataSource } from "typeorm";
+import { DataSource, QueryFailedError } from "typeorm";
 import { DateOfBirthPrecision } from "@shared/enums";
 
 import {
@@ -90,7 +91,7 @@ export class PhrService {
     user.dateOfBirth = request.dateOfBirth;
     user.dateOfBirthPrecision = DateOfBirthPrecision.FULL_DATE;
 
-    phr.citizenId = request.citizenId;
+    phr.citizenId = request.citizenId.trim() || null;
     phr.address = request.address;
     phr.healthInsurance = request.healthInsurance;
     phr.bloodType = request.bloodType;
@@ -98,10 +99,20 @@ export class PhrService {
     phr.chronicDiseases = request.chronicDiseases;
     phr.surgeryHistory = request.surgeryHistory;
 
-    await this.dataSource.transaction(async (manager) => {
-      await manager.save(UserEntity, user);
-      await manager.save(PersonalHealthProfileEntity, phr);
-    });
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        await manager.save(UserEntity, user);
+        await manager.save(PersonalHealthProfileEntity, phr);
+      });
+    } catch (error) {
+      const driverError = error instanceof QueryFailedError
+        ? error.driverError as { code?: string; constraint?: string }
+        : null;
+      if (driverError?.code === '23505' && driverError.constraint === 'uq_phr_citizen_id') {
+        throw new ConflictException('CCCD/CMND đã thuộc hồ sơ bệnh nhân khác.');
+      }
+      throw error;
+    }
 
     return this.toPhrProfile(user, phr);
   }

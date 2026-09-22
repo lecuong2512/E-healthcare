@@ -5,6 +5,7 @@ import {
   PaymentStatus,
   QueueSource,
   Gender,
+  DateOfBirthPrecision,
 } from '../enums';
 
 export interface LookupAppointmentRequest {
@@ -91,11 +92,25 @@ export interface WalkInBookingRequest {
   scheduleId: string;
   fullName: string;
   phone: string;
+  citizenId?: string;
+  patientId?: string;
   birthYear: number;
   gender: Gender;
   reasonForVisit: string;
   paymentMethod: CounterPaymentMethod;
   amountTendered: number;
+}
+
+export interface WalkInPatientSelectionError {
+  code: 'PATIENT_SELECTION_REQUIRED';
+  message: string;
+  candidates: Array<{
+    patientId: string;
+    fullName: string;
+    gender: Gender;
+    dateOfBirth: string;
+    dateOfBirthPrecision: DateOfBirthPrecision;
+  }>;
 }
 
 export interface WalkInBookingResponse {
