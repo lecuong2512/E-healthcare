@@ -76,7 +76,8 @@ time {
     background: #16a34a;
   }
 
-  &[data-state='error'] span {
+  &[data-state='error'] span,
+  &[data-state='expired'] span {
     background: #dc2626;
   }
 }
