@@ -1,0 +1,35 @@
+<section class="now" aria-labelledby="now-serving-title">
+  <div class="section-title">
+    <span></span>
+    <h2 id="now-serving-title">ĐANG KHÁM</h2>
+  </div>
+
+  @if (tickets.length) {
+    <div class="serving-grid">
+      @for (ticket of tickets; track ticket.id) {
+        <article
+          class="serving-card"
+          [class.serving-card--called]="lastCalledTicketId === ticket.id"
+        >
+          <div class="serving-card__number">
+            <span>SỐ THỨ TỰ</span>
+            <strong>{{ ticket.queueNumber }}</strong>
+          </div>
+          <div class="serving-card__detail">
+            <h3>{{ ticket.maskedPatientName }}</h3>
+            <p>
+              <strong>Phòng {{ ticket.roomNumber }}</strong>
+              · {{ ticket.specialtyName }}
+            </p>
+            <p>BS. {{ ticket.doctorName }}</p>
+          </div>
+        </article>
+      }
+    </div>
+  } @else {
+    <div class="empty">
+      <span>✓</span>
+      <p>Chưa có bệnh nhân đang khám</p>
+    </div>
+  }
+</section>
