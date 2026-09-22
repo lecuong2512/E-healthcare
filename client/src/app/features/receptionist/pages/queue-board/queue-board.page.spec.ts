@@ -1,4 +1,9 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  TestBed,
+  fakeAsync,
+  tick,
+} from '@angular/core/testing';
 
 import { QueueBoardTicketViewModel } from './queue-board.models';
 import { QueueBoardPage } from './queue-board.page';
@@ -69,5 +74,34 @@ describe('QueueBoardPage', () => {
     component.toggleMuted();
 
     expect(component.muted()).toBeTrue();
+  });
+
+  it('renders a valid call event within the 500ms presentation budget', fakeAsync(() => {
+    component.muted.set(true);
+    component.presentationStarted.set(true);
+
+    component.applyRealtimeEvent({
+      occurredAt: '2026-09-22T03:00:00.000Z',
+      previousStatus: 'CHECKED_IN',
+      status: 'IN_CONSULTATION',
+      ticket: servingTicket,
+    });
+    fixture.detectChanges();
+    tick(20);
+
+    expect(component.store.nowServing()[0].id).toBe(servingTicket.id);
+    expect(component.lastRenderLatencyMs()).not.toBeNull();
+    expect(component.lastRenderLatencyMs()!).toBeLessThan(500);
+    tick(5_000);
+  }));
+
+  it('announces an expired presentation session with text', () => {
+    component.store.setConnectionState('expired');
+    fixture.detectChanges();
+
+    const status = fixture.nativeElement.querySelector(
+      '[role="status"]',
+    ) as HTMLElement;
+    expect(status.textContent).toContain('Phiên trình chiếu đã hết hạn');
   });
 });

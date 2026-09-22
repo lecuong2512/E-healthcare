@@ -17,7 +17,21 @@ export type QueueBoardConnectionState =
   | 'connecting'
   | 'connected'
   | 'reconnecting'
+  | 'expired'
   | 'error';
+
+export type QueueBoardTicketStatus =
+  | 'CHECKED_IN'
+  | 'IN_CONSULTATION'
+  | 'COMPLETED';
+
+/** Internal event model populated by the future shared-contract adapter. */
+export interface QueueBoardStatusEventViewModel {
+  readonly occurredAt: string;
+  readonly previousStatus: QueueBoardTicketStatus | null;
+  readonly status: QueueBoardTicketStatus;
+  readonly ticket: QueueBoardTicketViewModel;
+}
 
 export interface QueueBoardPresentationSnapshot {
   readonly nowServing: readonly QueueBoardTicketViewModel[];
