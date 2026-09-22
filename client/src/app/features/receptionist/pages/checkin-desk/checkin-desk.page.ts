@@ -20,6 +20,8 @@ import {
   CounterPaymentIntent,
   ReceptionAppointmentViewModel,
   ReceptionLookupIntent,
+  ReceptionQueueConnectionState,
+  ReceptionQueueSummaryViewModel,
 } from '../../models/reception-presentation.models';
 
 type LookupMode = 'QR' | 'MANUAL';
@@ -45,6 +47,9 @@ export class CheckinDeskPage {
   @Input() paymentPending = false;
   @Input() checkInPending = false;
   @Input() errorMessage: string | null = null;
+  @Input() queueSummary: ReceptionQueueSummaryViewModel | null = null;
+  @Input() queueConnectionState: ReceptionQueueConnectionState =
+    'disconnected';
 
   @Output() lookupRequested = new EventEmitter<ReceptionLookupIntent>();
   @Output() appointmentSelected =
@@ -52,6 +57,7 @@ export class CheckinDeskPage {
   @Output() paymentRequested = new EventEmitter<CounterPaymentIntent>();
   @Output() checkInRequested = new EventEmitter<string>();
   @Output() refreshRequested = new EventEmitter<string>();
+  @Output() queueRefreshRequested = new EventEmitter<void>();
 
   readonly lookupMode = signal<LookupMode>('QR');
   readonly manualLookupKind = signal<ManualLookupKind>('APPOINTMENT_CODE');
@@ -161,5 +167,17 @@ export class CheckinDeskPage {
       [PaymentStatus.FAILED]: 'Thanh toán lỗi',
     };
     return labels[status] ?? status;
+  }
+
+  queueConnectionLabel(): string {
+    const labels: Record<ReceptionQueueConnectionState, string> = {
+      disconnected: 'Chưa kết nối realtime',
+      connecting: 'Đang kết nối realtime',
+      connected: 'Realtime đang hoạt động',
+      reconnecting: 'Đang kết nối lại realtime',
+      expired: 'Phiên realtime đã hết hạn',
+      error: 'Mất kết nối realtime',
+    };
+    return labels[this.queueConnectionState];
   }
 }

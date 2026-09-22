@@ -124,4 +124,25 @@ describe('WalkinBookingPage', () => {
     expect(content).toContain('RCT-0100');
     expect(content).not.toContain('0912345678');
   });
+
+  it('requires a new slot after a conflict instead of retrying the booking', () => {
+    const bookingSpy = jasmine.createSpy('booking');
+    const searchSpy = jasmine.createSpy('doctorSearch');
+    component.bookingRequested.subscribe(bookingSpy);
+    component.doctorSearchRequested.subscribe(searchSpy);
+    fillValidForm();
+    fixture.componentRef.setInput('slotConflict', true);
+    fixture.componentRef.setInput(
+      'errorMessage',
+      'Khung giờ không còn khả dụng.',
+    );
+    fixture.detectChanges();
+
+    component.refreshSlotsAfterConflict();
+
+    expect(component.selectedScheduleId()).toBe('');
+    expect(component.bookingForm.controls.scheduleId.value).toBe('');
+    expect(searchSpy).toHaveBeenCalledTimes(1);
+    expect(bookingSpy).not.toHaveBeenCalled();
+  });
 });

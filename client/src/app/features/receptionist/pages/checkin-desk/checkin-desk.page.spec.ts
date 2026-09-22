@@ -117,4 +117,29 @@ describe('CheckinDeskPage', () => {
     expect(content).toContain('đã check-in thành công');
     expect(content).toContain('18');
   });
+
+  it('renders a non-PII realtime queue summary and requests reconciliation', () => {
+    const refreshSpy = jasmine.createSpy('queueRefresh');
+    component.queueRefreshRequested.subscribe(refreshSpy);
+    fixture.componentRef.setInput('queueConnectionState', 'connected');
+    fixture.componentRef.setInput('queueSummary', {
+      waitingCount: 8,
+      inConsultationCount: 3,
+      lastIssuedQueueNumber: 24,
+      updatedAtLabel: '08:30:10',
+    });
+    fixture.detectChanges();
+
+    const content = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(content).toContain('Realtime đang hoạt động');
+    expect(content).toContain('Đang chờ');
+    expect(content).toContain('24');
+
+    const syncButton = [...fixture.nativeElement.querySelectorAll('button')].find(
+      (button: HTMLButtonElement) =>
+        button.textContent?.includes('Đồng bộ hàng đợi'),
+    ) as HTMLButtonElement;
+    syncButton.click();
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
 });

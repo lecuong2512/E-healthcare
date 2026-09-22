@@ -51,6 +51,7 @@ export class WalkinBookingPage {
   @Input() loadingDoctors = false;
   @Input() submitting = false;
   @Input() errorMessage: string | null = null;
+  @Input() slotConflict = false;
 
   @Output() doctorSearchRequested =
     new EventEmitter<WalkInDoctorSearchIntent>();
@@ -197,6 +198,11 @@ export class WalkinBookingPage {
     if (intent && !this.submitting) {
       this.bookingRequested.emit(intent);
     }
+  }
+
+  refreshSlotsAfterConflict(): void {
+    this.chooseSlot('');
+    this.searchDoctors();
   }
 
   updateAmountTendered(event: Event): void {
