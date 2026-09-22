@@ -85,6 +85,41 @@ describe('AuditLogsPage', () => {
     expect(table.querySelector('img')).toBeNull();
   });
 
+  it('lets keyboard users reveal and collapse a long User-Agent', () => {
+    const longUserAgent = `Mozilla/5.0 ${'EnterpriseBrowser/'.repeat(8)}`;
+    component.store.loadSuccess(
+      [
+        {
+          id: 'audit-long-user-agent',
+          occurredAt: '2026-09-22T01:30:00.000Z',
+          actorId: 'user-1',
+          actorDisplayName: 'Quản trị viên',
+          actorRole: 'ADMIN',
+          action: 'LOGIN',
+          ipAddress: '10.0.0.8',
+          userAgent: longUserAgent,
+        },
+      ],
+      1,
+      1,
+    );
+    fixture.detectChanges();
+
+    const trigger = fixture.nativeElement.querySelector(
+      '.user-agent-trigger',
+    ) as HTMLButtonElement;
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(fixture.nativeElement.querySelector('.user-agent-detail')).toBeNull();
+
+    trigger.click();
+    fixture.detectChanges();
+
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(
+      fixture.nativeElement.querySelector('.user-agent-detail').textContent,
+    ).toContain(longUserAgent);
+  });
+
   it('formats audit timestamps in UTC+7', () => {
     component.store.loadSuccess(
       [

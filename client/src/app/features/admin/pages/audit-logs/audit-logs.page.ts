@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ReactiveFormsModule, NonNullableFormBuilder } from '@angular/forms';
 
+import { AuditLogCsvDownloadService } from './audit-log-csv-download.service';
 import { AuditLogTimePipe } from './audit-log-time.pipe';
+import { AuditLogUserAgentComponent } from './audit-log-user-agent.component';
 import {
   createDefaultVietnamRange,
   vietnamDateTimeToUtcIso,
@@ -11,7 +13,11 @@ import { AuditLogsPresentationStore } from './audit-logs-presentation.store';
 @Component({
   selector: 'app-audit-logs-page',
   standalone: true,
-  imports: [ReactiveFormsModule, AuditLogTimePipe],
+  imports: [
+    ReactiveFormsModule,
+    AuditLogTimePipe,
+    AuditLogUserAgentComponent,
+  ],
   templateUrl: './audit-logs.page.html',
   styleUrl: './audit-logs.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -19,6 +25,7 @@ import { AuditLogsPresentationStore } from './audit-logs-presentation.store';
 })
 export class AuditLogsPage {
   private readonly formBuilder = inject(NonNullableFormBuilder);
+  private readonly csvDownload = inject(AuditLogCsvDownloadService);
   readonly store = inject(AuditLogsPresentationStore);
   private readonly defaultRange = createDefaultVietnamRange();
 
@@ -71,5 +78,15 @@ export class AuditLogsPage {
   changePageSize(event: Event): void {
     const select = event.target as HTMLSelectElement;
     this.store.setPageSize(Number(select.value));
+  }
+
+  /** Called by the future API adapter after receiving a server-generated CSV. */
+  completeCsvExport(blob: Blob, contentDisposition: string | null): void {
+    this.csvDownload.download(blob, contentDisposition);
+    this.store.exportSuccess();
+  }
+
+  failCsvExport(message: string): void {
+    this.store.exportError(message);
   }
 }

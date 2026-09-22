@@ -2,6 +2,7 @@ import { Injectable, computed, signal } from '@angular/core';
 
 import {
   AuditLogFilterViewModel,
+  AuditLogExportState,
   AuditLogRowViewModel,
   AuditLogViewState,
 } from './audit-logs.models';
@@ -18,6 +19,8 @@ export class AuditLogsPresentationStore {
   private readonly _totalPages = signal(0);
   private readonly _requestRevision = signal(0);
   private readonly _exportRevision = signal(0);
+  private readonly _exportState = signal<AuditLogExportState>('idle');
+  private readonly _exportErrorMessage = signal<string | null>(null);
 
   readonly rows = this._rows.asReadonly();
   readonly state = this._state.asReadonly();
@@ -29,6 +32,8 @@ export class AuditLogsPresentationStore {
   readonly totalPages = this._totalPages.asReadonly();
   readonly requestRevision = this._requestRevision.asReadonly();
   readonly exportRevision = this._exportRevision.asReadonly();
+  readonly exportState = this._exportState.asReadonly();
+  readonly exportErrorMessage = this._exportErrorMessage.asReadonly();
   readonly canGoPrevious = computed(() => this._page() > 1);
   readonly canGoNext = computed(
     () => this._totalPages() > 0 && this._page() < this._totalPages(),
@@ -89,9 +94,21 @@ export class AuditLogsPresentationStore {
   }
 
   requestExport(): void {
-    if (this._filter()) {
+    if (this._filter() && this._exportState() !== 'exporting') {
+      this._exportState.set('exporting');
+      this._exportErrorMessage.set(null);
       this._exportRevision.update((revision) => revision + 1);
     }
+  }
+
+  exportSuccess(): void {
+    this._exportState.set('idle');
+    this._exportErrorMessage.set(null);
+  }
+
+  exportError(message: string): void {
+    this._exportState.set('error');
+    this._exportErrorMessage.set(message);
   }
 
   private requestData(): void {

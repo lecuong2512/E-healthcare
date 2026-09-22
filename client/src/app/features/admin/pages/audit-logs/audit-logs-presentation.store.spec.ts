@@ -53,4 +53,28 @@ describe('AuditLogsPresentationStore', () => {
     store.retry();
     expect(store.requestRevision()).toBe(revision + 1);
   });
+
+  it('prevents duplicate exports and exposes recoverable export state', () => {
+    store.applyFilter({
+      fromLocal: '2026-09-22T00:00',
+      toLocal: '2026-09-22T23:59',
+      action: '',
+      search: '',
+    });
+
+    store.requestExport();
+    store.requestExport();
+    expect(store.exportRevision()).toBe(1);
+    expect(store.exportState()).toBe('exporting');
+
+    store.exportError('Không thể xuất dữ liệu.');
+    expect(store.exportState()).toBe('error');
+    expect(store.exportErrorMessage()).toContain('Không thể xuất');
+
+    store.requestExport();
+    expect(store.exportRevision()).toBe(2);
+    store.exportSuccess();
+    expect(store.exportState()).toBe('idle');
+    expect(store.exportErrorMessage()).toBeNull();
+  });
 });
