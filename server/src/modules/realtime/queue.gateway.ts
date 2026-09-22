@@ -14,6 +14,7 @@ import {
   QUEUE_AUTH_EXPIRED_EVENT,
   QUEUE_NAMESPACE,
   QUEUE_RECEPTION_ROOM,
+  QUEUE_PUBLIC_ROOM,
   QUEUE_SNAPSHOT_EVENT,
   QUEUE_SYNC_EVENT,
 } from '../../../../shared/src/constants/queue-socket.constants';
@@ -24,8 +25,16 @@ import { environment } from '../../config/environment';
 import { DoctorEntity } from '../../database/entities/doctor.entity';
 import { SessionService } from '../auth/session.service';
 import { QueueQueryService } from './queue-query.service';
+import { QueueBoardTokenService } from './queue-board-token.service';
 
-type QueueClient = Socket & { data: { queueRole?: Role; doctorId?: string; token?: string } };
+type QueueClient = Socket & { data: {
+  queueRole?: Role | 'PUBLIC_BOARD';
+  doctorId?: string;
+  userId?: string;
+  token?: string;
+  boardToken?: string;
+  boardTokenId?: string;
+} };
 
 const SNAPSHOT_INTERVAL_MS = 30_000;
 const MIN_SYNC_INTERVAL_MS = 1_000;
@@ -52,46 +61,78 @@ export class QueueGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly sessions: SessionService,
     private readonly dataSource: DataSource,
     private readonly queries: QueueQueryService,
+    private readonly boardTokens: QueueBoardTokenService,
   ) {}
 
   async handleConnection(client: QueueClient): Promise<void> {
     const token = client.handshake.auth?.token;
-    if (typeof token !== 'string') {
+    const boardToken = client.handshake.auth?.boardToken;
+    if ((token === undefined) === (boardToken === undefined)) {
       client.disconnect(true);
       return;
     }
     try {
-      const claims = await this.sessions.authenticate(token);
-      if (claims.role !== Role.RECEPTIONIST && claims.role !== Role.DOCTOR) {
-        client.disconnect(true);
-        return;
-      }
+      let queueRole: Role | 'PUBLIC_BOARD';
       let doctorId: string | undefined;
-      if (claims.role === Role.DOCTOR) {
-        const doctor = await this.dataSource.getRepository(DoctorEntity)
-          .findOneBy({ userId: claims.userId });
-        if (!doctor) {
+      let userId: string | undefined;
+      let boardTokenId: string | undefined;
+      let expiresAt: number;
+      let room: string;
+      let connectionKey: string;
+      if (boardToken !== undefined) {
+        if (typeof boardToken !== 'string') {
           client.disconnect(true);
           return;
         }
-        doctorId = doctor.id;
+        const claims = this.boardTokens.verify(boardToken);
+        queueRole = 'PUBLIC_BOARD';
+        boardTokenId = claims.tokenId;
+        expiresAt = claims.expiresAt;
+        room = QUEUE_PUBLIC_ROOM;
+        connectionKey = `board:${boardTokenId}`;
+      } else {
+        if (typeof token !== 'string') {
+          client.disconnect(true);
+          return;
+        }
+        const claims = await this.sessions.authenticate(token);
+        if (claims.role !== Role.RECEPTIONIST && claims.role !== Role.DOCTOR) {
+          client.disconnect(true);
+          return;
+        }
+        queueRole = claims.role;
+        userId = claims.userId;
+        if (claims.role === Role.DOCTOR) {
+          const doctor = await this.dataSource.getRepository(DoctorEntity)
+            .findOneBy({ userId: claims.userId });
+          if (!doctor) {
+            client.disconnect(true);
+            return;
+          }
+          doctorId = doctor.id;
+        }
+        const tokenClaims = decode(token);
+        expiresAt = typeof tokenClaims === 'object' && tokenClaims?.exp
+          ? tokenClaims.exp * 1000 : 0;
+        room = doctorId ? QUEUE_DOCTOR_ROOM(doctorId) : QUEUE_RECEPTION_ROOM;
+        connectionKey = claims.userId;
       }
-      const tokenClaims = decode(token);
-      const expiresAt = typeof tokenClaims === 'object' && tokenClaims?.exp
-        ? tokenClaims.exp * 1000 : 0;
       if (expiresAt <= Date.now()) {
         client.emit(QUEUE_AUTH_EXPIRED_EVENT);
         client.disconnect(true);
         return;
       }
-      if (client.disconnected || !this.reserveConnection(client.id, claims.userId)) {
+      if (client.disconnected || !this.reserveConnection(client.id, connectionKey)) {
         client.disconnect(true);
         return;
       }
-      client.data.queueRole = claims.role;
+      client.data.queueRole = queueRole;
       client.data.doctorId = doctorId;
-      client.data.token = token;
-      await client.join(doctorId ? QUEUE_DOCTOR_ROOM(doctorId) : QUEUE_RECEPTION_ROOM);
+      client.data.userId = userId;
+      client.data.token = typeof token === 'string' ? token : undefined;
+      client.data.boardToken = typeof boardToken === 'string' ? boardToken : undefined;
+      client.data.boardTokenId = boardTokenId;
+      await client.join(room);
       if (client.disconnected) {
         this.handleDisconnect(client);
         return;
@@ -146,12 +187,19 @@ export class QueueGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (client.disconnected || this.syncing.has(client.id) || !this.connectedClients.has(client.id)) return;
     this.syncing.add(client.id);
     try {
-      const claims = await this.sessions.authenticate(client.data.token);
-      if (claims.role !== client.data.queueRole) throw new Error('Role changed');
-      if (claims.role === Role.DOCTOR) {
-        const doctor = await this.dataSource.getRepository(DoctorEntity)
-          .findOneBy({ userId: claims.userId });
-        if (!doctor || doctor.id !== client.data.doctorId) throw new Error('Doctor changed');
+      if (client.data.queueRole === 'PUBLIC_BOARD') {
+        const claims = this.boardTokens.verify(client.data.boardToken ?? '');
+        if (claims.tokenId !== client.data.boardTokenId) throw new Error('Board token changed');
+      } else {
+        const claims = await this.sessions.authenticate(client.data.token);
+        if (claims.role !== client.data.queueRole || claims.userId !== client.data.userId) {
+          throw new Error('Queue identity changed');
+        }
+        if (claims.role === Role.DOCTOR) {
+          const doctor = await this.dataSource.getRepository(DoctorEntity)
+            .findOneBy({ userId: claims.userId });
+          if (!doctor || doctor.id !== client.data.doctorId) throw new Error('Doctor changed');
+        }
       }
       await this.sendSnapshot(client);
     } catch (error) {
@@ -189,6 +237,10 @@ export class QueueGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private async sendSnapshot(client: QueueClient): Promise<void> {
+    if (client.data.queueRole === 'PUBLIC_BOARD') {
+      client.emit(QUEUE_SNAPSHOT_EVENT, await this.queries.publicSnapshot());
+      return;
+    }
     const scope = client.data.queueRole === Role.DOCTOR ? 'DOCTOR' : 'RECEPTION';
     const snapshot = await this.queries.snapshot(scope, client.data.doctorId);
     client.emit(QUEUE_SNAPSHOT_EVENT, snapshot);

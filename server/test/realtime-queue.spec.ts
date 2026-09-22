@@ -11,11 +11,15 @@ import { environment } from '../src/config/environment';
 import { QueueEventsService } from '../src/modules/realtime/queue-events.service';
 import { QueueGateway } from '../src/modules/realtime/queue.gateway';
 import { QueueQueryService } from '../src/modules/realtime/queue-query.service';
+import { QueueBoardTokenService } from '../src/modules/realtime/queue-board-token.service';
+import { toPublicQueueTicket } from '../src/modules/realtime/public-queue.mapper';
 import {
   APPOINTMENT_STATUS_CHANGED_EVENT,
   QUEUE_AUTH_EXPIRED_EVENT,
   QUEUE_DOCTOR_ROOM,
   QUEUE_RECEPTION_ROOM,
+  QUEUE_PUBLIC_ROOM,
+  QUEUE_PUBLIC_STATUS_CHANGED_EVENT,
   QUEUE_SNAPSHOT_EVENT,
 } from '../../shared/src/constants/queue-socket.constants';
 
@@ -37,15 +41,16 @@ describe('Realtime queue', () => {
     checkedInAt: '2026-09-21T02:00:00.000Z',
   };
   const sessions = { authenticate: jest.fn() };
-  const queries = { snapshot: jest.fn(), ticket: jest.fn() };
+  const queries = { snapshot: jest.fn(), publicSnapshot: jest.fn(), ticket: jest.fn() };
+  const boardTokens = { verify: jest.fn() };
   const doctorRepository = { findOneBy: jest.fn() };
   const database = { getRepository: jest.fn() };
   let gateway: QueueGateway;
 
-  function client(authToken: unknown = token, id = 'socket-1') {
+  function client(authToken: unknown = token, id = 'socket-1', boardToken?: unknown) {
     return {
       id,
-      handshake: { auth: { token: authToken }, address: '127.0.0.1' },
+      handshake: { auth: { token: authToken, boardToken }, address: '127.0.0.1' },
       data: {},
       join: jest.fn(async () => undefined),
       emit: jest.fn(),
@@ -59,11 +64,16 @@ describe('Realtime queue', () => {
     doctorRepository.findOneBy.mockResolvedValue({ id: doctorId });
     database.getRepository.mockReturnValue(doctorRepository);
     queries.snapshot.mockResolvedValue({ scope: 'DOCTOR', doctorId, date: ticket.queueDate, items: [ticket] });
+    queries.publicSnapshot.mockResolvedValue({
+      scope: 'PUBLIC', date: ticket.queueDate, items: [toPublicQueueTicket(ticket)],
+    });
     queries.ticket.mockResolvedValue(ticket);
+    boardTokens.verify.mockReturnValue({ tokenId: 'board-1', expiresAt: Date.now() + 60_000 });
     gateway = new QueueGateway(
       sessions as unknown as SessionService,
       database as unknown as DataSource,
       queries as unknown as QueueQueryService,
+      boardTokens as unknown as QueueBoardTokenService,
     );
   });
 
@@ -171,7 +181,7 @@ describe('Realtime queue', () => {
     });
   });
 
-  it('publishes a committed ticket only to reception and its doctor room', async () => {
+  it('publishes an internal event to staff and a redacted event to the public room', async () => {
     const emit = jest.fn();
     gateway.server = { to: jest.fn(() => ({ emit })) } as unknown as typeof gateway.server;
     const events = new QueueEventsService(queries as unknown as QueueQueryService, gateway);
@@ -179,11 +189,66 @@ describe('Realtime queue', () => {
     expect(queries.ticket).toHaveBeenCalledWith(ticket.appointmentId);
     expect(gateway.server.to).toHaveBeenNthCalledWith(1, QUEUE_RECEPTION_ROOM);
     expect(gateway.server.to).toHaveBeenNthCalledWith(2, QUEUE_DOCTOR_ROOM(doctorId));
+    expect(gateway.server.to).toHaveBeenNthCalledWith(3, QUEUE_PUBLIC_ROOM);
     expect(emit).toHaveBeenCalledWith(APPOINTMENT_STATUS_CHANGED_EVENT, expect.objectContaining({
       appointmentId: ticket.appointmentId,
       status: AppointmentStatus.CHECKED_IN,
       ticket,
     }));
+    const publicCall = emit.mock.calls.find(([name]) => name === QUEUE_PUBLIC_STATUS_CHANGED_EVENT);
+    expect(publicCall?.[1]).toEqual({
+      doctorId, queueNumber: ticket.queueNumber, previousStatus: null,
+      status: ticket.status, occurredAt: expect.any(String),
+      ticket: {
+        doctorId, doctorName: ticket.doctorName, roomNumber: ticket.roomNumber,
+        maskedPatientName: 'Pati***', status: ticket.status,
+        queueNumber: ticket.queueNumber, queueDate: ticket.queueDate,
+      },
+    });
+    expect(JSON.stringify(publicCall?.[1])).not.toContain(ticket.appointmentCode);
+    expect(JSON.stringify(publicCall?.[1])).not.toContain(ticket.appointmentId);
+    expect(publicCall?.[1].ticket.maskedPatientName).not.toBe(ticket.patientName);
+  });
+
+  it('accepts a board token only into the public room with a redacted snapshot', async () => {
+    const socket = client(token, 'board-socket', 'board-token');
+    socket.handshake.auth.token = undefined;
+    await gateway.handleConnection(socket as unknown as Socket);
+
+    expect(boardTokens.verify).toHaveBeenCalledWith('board-token');
+    expect(sessions.authenticate).not.toHaveBeenCalled();
+    expect(socket.join).toHaveBeenCalledWith(QUEUE_PUBLIC_ROOM);
+    expect(socket.join).not.toHaveBeenCalledWith(QUEUE_RECEPTION_ROOM);
+    expect(queries.publicSnapshot).toHaveBeenCalledTimes(1);
+    expect(socket.emit).toHaveBeenCalledWith(QUEUE_SNAPSHOT_EVENT, {
+      scope: 'PUBLIC', date: ticket.queueDate, items: [toPublicQueueTicket(ticket)],
+    });
+    await gateway.sync(socket as unknown as Socket);
+    expect(boardTokens.verify).toHaveBeenCalledTimes(2);
+    gateway.handleDisconnect(socket as unknown as Socket);
+  });
+
+  it('rejects a handshake containing both staff and board tokens', async () => {
+    const socket = client(token, 'mixed-socket', 'board-token');
+    await gateway.handleConnection(socket as unknown as Socket);
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(sessions.authenticate).not.toHaveBeenCalled();
+    expect(boardTokens.verify).not.toHaveBeenCalled();
+  });
+
+  it('disconnects a public board when its token expires during sync', async () => {
+    const socket = client(token, 'board-socket', 'board-token');
+    socket.handshake.auth.token = undefined;
+    await gateway.handleConnection(socket as unknown as Socket);
+    boardTokens.verify.mockImplementationOnce(() => {
+      throw new UnauthorizedException({ code: 'SESSION_EXPIRED' });
+    });
+
+    await gateway.sync(socket as unknown as Socket);
+
+    expect(socket.emit).toHaveBeenCalledWith(QUEUE_AUTH_EXPIRED_EVENT);
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
   });
 
   it('still publishes to the doctor room if reception publish fails', async () => {
@@ -201,6 +266,9 @@ describe('Realtime queue', () => {
     expect(gateway.server.to).toHaveBeenCalledWith(QUEUE_DOCTOR_ROOM(doctorId));
     expect(doctorEmit).toHaveBeenCalledWith(APPOINTMENT_STATUS_CHANGED_EVENT,
       expect.objectContaining({ appointmentId: ticket.appointmentId }));
+    expect(gateway.server.to).toHaveBeenCalledWith(QUEUE_PUBLIC_ROOM);
+    expect(doctorEmit).toHaveBeenCalledWith(QUEUE_PUBLIC_STATUS_CHANGED_EVENT,
+      expect.objectContaining({ queueNumber: ticket.queueNumber }));
   });
 
   it('reconciles a missed event with a fresh snapshot every 30 seconds', async () => {
@@ -261,5 +329,20 @@ describe('Realtime queue', () => {
       statuses: [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_CONSULTATION],
     });
     expect(builder.addOrderBy).toHaveBeenCalledWith('appointment.queue_number', 'ASC');
+  });
+
+  it('redacts the persisted queue before returning a public snapshot', async () => {
+    const service = new QueueQueryService(database as unknown as DataSource);
+    jest.spyOn(service, 'snapshot').mockResolvedValue({
+      scope: 'RECEPTION', date: ticket.queueDate, items: [ticket],
+    });
+
+    const snapshot = await service.publicSnapshot();
+
+    expect(snapshot).toEqual({
+      scope: 'PUBLIC', date: ticket.queueDate, items: [toPublicQueueTicket(ticket)],
+    });
+    expect(snapshot.items[0]).not.toHaveProperty('appointmentId');
+    expect(snapshot.items[0]).not.toHaveProperty('appointmentCode');
   });
 });

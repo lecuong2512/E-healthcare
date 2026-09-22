@@ -32,3 +32,33 @@ export interface QueueStatusChanged {
   occurredAt: string;
   ticket: QueueTicket;
 }
+
+export interface PublicQueueTicket {
+  doctorId: string;
+  doctorName: string;
+  roomNumber: string;
+  maskedPatientName: string;
+  status: AppointmentStatus;
+  queueNumber: number;
+  queueDate: string;
+}
+
+export interface PublicQueueSnapshot {
+  scope: 'PUBLIC';
+  date: string;
+  items: PublicQueueTicket[];
+}
+
+export interface PublicQueueStatusChanged {
+  doctorId: string;
+  queueNumber: number;
+  previousStatus: AppointmentStatus | null;
+  status: AppointmentStatus;
+  occurredAt: string;
+  ticket: PublicQueueTicket;
+}
+
+export interface PublicQueueBoardToken {
+  token: string;
+  expiresAt: string;
+}
