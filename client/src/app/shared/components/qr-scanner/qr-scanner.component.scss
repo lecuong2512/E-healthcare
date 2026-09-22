@@ -21,26 +21,6 @@
 .qr-scanner__heading {
   justify-content: space-between;
   margin-bottom: 1rem;
-
-  h2 {
-    margin: 0.15rem 0 0;
-    color: #0f172a;
-    font-size: 1.125rem;
-  }
-}
-
-.qr-scanner__eyebrow {
-  margin: 0;
-  color: #0284c7;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.qr-scanner__privacy {
-  color: #475569;
-  font-size: 0.75rem;
 }
 
 .qr-scanner__preview {
@@ -157,16 +137,4 @@
   margin: 0.75rem 0 0;
   color: #b91c1c;
   font-size: 0.875rem;
-}
-
-@media (max-width: 520px) {
-  .qr-scanner__heading,
-  .qr-scanner__input-row {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .qr-scanner__privacy {
-    align-self: flex-start;
-  }
 }
