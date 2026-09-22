@@ -56,4 +56,7 @@ export class AppointmentEntity {
 
   @Column({ name: 'checked_in_at', type: 'timestamptz', nullable: true })
   checkedInAt!: Date | null;
+
+  @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
+  completedAt!: Date | null;
 }

@@ -7,6 +7,7 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AccessTokenGuard } from "./common/guards/access-token.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
 import { DoctorModule } from "./modules/doctor/doctor.module";
+import { ClinicalModule } from "./modules/clinical/clinical.module";
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { DoctorModule } from "./modules/doctor/doctor.module";
     DoctorModule,
     BookingModule,
     PhrModule,
+    ClinicalModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
   ],
   providers: [
