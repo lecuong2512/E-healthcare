@@ -6,6 +6,7 @@
 - Bệnh nhân đã đăng nhập lấy token qua `GET /api/v1/appointments/:appointmentId/check-in-qr`. Response `qrToken` là nội dung đưa vào mã QR, hết hạn sau 15 phút. Chỉ bệnh nhân sở hữu lịch hẹn `CONFIRMED` được cấp token.
 - Lễ tân dùng `POST /api/v1/reception/qr/lookup` với body `{ "qrToken": "..." }` để tra cứu, hoặc `POST /api/v1/reception/qr/check-in` để check-in. Token được kiểm tra chữ ký HS256, mục đích sử dụng và hạn dùng; backend lấy dữ liệu lịch hẹn thật từ DB.
 - QR hết hạn hoặc bị sửa bị từ chối. Sau khi check-in thành công, dùng lại token không thể cấp thêm số hàng đợi vì transaction chỉ cho phép lịch `CONFIRMED` chuyển sang `CHECKED_IN`. Tra cứu thủ công bằng mã lịch hẹn/số điện thoại và API check-in có quyền lễ tân vẫn dùng được khi bệnh nhân không có QR.
+- Check-in lịch hẹn chỉ mở từ 60 phút trước giờ bắt đầu đến hết 15 phút sau giờ kết thúc slot, tính theo `Asia/Ho_Chi_Minh` và chỉ trong đúng ngày khám. Cả `canCheckIn` khi tra cứu và transaction check-in dùng cùng quy tắc này; quét QR không bỏ qua giới hạn giờ.
 
 ## Hàng đợi realtime
 

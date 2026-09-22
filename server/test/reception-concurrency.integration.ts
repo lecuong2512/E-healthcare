@@ -188,10 +188,30 @@ describe('Reception concurrency on PostgreSQL', () => {
     expect(events.statusChanged).not.toHaveBeenCalled();
   });
 
+  it('keeps the queue unchanged outside the Vietnam check-in window', async () => {
+    const earlyId = await appointment(
+      await slot(SlotStatus.BOOKED, '11:00:00', '11:30:00'), PaymentStatus.PAID,
+    );
+    const lateId = await appointment(
+      await slot(SlotStatus.BOOKED, '08:00:00', '08:30:00'), PaymentStatus.PAID,
+    );
+
+    await expect(reception.checkIn(earlyId, context())).rejects.toThrow(ConflictException);
+    await expect(reception.checkIn(lateId, context())).rejects.toThrow(ConflictException);
+    const rows = await database.query(
+      'SELECT status, queue_number FROM appointments WHERE id IN ($1, $2)', [earlyId, lateId],
+    );
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).toMatchObject({ status: AppointmentStatus.CONFIRMED, queue_number: null });
+    }
+    expect(events.statusChanged).not.toHaveBeenCalled();
+  });
+
   it('allocates distinct queue numbers for concurrent appointments of one doctor', async () => {
     const ids = await Promise.all([
+      appointment(await slot(SlotStatus.BOOKED, '09:30:00', '10:00:00'), PaymentStatus.PAID),
       appointment(await slot(SlotStatus.BOOKED), PaymentStatus.PAID),
-      appointment(await slot(SlotStatus.BOOKED, '11:00:00', '11:30:00'), PaymentStatus.PAID),
     ]);
     const responses = await Promise.all(ids.map((id) => reception.checkIn(id, context())));
     expect(responses.map((item) => item.queueNumber).sort()).toEqual([1, 2]);
