@@ -1,8 +1,9 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import {
   AppointmentStatus,
   CounterPaymentMethod,
+  CounterPaymentStatus,
   PaymentMethod,
   PaymentStatus,
 } from '@shared/enums';
@@ -78,7 +79,9 @@ describe('CounterPaymentService', () => {
     const dataSource = {
       transaction: jest.fn(async (_isolation, work) => work(manager)),
       getRepository: jest.fn(() => ({
-        findOne: async () => transactions[0] ?? null,
+        findOne: async ({ where }: { where: { appointmentId: string; status: CounterPaymentStatus } }) =>
+          transactions.find((transaction) => transaction.appointmentId === where.appointmentId &&
+            transaction.status === where.status) ?? null,
       })),
     } as unknown as DataSource;
     service = new CounterPaymentService(
@@ -131,5 +134,22 @@ describe('CounterPaymentService', () => {
 
     expect(transactions).toHaveLength(0);
     expect(appointment.paymentStatus).toBe(PaymentStatus.UNPAID);
+  });
+
+  it('only reprints a successful receipt when an older transaction was voided', async () => {
+    const receipt = await service.collect(appointmentId, auditContext, {
+      method: CounterPaymentMethod.CASH,
+      amountTendered: 300000,
+    });
+    transactions.unshift({
+      ...transactions[0],
+      id: 'voided-transaction',
+      receiptCode: 'VOIDED-RECEIPT',
+      status: CounterPaymentStatus.VOIDED,
+    });
+
+    expect(await service.getReceipt(appointmentId)).toEqual(receipt);
+    transactions.pop();
+    await expect(service.getReceipt(appointmentId)).rejects.toThrow(NotFoundException);
   });
 });

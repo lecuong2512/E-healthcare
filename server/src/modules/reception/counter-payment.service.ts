@@ -171,7 +171,7 @@ export class CounterPaymentService {
     const transaction = await this.dataSource
       .getRepository(CounterPaymentTransactionEntity)
       .findOne({
-        where: { appointmentId },
+        where: { appointmentId, status: CounterPaymentStatus.SUCCESS },
         order: { createdAt: 'ASC', id: 'ASC' },
       });
     if (!transaction) throw new NotFoundException('Không tìm thấy phiếu thu tại quầy.');
