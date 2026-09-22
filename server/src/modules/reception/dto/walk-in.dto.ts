@@ -3,9 +3,11 @@ import {
   IsEnum,
   IsInt,
   IsNumber,
+  IsOptional,
   IsString,
   IsUUID,
   Length,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -15,6 +17,8 @@ import { WalkInBookingRequest } from '@shared/interfaces';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
+const trimOptional = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? value.trim() || undefined : value;
 
 export class WalkInDto implements WalkInBookingRequest {
   @IsUUID('4')
@@ -29,6 +33,17 @@ export class WalkInDto implements WalkInBookingRequest {
   @IsString()
   @MaxLength(32)
   phone!: string;
+
+  @Transform(trimOptional)
+  @IsOptional()
+  @IsString()
+  @Length(1, 20)
+  @Matches(/^(?:\d{9}|\d{12})$/, { message: 'CCCD/CMND phải gồm 9 hoặc 12 chữ số.' })
+  citizenId?: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  patientId?: string;
 
   @IsInt()
   @Min(1900)

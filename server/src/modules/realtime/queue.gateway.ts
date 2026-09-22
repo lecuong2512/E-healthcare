@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Logger, UnauthorizedException } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
   ConnectedSocket,
@@ -11,6 +11,7 @@ import {
 import { Role } from '@shared/enums';
 import {
   QUEUE_DOCTOR_ROOM,
+  QUEUE_AUTH_EXPIRED_EVENT,
   QUEUE_NAMESPACE,
   QUEUE_RECEPTION_ROOM,
   QUEUE_SNAPSHOT_EVENT,
@@ -68,6 +69,7 @@ export class QueueGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const expiresAt = typeof tokenClaims === 'object' && tokenClaims?.exp
         ? tokenClaims.exp * 1000 : 0;
       if (expiresAt <= Date.now()) {
+        client.emit(QUEUE_AUTH_EXPIRED_EVENT);
         client.disconnect(true);
         return;
       }
@@ -75,12 +77,16 @@ export class QueueGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.data.doctorId = doctorId;
       client.data.token = token;
       await client.join(doctorId ? QUEUE_DOCTOR_ROOM(doctorId) : QUEUE_RECEPTION_ROOM);
-      const timer = setTimeout(() => client.disconnect(true), expiresAt - Date.now());
+      const timer = setTimeout(() => {
+        client.emit(QUEUE_AUTH_EXPIRED_EVENT);
+        client.disconnect(true);
+      }, expiresAt - Date.now());
       timer.unref();
       this.expiryTimers.set(client.id, timer);
       await this.sendSnapshot(client);
     } catch (error) {
       this.logger.warn(`Queue socket connection failed: ${String(error)}`);
+      if (this.isExpiredSession(error)) client.emit(QUEUE_AUTH_EXPIRED_EVENT);
       client.disconnect(true);
     }
   }
@@ -104,6 +110,7 @@ export class QueueGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await this.sendSnapshot(client);
     } catch (error) {
       this.logger.warn(`Queue socket sync failed: ${String(error)}`);
+      if (this.isExpiredSession(error)) client.emit(QUEUE_AUTH_EXPIRED_EVENT);
       client.disconnect(true);
     }
   }
@@ -116,5 +123,12 @@ export class QueueGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const scope = client.data.queueRole === Role.DOCTOR ? 'DOCTOR' : 'RECEPTION';
     const snapshot = await this.queries.snapshot(scope, client.data.doctorId);
     client.emit(QUEUE_SNAPSHOT_EVENT, snapshot);
+  }
+
+  private isExpiredSession(error: unknown): boolean {
+    if (!(error instanceof UnauthorizedException)) return false;
+    const response = error.getResponse();
+    return typeof response === 'object' && response !== null &&
+      'code' in response && response.code === 'SESSION_EXPIRED';
   }
 }

@@ -189,6 +189,31 @@ describe("SRS-AUTH-02 HTTP và PostgreSQL thật", () => {
     await login("+84901234567").expect(200);
   });
 
+  test("đăng nhập đúng tài khoản khi nhiều hồ sơ walk-in dùng chung số điện thoại", async () => {
+    await database.query(
+      `INSERT INTO users (phone_number,full_name,gender,date_of_birth,status)
+       VALUES ('+84901234567','Người nhà A','MALE','1990-01-01','PENDING_VERIFY'),
+              ('+84901234567','Người nhà B','FEMALE','1992-01-01','PENDING_VERIFY')`,
+    );
+    const userId = await seed();
+    const result = await login("0901234567").expect(200);
+    const claims = verifyJwt(result.body.accessToken, environment.JWT_ACCESS_SECRET!, {
+      issuer: "ehealth-api", audience: "ehealth-client",
+    }) as JwtPayload;
+    expect(claims.userId).toBe(userId);
+    const [count] = await database.query(
+      "SELECT COUNT(*)::int AS total FROM users WHERE phone_number = '+84901234567'",
+    );
+    expect(count.total).toBe(3);
+    await expect(database.query(
+      `INSERT INTO users (phone_number,password_hash,full_name,gender,date_of_birth,status)
+       VALUES ('+84901234567','another-hash','Tài khoản khác','MALE','1995-01-01','ACTIVE')`,
+    )).rejects.toMatchObject({
+      code: "23505",
+      constraint: "uq_users_login_phone_number",
+    });
+  });
+
   test("xoay refresh; dùng lại token cũ thu hồi cả phiên và access đã cấp", async () => {
     await seed();
     const initial = await login().expect(200);

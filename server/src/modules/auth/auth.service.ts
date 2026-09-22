@@ -382,7 +382,7 @@ export class AuthService {
       .getRepository(UserEntity)
       .createQueryBuilder("user")
       .where("LOWER(user.email) = LOWER(:email)", { email })
-      .orWhere("user.phoneNumber IN (:...phoneVariants)", { phoneVariants })
+      .orWhere("(user.phoneNumber IN (:...phoneVariants) AND user.passwordHash IS NOT NULL)", { phoneVariants })
       .getOne();
     if (user) throw this.duplicateContact();
   }
