@@ -1,10 +1,10 @@
 <section class="qr-scanner" aria-labelledby="qr-scanner-title">
-  <div class="qr-scanner__heading">
+  <div class="qr-scanner__heading flex-col items-stretch sm:flex-row sm:items-center">
     <div>
-      <p class="qr-scanner__eyebrow">Check-in nhanh</p>
-      <h2 id="qr-scanner-title">Quét mã QR lịch hẹn</h2>
+      <p class="m-0 text-xs font-bold uppercase tracking-widest text-sky-600">Check-in nhanh</p>
+      <h2 id="qr-scanner-title" class="mb-0 mt-1 text-lg font-bold text-slate-900">Quét mã QR lịch hẹn</h2>
     </div>
-    <span class="qr-scanner__privacy">Không lưu ảnh camera</span>
+    <span class="self-start text-xs text-slate-600">Không lưu ảnh camera</span>
   </div>
 
   <div class="qr-scanner__preview" [class.qr-scanner__preview--active]="cameraState() === 'active'">
@@ -39,7 +39,7 @@
 
   <form class="qr-scanner__keyboard" (submit)="$event.preventDefault(); submitKeyboardValue()">
     <label for="qr-keyboard-input">Mã từ máy quét</label>
-    <div class="qr-scanner__input-row">
+    <div class="qr-scanner__input-row flex-col items-stretch sm:flex-row sm:items-center">
       <input
         id="qr-keyboard-input"
         name="qrToken"
