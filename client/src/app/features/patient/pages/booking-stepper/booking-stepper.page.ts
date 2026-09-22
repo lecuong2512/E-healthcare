@@ -128,10 +128,10 @@ export class BookingStepperPage implements OnDestroy {
   // ─── Step 4: Payment method ───────────────────────────────
   readonly paymentMethod = signal<string>('vnpay');
   readonly paymentMethods = [
-    { id: 'vnpay',    label: 'VNPay',           icon: '💳' },
-    { id: 'momo',     label: 'MoMo',            icon: '💜' },
-    { id: 'banking',  label: 'Chuyển khoản',    icon: '🏦' },
-    { id: 'cash',     label: 'Tiền mặt tại viện', icon: '💵' },
+    { id: 'vnpay',    label: 'VNPay',           icon: '💳' , iconPath: 'assets/vnpay.webp'},
+    { id: 'momo',     label: 'MoMo',            icon: '💜' , iconPath: 'assets/momo.png'},
+    { id: 'banking',  label: 'Chuyển khoản',    icon: '🏦' , iconPath: null},
+    { id: 'cash',     label: 'Tiền mặt tại viện', icon: '💵' , iconPath: null},
   ];
 
   // ─── Countdown timer ─────────────────────────────────────

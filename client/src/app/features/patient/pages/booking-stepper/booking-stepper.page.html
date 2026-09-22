@@ -564,7 +564,13 @@
                 [class.border-slate-200]="paymentMethod() !== pm.id"
                 [class.bg-white]="paymentMethod() !== pm.id"
               >
-                <span class="text-xl leading-none">{{ pm.icon }}</span>
+                <span class="text-xl leading-none">
+                  @if (pm.iconPath) {
+                  <img [src]="pm.iconPath" [alt]="pm.label" class="w-6 h-6">
+                    } @else {
+                  <span class="text-xl leading-none">{{ pm.icon }}</span>
+                }
+                </span>
                 <span class="text-xs font-semibold"
                       [class.text-sky-700]="paymentMethod() === pm.id"
                       [class.text-slate-700]="paymentMethod() !== pm.id">
