@@ -47,6 +47,16 @@ export class QueueBoardPresentationStore {
     this._updatedAt.set(new Date());
   }
 
+  complete(ticketId: string): void {
+    this._nowServing.update((tickets) =>
+      tickets.filter((ticket) => ticket.id !== ticketId),
+    );
+    if (this._lastCalledTicketId() === ticketId) {
+      this._lastCalledTicketId.set(null);
+    }
+    this._updatedAt.set(new Date());
+  }
+
   setConnectionState(state: QueueBoardConnectionState): void {
     this._connectionState.set(state);
   }
