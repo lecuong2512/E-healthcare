@@ -12,6 +12,8 @@ import { EnableUnaccentDoctorSearch1789707600000 } from './migrations/1789707600
 import { AddReceptionQueueAndCounterPayment1789923600000 } from "./migrations/1789923600000-add-reception-queue-and-counter-payment";
 import { AddWalkInPatientAndIdempotency1789927200000 } from "./migrations/1789927200000-add-walk-in-patient-and-idempotency";
 import { AddReceptionAuditLogs1789930800000 } from "./migrations/1789930800000-add-reception-audit-logs";
+import { AllowSharedPatientPhone1789934400000 } from "./migrations/1789934400000-allow-shared-patient-phone";
+import { UniquePatientCitizenId1789938000000 } from "./migrations/1789938000000-unique-patient-citizen-id";
 import {
   AuthSessionEntity,
   GoogleOAuthFlowEntity,
@@ -88,6 +90,8 @@ export function createDataSource(url: string): DataSource {
       AddReceptionQueueAndCounterPayment1789923600000,
       AddWalkInPatientAndIdempotency1789927200000,
       AddReceptionAuditLogs1789930800000,
+      AllowSharedPatientPhone1789934400000,
+      UniquePatientCitizenId1789938000000,
     ],
   });
 }

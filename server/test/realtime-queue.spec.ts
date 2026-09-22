@@ -1,3 +1,5 @@
+import './test-environment';
+import { UnauthorizedException } from '@nestjs/common';
 import { sign } from 'jsonwebtoken';
 import { Role, AppointmentStatus, QueueSource } from '@shared/enums';
 import { QueueTicket } from '@shared/interfaces';
@@ -5,11 +7,13 @@ import { DataSource } from 'typeorm';
 import { Socket } from 'socket.io';
 import { DoctorEntity } from '../src/database/entities/doctor.entity';
 import { SessionService } from '../src/modules/auth/session.service';
+import { environment } from '../src/config/environment';
 import { QueueEventsService } from '../src/modules/realtime/queue-events.service';
 import { QueueGateway } from '../src/modules/realtime/queue.gateway';
 import { QueueQueryService } from '../src/modules/realtime/queue-query.service';
 import {
   APPOINTMENT_STATUS_CHANGED_EVENT,
+  QUEUE_AUTH_EXPIRED_EVENT,
   QUEUE_DOCTOR_ROOM,
   QUEUE_RECEPTION_ROOM,
   QUEUE_SNAPSHOT_EVENT,
@@ -107,7 +111,64 @@ describe('Realtime queue', () => {
     sessions.authenticate.mockRejectedValue(new Error('revoked'));
     await gateway.sync(socket as unknown as Socket);
     expect(socket.disconnect).toHaveBeenCalledWith(true);
+    expect(socket.emit).not.toHaveBeenCalledWith(QUEUE_AUTH_EXPIRED_EVENT);
     gateway.handleDisconnect(socket as unknown as Socket);
+  });
+
+  it('signals token expiry before disconnecting a connected socket', async () => {
+    jest.useFakeTimers();
+    try {
+      const socket = client();
+      await gateway.handleConnection(socket as unknown as Socket);
+      jest.advanceTimersByTime(61_000);
+      expect(socket.emit).toHaveBeenCalledWith(QUEUE_AUTH_EXPIRED_EVENT);
+      expect(socket.emit.mock.invocationCallOrder.at(-1)).toBeLessThan(
+        socket.disconnect.mock.invocationCallOrder[0],
+      );
+      gateway.handleDisconnect(socket as unknown as Socket);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('signals an expired session on sync', async () => {
+    const socket = client();
+    await gateway.handleConnection(socket as unknown as Socket);
+    sessions.authenticate.mockRejectedValue(new UnauthorizedException({ code: 'SESSION_EXPIRED' }));
+    await gateway.sync(socket as unknown as Socket);
+    expect(socket.emit).toHaveBeenCalledWith(QUEUE_AUTH_EXPIRED_EVENT);
+    gateway.handleDisconnect(socket as unknown as Socket);
+  });
+
+  it('distinguishes an expired token from an invalid token during connection', async () => {
+    const expired = client();
+    sessions.authenticate.mockRejectedValueOnce(
+      new UnauthorizedException({ code: 'SESSION_EXPIRED' }),
+    );
+    await gateway.handleConnection(expired as unknown as Socket);
+    expect(expired.emit).toHaveBeenCalledWith(QUEUE_AUTH_EXPIRED_EVENT);
+    expect(expired.disconnect).toHaveBeenCalledWith(true);
+
+    const invalid = client();
+    sessions.authenticate.mockRejectedValueOnce(
+      new UnauthorizedException({ code: 'SESSION_INVALID' }),
+    );
+    await gateway.handleConnection(invalid as unknown as Socket);
+    expect(invalid.emit).not.toHaveBeenCalledWith(QUEUE_AUTH_EXPIRED_EVENT);
+    expect(invalid.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('classifies only a verified expired access token as expired', async () => {
+    const realSessions = new SessionService(database as unknown as DataSource);
+    const expired = sign({ type: 'access' }, environment.JWT_ACCESS_SECRET!, {
+      algorithm: 'HS256', issuer: 'ehealth-api', audience: 'ehealth-client', expiresIn: -1,
+    });
+    await expect(realSessions.authenticate(expired)).rejects.toMatchObject({
+      response: { code: 'SESSION_EXPIRED' },
+    });
+    await expect(realSessions.authenticate('invalid.token.value')).rejects.toMatchObject({
+      response: { code: 'SESSION_INVALID' },
+    });
   });
 
   it('publishes a committed ticket only to reception and its doctor room', async () => {

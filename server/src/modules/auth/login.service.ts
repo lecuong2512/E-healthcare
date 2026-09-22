@@ -40,9 +40,11 @@ export class LoginService {
         const user = await users
           .createQueryBuilder("user")
           .setLock("pessimistic_write")
-          .where("LOWER(user.email) = LOWER(:identifier)", { identifier })
-          .orWhere("user.phoneNumber = :identifier", { identifier })
-          .orWhere("user.phoneNumber = :localPhone", { localPhone })
+          .where("user.passwordHash IS NOT NULL")
+          .andWhere("(LOWER(user.email) = LOWER(:identifier) OR user.phoneNumber = :identifier OR user.phoneNumber = :localPhone)", {
+            identifier,
+            localPhone,
+          })
           .getOne();
 
         if (!user || user.status !== UserStatus.ACTIVE) return this.invalidLogin();

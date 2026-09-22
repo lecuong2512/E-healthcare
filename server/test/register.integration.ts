@@ -230,12 +230,24 @@ describe("SRS-AUTH-01 HTTP + real PostgreSQL", () => {
 
   test("rejects an existing legacy local-format phone", async () => {
     await database.query(
-      "INSERT INTO users (phone_number, full_name, gender, date_of_birth) VALUES ('0901234567','Existing','MALE','2000-01-01')",
+      "INSERT INTO users (phone_number, password_hash, full_name, gender, date_of_birth) VALUES ('0901234567','legacy-hash','Existing','MALE','2000-01-01')",
     );
     await register({ email: undefined, phoneNumber: "+84901234567" }).expect(
       409,
     );
     expect(send).not.toHaveBeenCalled();
+  });
+
+  test("permits registration when the phone belongs only to walk-in profiles", async () => {
+    await database.query(
+      "INSERT INTO users (phone_number, full_name, gender, date_of_birth) VALUES ('+84901234567','Người nhà','MALE','2000-01-01')",
+    );
+    const registration = await register({ email: undefined, phoneNumber: "0901234567" }).expect(202);
+    await verify(registration.body.registrationId).expect(201);
+    const [count] = await database.query(
+      "SELECT COUNT(*)::int AS total FROM users WHERE phone_number = '+84901234567'",
+    );
+    expect(count.total).toBe(2);
   });
 
   test("commits failed attempts and locks both verification and requests after the fifth failure", async () => {

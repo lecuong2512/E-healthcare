@@ -236,6 +236,92 @@ describe('Reception concurrency on PostgreSQL', () => {
     ]);
   });
 
+  it('creates a separate patient for a family member using an existing phone', async () => {
+    const [existing] = await database.query(
+      `INSERT INTO users (phone_number,full_name,gender,date_of_birth)
+       VALUES ('+84912345678','Người nhà','FEMALE','1960-01-01') RETURNING id`,
+    );
+    const result = await walkIn.book(
+      walkInRequest(await slot(SlotStatus.AVAILABLE), '0912345678'),
+      context(), randomUUID(),
+    );
+    expect(result.patientId).not.toBe(existing.id);
+    const rows = await database.query(
+      'SELECT id FROM users WHERE phone_number = $1 ORDER BY id', ['+84912345678'],
+    );
+    expect(rows.map((row: { id: string }) => row.id).sort()).toEqual(
+      [existing.id, result.patientId].sort(),
+    );
+  });
+
+  it('requires patient selection when concurrent walk-ins find a matching profile', async () => {
+    const schedules = await Promise.all([
+      slot(SlotStatus.AVAILABLE),
+      slot(SlotStatus.AVAILABLE, '11:00:00', '11:30:00'),
+    ]);
+    const results = await Promise.allSettled(schedules.map((scheduleId) =>
+      walkIn.book(walkInRequest(scheduleId, '0912345678'), context(), randomUUID()),
+    ));
+    const success = results.find((result) => result.status === 'fulfilled') as PromiseFulfilledResult<{
+      patientId: string;
+    }>;
+    const rejectedIndex = results.findIndex((result) => result.status === 'rejected');
+    expect(success).toBeDefined();
+    expect(rejectedIndex).toBeGreaterThanOrEqual(0);
+    const failure = results[rejectedIndex] as PromiseRejectedResult;
+    expect(failure.reason.getResponse()).toMatchObject({ code: 'PATIENT_SELECTION_REQUIRED' });
+    const retry = await walkIn.book({
+      ...walkInRequest(schedules[rejectedIndex], '0912345678'),
+      patientId: success.value.patientId,
+    }, context(), randomUUID());
+    expect(retry.patientId).toBe(success.value.patientId);
+    const [count] = await database.query(
+      'SELECT COUNT(*)::int AS total FROM users WHERE phone_number = $1',
+      ['+84912345678'],
+    );
+    expect(count.total).toBe(1);
+  });
+
+  it('matches by CCCD across different contact phones and enforces unique CCCD', async () => {
+    const citizenId = '012345678901';
+    const first = await walkIn.book({
+      ...walkInRequest(await slot(SlotStatus.AVAILABLE), '0912345678'), citizenId,
+    }, context(), randomUUID());
+    const second = await walkIn.book({
+      ...walkInRequest(await slot(SlotStatus.AVAILABLE, '11:00:00', '11:30:00'), '0987654321'),
+      citizenId,
+    }, context(), randomUUID());
+    expect(second.patientId).toBe(first.patientId);
+    await expect(database.query(
+      `INSERT INTO personal_health_profiles (user_id,citizen_id) VALUES ($1,$2)`,
+      [patientId, citizenId],
+    )).rejects.toMatchObject({ code: '23505', constraint: 'uq_phr_citizen_id' });
+  });
+
+  it('links a new CCCD to a selected legacy profile without creating another patient', async () => {
+    const [legacy] = await database.query(
+      `INSERT INTO users (phone_number,full_name,gender,date_of_birth)
+       VALUES ('+84912345678','Khách vãng lai','MALE','1985-01-01') RETURNING id`,
+    );
+    await database.query("INSERT INTO user_roles (user_id,role) VALUES ($1,'ROLE_PATIENT')", [legacy.id]);
+    await database.query('INSERT INTO personal_health_profiles (user_id) VALUES ($1)', [legacy.id]);
+    const scheduleId = await slot(SlotStatus.AVAILABLE);
+    const citizenId = '012345678901';
+    await expect(walkIn.book({
+      ...walkInRequest(scheduleId, '0912345678'), citizenId,
+    }, context(), randomUUID())).rejects.toMatchObject({
+      response: { code: 'PATIENT_SELECTION_REQUIRED' },
+    });
+    const result = await walkIn.book({
+      ...walkInRequest(scheduleId, '0912345678'), citizenId, patientId: legacy.id,
+    }, context(), randomUUID());
+    expect(result.patientId).toBe(legacy.id);
+    const [profile] = await database.query(
+      'SELECT citizen_id FROM personal_health_profiles WHERE user_id = $1', [legacy.id],
+    );
+    expect(profile.citizen_id).toBe(citizenId);
+  });
+
   it('returns the committed walk-in on retry without another payment or queue number', async () => {
     const scheduleId = await slot(SlotStatus.AVAILABLE);
     const key = randomUUID();

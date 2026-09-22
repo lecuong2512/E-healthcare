@@ -69,11 +69,15 @@ describe('WalkInService', () => {
   let dataSource: { getRepository: jest.Mock; transaction: jest.Mock };
   let savedAppointment: AppointmentEntity | null;
   let existingPatients: UserEntity[];
+  let existingProfiles: PersonalHealthProfileEntity[];
+  let savedProfiles: PersonalHealthProfileEntity[];
   let remainingCodeCollisions: number;
 
   beforeEach(() => {
     savedAppointment = null;
     existingPatients = [];
+    existingProfiles = [];
+    savedProfiles = [];
     remainingCodeCollisions = 0;
     redis = {
       get: jest.fn(async () => null),
@@ -90,11 +94,17 @@ describe('WalkInService', () => {
       where: jest.fn().mockReturnThis(),
       getOne: jest.fn(async () => ({ ...slot })),
     };
+    let selectedUserId: string | undefined;
     const userQuery = {
       setLock: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       getMany: jest.fn(async () => existingPatients),
+      getOne: jest.fn(async () => existingPatients.find((patient) => patient.id === selectedUserId) ?? null),
     };
+    userQuery.where.mockImplementation((_sql: string, params?: { id?: string }) => {
+      selectedUserId = params?.id;
+      return userQuery;
+    });
     const appointmentQuery = {
       innerJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -123,7 +133,17 @@ describe('WalkInService', () => {
           };
         }
         if (entity === PersonalHealthProfileEntity) {
-          return { save: async (value: PersonalHealthProfileEntity) => value };
+          return {
+            findOneBy: async (where: { citizenId?: string; userId?: string }) =>
+              existingProfiles.find((profile) =>
+                (!where.citizenId || profile.citizenId === where.citizenId) &&
+                (!where.userId || profile.userId === where.userId),
+              ) ?? null,
+            save: async (value: PersonalHealthProfileEntity) => {
+              savedProfiles.push(value);
+              return value;
+            },
+          };
         }
         if (entity === AppointmentEntity) {
           return {
@@ -231,19 +251,137 @@ describe('WalkInService', () => {
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('không gắn lịch vào hồ sơ cùng số điện thoại nhưng khác danh tính', async () => {
+  it('tạo hồ sơ mới cho người nhà dùng chung số điện thoại', async () => {
     existingPatients = [{
       id: 'existing-patient',
       fullName: 'Nguoi Khac',
       gender: Gender.MALE,
       dateOfBirth: '1989-01-01',
     } as UserEntity];
-    await expect(service.book(request, auditContext, key)).rejects.toThrow(
-      ConflictException,
-    );
-    expect(payments.recordCashPayment).not.toHaveBeenCalled();
-    expect(queueEvents.statusChanged).not.toHaveBeenCalled();
+    const result = await service.book(request, auditContext, key);
+    expect(result.patientId).toBe('patient-1');
+    expect(payments.recordCashPayment).toHaveBeenCalledTimes(1);
+    expect(queueEvents.statusChanged).toHaveBeenCalledTimes(1);
     expect(redis.releaseLockIfOwner).toHaveBeenCalledTimes(1);
+  });
+
+  it('trả danh sách hồ sơ để lễ tân chọn khi không có CCCD', async () => {
+    existingPatients = ['patient-a', 'patient-b'].map((id) => ({
+      id,
+      fullName: 'Nguyễn Văn A',
+      gender: Gender.MALE,
+      dateOfBirth: '1989-01-01',
+    } as UserEntity));
+    await expect(service.book(request, auditContext, key)).rejects.toMatchObject({
+      response: {
+        code: 'PATIENT_SELECTION_REQUIRED',
+        candidates: [
+          { patientId: 'patient-a' },
+          { patientId: 'patient-b' },
+        ],
+      },
+    });
+    expect(payments.recordCashPayment).not.toHaveBeenCalled();
+  });
+
+  it('chỉ tái sử dụng hồ sơ không có CCCD sau khi lễ tân chọn patientId', async () => {
+    existingPatients = [{
+      id: 'existing-patient',
+      phoneNumber: '+84987654321',
+      fullName: 'Nguyễn Văn A',
+      gender: Gender.MALE,
+      dateOfBirth: '1989-01-01',
+    } as UserEntity];
+    await expect(service.book(request, auditContext, key)).rejects.toMatchObject({
+      response: { code: 'PATIENT_SELECTION_REQUIRED' },
+    });
+    const result = await service.book({ ...request, patientId: 'existing-patient' }, auditContext, key);
+    expect(result.patientId).toBe('existing-patient');
+  });
+
+  it('ưu tiên CCCD và tái sử dụng hồ sơ dù số điện thoại liên hệ khác', async () => {
+    existingPatients = [{
+      id: 'existing-patient',
+      phoneNumber: '+84987654321',
+      fullName: 'Nguyễn Văn A',
+      gender: Gender.MALE,
+      dateOfBirth: '1989-01-01',
+    } as UserEntity];
+    existingProfiles = [{
+      userId: 'existing-patient',
+      citizenId: '012345678901',
+    } as PersonalHealthProfileEntity];
+    const result = await service.book({ ...request, citizenId: '012345678901' }, auditContext, key);
+    expect(result.patientId).toBe('existing-patient');
+    expect(savedProfiles).toHaveLength(0);
+  });
+
+  it('không gắn lịch nếu CCCD khớp nhưng nhân thân khác', async () => {
+    existingPatients = [{
+      id: 'existing-patient',
+      fullName: 'Người khác',
+      gender: Gender.MALE,
+      dateOfBirth: '1989-01-01',
+    } as UserEntity];
+    existingProfiles = [{
+      userId: 'existing-patient',
+      citizenId: '012345678901',
+    } as PersonalHealthProfileEntity];
+    await expect(service.book({ ...request, citizenId: '012345678901' }, auditContext, key))
+      .rejects.toThrow(ConflictException);
+    expect(payments.recordCashPayment).not.toHaveBeenCalled();
+  });
+
+  it('gắn CCCD vào hồ sơ cũ sau khi lễ tân chọn patientId', async () => {
+    existingPatients = [{
+      id: 'legacy-patient',
+      fullName: 'Nguyễn Văn A',
+      gender: Gender.MALE,
+      dateOfBirth: '1989-01-01',
+    } as UserEntity];
+    existingProfiles = [{ userId: 'legacy-patient', citizenId: null } as PersonalHealthProfileEntity];
+    await expect(service.book({ ...request, citizenId: '012345678901' }, auditContext, key))
+      .rejects.toMatchObject({ response: { code: 'PATIENT_SELECTION_REQUIRED' } });
+    const result = await service.book({
+      ...request, citizenId: '012345678901', patientId: 'legacy-patient',
+    }, auditContext, key);
+    expect(result.patientId).toBe('legacy-patient');
+    expect(savedProfiles).toEqual([expect.objectContaining({
+      userId: 'legacy-patient', citizenId: '012345678901',
+    })]);
+  });
+
+  it('tạo hồ sơ mới khi CCCD khác mã của hồ sơ cùng số điện thoại', async () => {
+    existingPatients = [{
+      id: 'other-patient',
+      fullName: 'Nguyễn Văn A',
+      gender: Gender.MALE,
+      dateOfBirth: '1989-01-01',
+    } as UserEntity];
+    existingProfiles = [{
+      userId: 'other-patient', citizenId: '111111111111',
+    } as PersonalHealthProfileEntity];
+    const result = await service.book({ ...request, citizenId: '012345678901' }, auditContext, key);
+    expect(result.patientId).toBe('patient-1');
+    expect(savedProfiles).toEqual([expect.objectContaining({
+      userId: 'patient-1', citizenId: '012345678901',
+    })]);
+  });
+
+  it('không ghi đè CCCD khác trên hồ sơ được chọn', async () => {
+    existingPatients = [{
+      id: 'other-patient',
+      fullName: 'Nguyễn Văn A',
+      gender: Gender.MALE,
+      dateOfBirth: '1989-01-01',
+    } as UserEntity];
+    existingProfiles = [{
+      userId: 'other-patient', citizenId: '111111111111',
+    } as PersonalHealthProfileEntity];
+    await expect(service.book({
+      ...request, citizenId: '012345678901', patientId: 'other-patient',
+    }, auditContext, key)).rejects.toThrow(ConflictException);
+    expect(savedProfiles).toHaveLength(0);
   });
 
   it('giải phóng Redis lock khi giao dịch thất bại', async () => {
