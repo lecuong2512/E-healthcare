@@ -7,3 +7,4 @@ environment.JWT_REFRESH_SECRET =
 environment.OTP_HMAC_SECRET = "test-otp-secret-not-for-production-123456789";
 environment.BULLMQ_MOCK = "true";
 environment.QR_CHECKIN_SECRET = "test-qr-checkin-secret-not-for-production-987654321";
+environment.QUEUE_BOARD_SECRET = "test-queue-board-secret-not-for-production-123456789";

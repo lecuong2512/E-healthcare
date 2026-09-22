@@ -5,11 +5,12 @@ import { DoctorQueueController, ReceptionQueueController } from './queue.control
 import { QueueEventsService } from './queue-events.service';
 import { QueueGateway } from './queue.gateway';
 import { QueueQueryService } from './queue-query.service';
+import { QueueBoardTokenService } from './queue-board-token.service';
 
 @Module({
   imports: [AuthModule, DatabaseModule],
   controllers: [ReceptionQueueController, DoctorQueueController],
-  providers: [QueueQueryService, QueueGateway, QueueEventsService],
+  providers: [QueueQueryService, QueueBoardTokenService, QueueGateway, QueueEventsService],
   exports: [QueueEventsService],
 })
 export class RealtimeModule {}
