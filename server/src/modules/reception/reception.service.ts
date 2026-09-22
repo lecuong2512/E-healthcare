@@ -19,6 +19,7 @@ import { LookupAppointmentDto } from './dto/lookup-appointment.dto';
 import { QueueNumberService } from './queue-number.service';
 import { QueueEventsService } from '../realtime/queue-events.service';
 import { ReceptionAuditContext, ReceptionAuditService } from './reception-audit.service';
+import { checkInWindowReason, checkInWindowStatus } from './check-in-window';
 
 @Injectable()
 export class ReceptionService {
@@ -37,7 +38,8 @@ export class ReceptionService {
       throw new BadRequestException('Cần truyền đúng một trong code hoặc phone.');
     }
 
-    const today = vietnamNow().date;
+    const now = vietnamNow();
+    const today = now.date;
     const builder = this.dataSource
       .getRepository(AppointmentEntity)
       .createQueryBuilder('appointment')
@@ -70,22 +72,26 @@ export class ReceptionService {
       { lookupBy: query.code ? 'CODE' : 'PHONE', resultCount: appointments.length },
     );
     return appointments.map((appointment) => {
+      const windowStatus = checkInWindowStatus(appointment.schedule, now);
       const requiresPayment =
         appointment.paymentMethod === PaymentMethod.PAY_AT_CLINIC &&
         appointment.paymentStatus === PaymentStatus.UNPAID;
       const canCheckIn =
         appointment.status === AppointmentStatus.CONFIRMED &&
         appointment.paymentStatus === PaymentStatus.PAID &&
-        appointment.schedule.status === SlotStatus.BOOKED;
+        appointment.schedule.status === SlotStatus.BOOKED &&
+        windowStatus === 'OPEN';
       const blockedReason = canCheckIn
         ? null
         : appointment.status !== AppointmentStatus.CONFIRMED
           ? 'Lịch hẹn không ở trạng thái xác nhận.'
           : appointment.schedule.status !== SlotStatus.BOOKED
             ? 'Khung khám đã ngừng nhận bệnh nhân; cần lễ tân xử lý.'
-          : requiresPayment
-            ? 'Cần thu viện phí tại quầy trước khi check-in.'
-            : 'Lịch hẹn chưa được xác nhận thanh toán.';
+          : windowStatus !== 'OPEN'
+            ? checkInWindowReason(windowStatus)
+            : requiresPayment
+              ? 'Cần thu viện phí tại quầy trước khi check-in.'
+              : 'Lịch hẹn chưa được xác nhận thanh toán.';
 
       return {
         id: appointment.id,
@@ -128,10 +134,6 @@ export class ReceptionService {
       if (appointment.status !== AppointmentStatus.CONFIRMED) {
         throw new ConflictException('Lịch hẹn không thể check-in ở trạng thái hiện tại.');
       }
-      if (appointment.paymentStatus !== PaymentStatus.PAID) {
-        throw new ConflictException('Lịch hẹn chưa được thanh toán.');
-      }
-
       const schedule = await manager.getRepository(DoctorScheduleEntity).findOneBy({
         id: appointment.scheduleId,
       });
@@ -142,9 +144,12 @@ export class ReceptionService {
       if (schedule.status !== SlotStatus.BOOKED) {
         throw new ConflictException('Khung khám đã ngừng nhận bệnh nhân; cần lễ tân xử lý.');
       }
-      const today = vietnamNow().date;
-      if (schedule.date !== today) {
-        throw new ConflictException('Chỉ được check-in lịch hẹn trong ngày.');
+      const now = vietnamNow();
+      const today = now.date;
+      const windowStatus = checkInWindowStatus(schedule, now);
+      if (windowStatus !== 'OPEN') throw new ConflictException(checkInWindowReason(windowStatus));
+      if (appointment.paymentStatus !== PaymentStatus.PAID) {
+        throw new ConflictException('Lịch hẹn chưa được thanh toán.');
       }
 
       const queueNumber = await this.queueNumbers.allocate(
