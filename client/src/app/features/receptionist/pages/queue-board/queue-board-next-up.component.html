@@ -1,0 +1,21 @@
+<aside class="next" aria-labelledby="next-up-title">
+  <div class="section-title">
+    <span></span>
+    <h2 id="next-up-title">CHUẨN BỊ VÀO KHÁM</h2>
+  </div>
+  @if (tickets.length) {
+    <ol>
+      @for (ticket of tickets; track ticket.id) {
+        <li>
+          <strong>{{ ticket.queueNumber }}</strong>
+          <div>
+            <span>{{ ticket.maskedPatientName }}</span>
+            <small>Phòng {{ ticket.roomNumber }}</small>
+          </div>
+        </li>
+      }
+    </ol>
+  } @else {
+    <div class="empty"><p>Danh sách chờ đang trống</p></div>
+  }
+</aside>

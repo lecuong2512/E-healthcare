@@ -1,0 +1,84 @@
+<main class="board">
+  <header class="board__header">
+    <div>
+      <p class="mb-1 text-xs font-bold tracking-[.18em] opacity-80">
+        E-HEALTHCARE MEDICAL
+      </p>
+      <h1>BẢNG GỌI SỐ KHÁM BỆNH</h1>
+    </div>
+    <div class="board__meta">
+      <time [attr.datetime]="now().toISOString()">
+        {{ now() | date: 'HH:mm' }}
+        <small>{{ now() | date: 'dd/MM/yyyy' }}</small>
+      </time>
+      <button
+        type="button"
+        class="min-h-12 min-w-12 rounded-full border border-white/40 bg-white/10 text-xl text-white focus-visible:outline focus-visible:outline-4 focus-visible:outline-white/30"
+        (click)="toggleMuted()"
+        [attr.aria-label]="muted() ? 'Bật chuông gọi số' : 'Tắt chuông gọi số'"
+      >
+        {{ muted() ? '🔇' : '🔊' }}
+      </button>
+    </div>
+  </header>
+
+  <div
+    class="board__connection"
+    [attr.data-state]="store.connectionState()"
+    role="status"
+  >
+    <span></span>{{ connectionLabel() }}
+    @if (store.updatedAt()) {
+      <small>Cập nhật lúc {{ store.updatedAt() | date: 'HH:mm:ss' }}</small>
+    }
+  </div>
+
+  <section class="board__content" aria-live="polite">
+    <app-queue-board-now-serving
+      [tickets]="store.nowServing()"
+      [lastCalledTicketId]="store.lastCalledTicketId()"
+    />
+    <app-queue-board-next-up [tickets]="store.nextUp()" />
+  </section>
+
+  <footer>
+    Vui lòng theo dõi số thứ tự và di chuyển đến đúng phòng khám khi được gọi.
+  </footer>
+
+  @if (!presentationStarted()) {
+    <div
+      class="fixed inset-0 z-[100] grid place-items-center bg-slate-950/90 p-6 backdrop-blur-md"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="launcher-title"
+    >
+      <div
+        class="w-full max-w-xl rounded-3xl bg-white p-10 text-center shadow-2xl"
+      >
+        <span
+          class="mx-auto grid h-16 w-16 place-content-center rounded-2xl bg-sky-600 text-2xl font-extrabold text-white"
+          >E+</span
+        >
+        <h2 id="launcher-title" class="mb-2 mt-5 text-2xl font-bold">
+          Sẵn sàng hiển thị bảng gọi số
+        </h2>
+        <p class="leading-relaxed text-slate-600">
+          Thao tác này bật chế độ toàn màn hình và cho phép phát chuông gọi
+          bệnh nhân.
+        </p>
+        <button
+          type="button"
+          class="min-h-12 rounded-xl bg-sky-600 px-6 py-3 font-bold text-white hover:bg-sky-700 focus-visible:outline focus-visible:outline-4 focus-visible:outline-sky-200"
+          (click)="startPresentation()"
+        >
+          Bắt đầu trình chiếu
+        </button>
+        @if (fullscreenError()) {
+          <p class="mt-4 text-amber-700" role="alert">
+            {{ fullscreenError() }}
+          </p>
+        }
+      </div>
+    </div>
+  }
+</main>
