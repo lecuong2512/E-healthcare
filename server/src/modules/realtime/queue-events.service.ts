@@ -37,8 +37,13 @@ export class QueueEventsService {
         occurredAt: new Date().toISOString(),
         ticket,
       };
-      this.gateway.emitToRoom(QUEUE_RECEPTION_ROOM, APPOINTMENT_STATUS_CHANGED_EVENT, event);
-      this.gateway.emitToRoom(QUEUE_DOCTOR_ROOM(ticket.doctorId), APPOINTMENT_STATUS_CHANGED_EVENT, event);
+      for (const room of [QUEUE_RECEPTION_ROOM, QUEUE_DOCTOR_ROOM(ticket.doctorId)]) {
+        try {
+          this.gateway.emitToRoom(room, APPOINTMENT_STATUS_CHANGED_EVENT, event);
+        } catch (error) {
+          this.logger.warn(`Queue event failed for appointment ${appointmentId}, room ${room}: ${String(error)}`);
+        }
+      }
     } catch (error) {
       this.logger.warn(`Queue event failed for appointment ${appointmentId}: ${String(error)}`);
     }

@@ -50,6 +50,10 @@ const ACTIVE_STATUSES = [
   AppointmentStatus.IN_CONSULTATION,
 ];
 
+// The Redis hold reduces competing requests. The database row lock and unique
+// active-schedule index remain authoritative if this hold expires mid-transaction.
+const WALK_IN_SLOT_HOLD_SECONDS = 15;
+
 function sameName(left: string, right: string): boolean {
   const normalize = (value: string): string =>
     value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('vi-VN')
@@ -175,7 +179,7 @@ export class WalkInService {
     const lockToken = randomUUID();
     let acquired: boolean;
     try {
-      acquired = await this.redis.setNxEx(lockKey, lockToken, 15);
+      acquired = await this.redis.setNxEx(lockKey, lockToken, WALK_IN_SLOT_HOLD_SECONDS);
     } catch {
       throw new ServiceUnavailableException('Không thể khóa khung khám.');
     }

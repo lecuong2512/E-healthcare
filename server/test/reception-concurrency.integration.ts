@@ -174,6 +174,20 @@ describe('Reception concurrency on PostgreSQL', () => {
     expect(auditCount.count).toBe(1);
   });
 
+  it('rejects check-in when a booked schedule is later taken offline', async () => {
+    const scheduleId = await slot(SlotStatus.BOOKED);
+    const id = await appointment(scheduleId, PaymentStatus.PAID);
+    await database.query('UPDATE doctor_schedules SET status = $1 WHERE id = $2',
+      [SlotStatus.OFF, scheduleId]);
+
+    await expect(reception.checkIn(id, context())).rejects.toThrow(ConflictException);
+    const [row] = await database.query(
+      'SELECT status, queue_number FROM appointments WHERE id = $1', [id],
+    );
+    expect(row).toMatchObject({ status: AppointmentStatus.CONFIRMED, queue_number: null });
+    expect(events.statusChanged).not.toHaveBeenCalled();
+  });
+
   it('allocates distinct queue numbers for concurrent appointments of one doctor', async () => {
     const ids = await Promise.all([
       appointment(await slot(SlotStatus.BOOKED), PaymentStatus.PAID),
