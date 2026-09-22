@@ -36,6 +36,22 @@ export interface CounterPaymentIntent {
   readonly amountTendered: number;
 }
 
+export type ReceptionQueueConnectionState =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'expired'
+  | 'error';
+
+/** Non-PII summary rendered at the receptionist desk. */
+export interface ReceptionQueueSummaryViewModel {
+  readonly waitingCount: number;
+  readonly inConsultationCount: number;
+  readonly lastIssuedQueueNumber: number | null;
+  readonly updatedAtLabel: string;
+}
+
 export interface WalkInDoctorViewModel {
   readonly doctorId: string;
   readonly doctorName: string;
