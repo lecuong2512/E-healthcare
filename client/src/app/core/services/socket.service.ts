@@ -1,22 +1,177 @@
-import { Injectable } from '@angular/core';
+import { Injectable, InjectionToken, effect, inject, signal } from '@angular/core';
+import { Socket, io } from 'socket.io-client';
+
+import { environment } from '../../../environments/environment';
+import { TokenStoreService } from './token-store.service';
+
+export type SocketConnectionState =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'error';
+
+type SocketClientFactory = (
+  uri: string,
+  options: Parameters<typeof io>[1],
+) => Socket;
+
+export const SOCKET_CLIENT_FACTORY = new InjectionToken<SocketClientFactory>(
+  'SOCKET_CLIENT_FACTORY',
+  { providedIn: 'root', factory: () => io },
+);
 
 /**
- * STUB — chưa triển khai đầy đủ trong task Base Architecture này.
- * Để sẵn vị trí/interface cho task sau (Realtime hàng đợi khám SRS-DOC-02,
- * queue-board SRS-REC, trạng thái slot SRS-PAT-02) kết nối Socket.io mà
- * không phải đổi cấu trúc thư mục core/services.
+ * Owns authenticated Socket.IO connections for the web client.
  *
- * Khi triển khai thật: kết nối tới API Gateway (namespace theo role), tự
- * disconnect() ở AuthService.logout(), và tự reconnect khi authInterceptor
- * refresh token thành công (access token đổi -> cần re-handshake socket auth).
+ * Access tokens remain in memory and are supplied by callback for every
+ * handshake. A refreshed token therefore never needs to be persisted. Public
+ * Queue Board sessions deliberately use a separate adapter and board token.
  */
 @Injectable({ providedIn: 'root' })
 export class SocketService {
-  connect(_namespace: string): void {
-    // TODO: tích hợp socket.io-client khi làm task Realtime (chưa thuộc scope Base Architecture)
+  private readonly tokenStore = inject(TokenStoreService);
+  private readonly socketFactory = inject(SOCKET_CLIENT_FACTORY);
+  private readonly sockets = new Map<string, Socket>();
+  private readonly _connectionStates = signal<
+    Readonly<Record<string, SocketConnectionState>>
+  >({});
+
+  readonly connectionStates = this._connectionStates.asReadonly();
+
+  constructor() {
+    let previousToken: string | null = null;
+
+    effect(
+      () => {
+        const currentToken = this.tokenStore.accessToken();
+
+        if (currentToken === previousToken) {
+          return;
+        }
+
+        previousToken = currentToken;
+
+        for (const [namespace, socket] of this.sockets) {
+          if (!currentToken) {
+            socket.disconnect();
+            this.setState(namespace, 'disconnected');
+            continue;
+          }
+
+          // Force a new namespace handshake so the server receives the new
+          // in-memory token after login or refresh.
+          socket.disconnect();
+          this.setState(namespace, 'connecting');
+          socket.connect();
+        }
+      },
+      { allowSignalWrites: true },
+    );
   }
 
-  disconnect(): void {
-    // TODO
+  connect(namespace: string): Socket {
+    const normalizedNamespace = this.normalizeNamespace(namespace);
+    const existingSocket = this.sockets.get(normalizedNamespace);
+
+    if (existingSocket) {
+      if (!existingSocket.connected && this.tokenStore.accessToken()) {
+        this.setState(normalizedNamespace, 'connecting');
+        existingSocket.connect();
+      }
+
+      return existingSocket;
+    }
+
+    const socket = this.socketFactory(
+      `${environment.socketBaseUrl}${normalizedNamespace}`,
+      {
+        path: environment.socketPath,
+        autoConnect: false,
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1_000,
+        reconnectionDelayMax: 10_000,
+        timeout: 10_000,
+        auth: (callback) => {
+          callback({ token: this.tokenStore.accessToken() });
+        },
+      },
+    );
+
+    this.registerLifecycleListeners(normalizedNamespace, socket);
+    this.sockets.set(normalizedNamespace, socket);
+    this.setState(normalizedNamespace, 'disconnected');
+
+    if (this.tokenStore.accessToken()) {
+      this.setState(normalizedNamespace, 'connecting');
+      socket.connect();
+    }
+
+    return socket;
+  }
+
+  getSocket(namespace: string): Socket | undefined {
+    return this.sockets.get(this.normalizeNamespace(namespace));
+  }
+
+  disconnect(namespace?: string): void {
+    if (namespace) {
+      this.disconnectNamespace(this.normalizeNamespace(namespace));
+      return;
+    }
+
+    for (const registeredNamespace of [...this.sockets.keys()]) {
+      this.disconnectNamespace(registeredNamespace);
+    }
+  }
+
+  private registerLifecycleListeners(
+    namespace: string,
+    socket: Socket,
+  ): void {
+    socket.on('connect', () => this.setState(namespace, 'connected'));
+    socket.on('connect_error', () => this.setState(namespace, 'error'));
+    socket.on('disconnect', () => this.setState(namespace, 'disconnected'));
+    socket.io.on('reconnect_attempt', () =>
+      this.setState(namespace, 'reconnecting'),
+    );
+  }
+
+  private disconnectNamespace(namespace: string): void {
+    const socket = this.sockets.get(namespace);
+
+    if (!socket) {
+      return;
+    }
+
+    socket.removeAllListeners();
+    socket.io.removeAllListeners();
+    socket.disconnect();
+    this.sockets.delete(namespace);
+    this.setState(namespace, 'disconnected');
+  }
+
+  private normalizeNamespace(namespace: string): string {
+    const trimmedNamespace = namespace.trim();
+
+    if (!trimmedNamespace || trimmedNamespace === '/') {
+      return '/';
+    }
+
+    return trimmedNamespace.startsWith('/')
+      ? trimmedNamespace
+      : `/${trimmedNamespace}`;
+  }
+
+  private setState(
+    namespace: string,
+    state: SocketConnectionState,
+  ): void {
+    this._connectionStates.update((states) => ({
+      ...states,
+      [namespace]: state,
+    }));
   }
 }

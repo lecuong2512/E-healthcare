@@ -1,7 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, of, tap } from 'rxjs';
+import { Observable, catchError, finalize, of, tap } from 'rxjs';
 import { TokenStoreService } from './token-store.service';
+import { SocketService } from './socket.service';
 import {
   LoginResponse,
   RefreshResponse,
@@ -16,6 +17,7 @@ const API_BASE = '/api/v1';
 export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly tokenStore = inject(TokenStoreService);
+  private readonly socketService = inject(SocketService);
 
   login(identifier: string, password: string): Observable<LoginResponse> {
     return this.http
@@ -32,7 +34,12 @@ export class AuthService {
   logout(): Observable<void> {
     return this.http
       .post<void>(`${API_BASE}/auth/logout`, {}, { withCredentials: true })
-      .pipe(tap(() => this.tokenStore.clear()));
+      .pipe(
+        finalize(() => {
+          this.socketService.disconnect();
+          this.tokenStore.clear();
+        }),
+      );
   }
 
   /**

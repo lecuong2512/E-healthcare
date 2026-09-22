@@ -1,0 +1,61 @@
+<section class="qr-scanner" aria-labelledby="qr-scanner-title">
+  <div class="qr-scanner__heading">
+    <div>
+      <p class="qr-scanner__eyebrow">Check-in nhanh</p>
+      <h2 id="qr-scanner-title">Quét mã QR lịch hẹn</h2>
+    </div>
+    <span class="qr-scanner__privacy">Không lưu ảnh camera</span>
+  </div>
+
+  <div class="qr-scanner__preview" [class.qr-scanner__preview--active]="cameraState() === 'active'">
+    <video #preview muted playsinline aria-label="Hình ảnh camera để quét mã QR"></video>
+    @if (cameraState() !== 'active') {
+      <div class="qr-scanner__placeholder" aria-hidden="true">
+        <span class="qr-scanner__finder"></span>
+        <span>Đưa mã QR vào giữa khung hình</span>
+      </div>
+    }
+  </div>
+
+  <div class="qr-scanner__actions">
+    @if (cameraState() === 'active') {
+      <button type="button" class="qr-scanner__button qr-scanner__button--secondary" (click)="stopCamera()">
+        Tắt camera
+      </button>
+    } @else {
+      <button
+        type="button"
+        class="qr-scanner__button"
+        [disabled]="cameraState() === 'requesting'"
+        [attr.aria-busy]="cameraState() === 'requesting'"
+        (click)="startCamera()"
+      >
+        {{ cameraState() === 'requesting' ? 'Đang mở camera…' : 'Mở camera' }}
+      </button>
+    }
+  </div>
+
+  <div class="qr-scanner__divider"><span>hoặc máy quét USB</span></div>
+
+  <form class="qr-scanner__keyboard" (submit)="$event.preventDefault(); submitKeyboardValue()">
+    <label for="qr-keyboard-input">Mã từ máy quét</label>
+    <div class="qr-scanner__input-row">
+      <input
+        id="qr-keyboard-input"
+        name="qrToken"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        maxlength="2048"
+        placeholder="Quét mã rồi nhấn Enter"
+        [value]="keyboardValue"
+        (input)="keyboardValue = $any($event.target).value"
+      />
+      <button type="submit" class="qr-scanner__button">Tiếp tục</button>
+    </div>
+  </form>
+
+  @if (errorMessage()) {
+    <p class="qr-scanner__error" role="alert">{{ errorMessage() }}</p>
+  }
+</section>
