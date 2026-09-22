@@ -21,3 +21,4 @@ export interface AuditLogFilterViewModel {
 }
 
 export type AuditLogViewState = 'idle' | 'loading' | 'loaded' | 'error';
+export type AuditLogExportState = 'idle' | 'exporting' | 'error';
