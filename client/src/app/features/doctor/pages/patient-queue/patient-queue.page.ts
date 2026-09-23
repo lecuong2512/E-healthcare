@@ -14,14 +14,7 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
-type StatusVariant =
-  | 'AVAILABLE'
-  | 'HOLDING'
-  | 'BOOKED'
-  | 'CHECKED_IN'
-  | 'IN_CONSULTATION'
-  | 'COMPLETED'
-  | 'NO_SHOW';
+import { StatusVariant } from 'src/app/shared/components/status-badge/status-badge.component';
 interface QueuePatient {
   stt: number;
   time: string;
