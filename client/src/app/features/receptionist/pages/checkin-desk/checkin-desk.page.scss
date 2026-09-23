@@ -85,6 +85,41 @@
   background: #dc2626;
 }
 
+.counter-payment-receipt dt {
+  color: #047857;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.counter-payment-receipt dd {
+  margin: 0.15rem 0 0;
+  color: #064e3b;
+  font-weight: 600;
+}
+
+@media print {
+  .reception-shell * {
+    visibility: hidden;
+  }
+
+  #counter-payment-receipt,
+  #counter-payment-receipt * {
+    visibility: visible;
+  }
+
+  #counter-payment-receipt {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    border-color: #d1d5db;
+    background: #fff;
+  }
+
+  .receipt-print-button {
+    display: none;
+  }
+}
+
 @media (max-width: 640px) {
   .detail-grid {
     grid-template-columns: 1fr;

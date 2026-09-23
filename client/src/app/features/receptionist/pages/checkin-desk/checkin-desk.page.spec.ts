@@ -1,7 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import { AppointmentStatus, PaymentStatus } from '@shared/enums';
+import {
+  AppointmentStatus,
+  CounterPaymentMethod,
+  PaymentStatus,
+} from '@shared/enums';
 import {
   ReceptionAppointmentViewModel,
   WalkInDoctorViewModel,
@@ -137,8 +141,44 @@ describe('CheckinDeskPage', () => {
 
     expect(paymentSpy).toHaveBeenCalledOnceWith({
       appointmentId: 'appointment-1',
+      method: CounterPaymentMethod.CASH,
       amountTendered: 400_000,
     });
+  });
+
+  it('renders the backend receipt and requests printing without altering it', () => {
+    const printSpy = jasmine.createSpy('printReceipt');
+    component.receiptPrintRequested.subscribe(printSpy);
+    fixture.componentRef.setInput('selectedAppointment', {
+      ...appointment,
+      paymentStatus: PaymentStatus.PAID,
+      requiresPayment: false,
+      canCheckIn: true,
+      blockedReason: null,
+    });
+    fixture.componentRef.setInput('receipt', {
+      receiptCode: 'RCT-260924-0001',
+      transactionCode: 'TXN-260924-0001',
+      appointmentCode: appointment.appointmentCode,
+      patientName: appointment.patientName,
+      doctorName: appointment.doctorName,
+      amount: 350_000,
+      amountTendered: 400_000,
+      changeAmount: 50_000,
+      paymentMethod: CounterPaymentMethod.CASH,
+      collectedBy: 'receptionist-1',
+      paidAt: '2026-09-24T02:00:00.000Z',
+    });
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.textContent).toContain('RCT-260924-0001');
+    expect(host.textContent).toContain('TXN-260924-0001');
+    const printButton = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('In phiếu thu'),
+    ) as HTMLButtonElement;
+    printButton.click();
+    expect(printSpy).toHaveBeenCalledTimes(1);
   });
 
   it('does not emit check-in while the authoritative view says it is blocked', () => {
