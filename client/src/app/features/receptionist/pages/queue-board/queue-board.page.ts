@@ -21,7 +21,6 @@ import { QueueBoardRealtimeCoordinator } from './queue-board-realtime.coordinato
   standalone: true,
   imports: [DatePipe, QueueBoardNowServingComponent, QueueBoardNextUpComponent],
   templateUrl: './queue-board.page.html',
-  styleUrl: './queue-board.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [QueueBoardPresentationStore, QueueBoardRealtimeCoordinator],
 })

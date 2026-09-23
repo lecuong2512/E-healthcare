@@ -1,7 +1,15 @@
-<section class="now" aria-labelledby="now-serving-title">
-  <div class="section-title">
-    <span></span>
-    <h2 id="now-serving-title">ĐANG KHÁM</h2>
+<section class="now-serving" aria-labelledby="now-serving-title">
+  <div class="section-heading">
+    <div>
+      <span class="section-heading__marker" aria-hidden="true"></span>
+      <div>
+        <h2 id="now-serving-title">Đang khám</h2>
+        <p>Now serving</p>
+      </div>
+    </div>
+    <span class="section-heading__count">
+      {{ tickets.length }} phòng đang phục vụ
+    </span>
   </div>
 
   @if (tickets.length) {
@@ -12,24 +20,25 @@
           [class.serving-card--called]="lastCalledTicketId === ticket.id"
         >
           <div class="serving-card__number">
-            <span>SỐ THỨ TỰ</span>
+            <span>Số thứ tự</span>
             <strong>{{ ticket.queueNumber }}</strong>
           </div>
           <div class="serving-card__detail">
+            <span class="serving-card__room">
+              Phòng {{ ticket.roomNumber }}
+            </span>
             <h3>{{ ticket.maskedPatientName }}</h3>
-            <p>
-              <strong>Phòng {{ ticket.roomNumber }}</strong>
-              · {{ ticket.specialtyName }}
-            </p>
-            <p>BS. {{ ticket.doctorName }}</p>
+            <p>{{ ticket.specialtyName }}</p>
+            <p class="serving-card__doctor">BS. {{ ticket.doctorName }}</p>
           </div>
         </article>
       }
     </div>
   } @else {
     <div class="empty">
-      <span>✓</span>
-      <p>Chưa có bệnh nhân đang khám</p>
+      <span aria-hidden="true">✓</span>
+      <strong>Chưa có bệnh nhân đang khám</strong>
+      <p>Bảng sẽ tự động cập nhật khi có số mới được gọi.</p>
     </div>
   }
 </section>
