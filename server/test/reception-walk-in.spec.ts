@@ -11,6 +11,7 @@ import { CounterPaymentService } from '../src/modules/reception/counter-payment.
 import { QueueNumberService } from '../src/modules/reception/queue-number.service';
 import { WalkInService } from '../src/modules/reception/walk-in.service';
 import { RedisService } from '../src/common/redis/redis.service';
+import { QueueEventsService } from '../src/modules/realtime/queue-events.service';
 
 jest.mock('../src/common/utils/vn-time.util', () => ({
   vietnamNow: () => ({ date: '2026-09-21', time: '09:00:00' }),
@@ -62,6 +63,7 @@ describe('WalkInService', () => {
   let service: WalkInService;
   let redis: { get: jest.Mock; setNxEx: jest.Mock; releaseLockIfOwner: jest.Mock };
   let payments: { recordCashPayment: jest.Mock; getReceipt: jest.Mock };
+  let queueEvents: { statusChanged: jest.Mock };
   let dataSource: { getRepository: jest.Mock; transaction: jest.Mock };
   let savedAppointment: AppointmentEntity | null;
   let existingPatients: UserEntity[];
@@ -80,6 +82,7 @@ describe('WalkInService', () => {
       recordCashPayment: jest.fn(async () => receipt),
       getReceipt: jest.fn(async () => receipt),
     };
+    queueEvents = { statusChanged: jest.fn(async () => undefined) };
     const scheduleQuery = {
       setLock: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -167,6 +170,7 @@ describe('WalkInService', () => {
       redis as unknown as RedisService,
       { allocate: jest.fn(async () => 7) } as unknown as QueueNumberService,
       payments as unknown as CounterPaymentService,
+      queueEvents as unknown as QueueEventsService,
     );
   });
 
@@ -186,6 +190,7 @@ describe('WalkInService', () => {
     expect(first.queueNumber).toBe(7);
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(payments.recordCashPayment).toHaveBeenCalledTimes(1);
+    expect(queueEvents.statusChanged).toHaveBeenCalledTimes(1);
     expect(redis.setNxEx).toHaveBeenCalledTimes(1);
     const acquiredToken = redis.setNxEx.mock.calls[0][1];
     expect(redis.releaseLockIfOwner).toHaveBeenCalledWith(
@@ -221,6 +226,7 @@ describe('WalkInService', () => {
       ConflictException,
     );
     expect(payments.recordCashPayment).not.toHaveBeenCalled();
+    expect(queueEvents.statusChanged).not.toHaveBeenCalled();
     expect(redis.releaseLockIfOwner).toHaveBeenCalledTimes(1);
   });
 
