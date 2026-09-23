@@ -6,3 +6,5 @@ export * from "./payment-method.enum";
 export * from "./gender.enum";
 export * from "./user-status.enum";
 export * from "./shift-type.enum";
+export * from "./queue-name.enum";
+export * from "./job-name.enum";
