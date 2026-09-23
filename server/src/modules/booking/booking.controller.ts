@@ -14,7 +14,8 @@ import {
   ReleaseSlotDto,
   ConfirmBookingDto,
 } from './dto';
-import { Public } from '../../common/decorators/auth.decorators';
+import { Public, Roles } from '../../common/decorators/auth.decorators';
+import { Role } from '@shared/enums';
 import { AuthenticatedRequest } from '../../common/guards/authenticated-request';
 import {
   ReserveSlotResponse,
@@ -61,7 +62,7 @@ export class BookingController {
    * Dùng DB Transaction với SELECT ... FOR UPDATE chốt slot sang BOOKED,
    * tạo Appointment CONFIRMED và giải phóng khóa Redis.
    */
-  @Public()
+  @Roles(Role.PATIENT)
   @Post('confirm-booking')
   @HttpCode(HttpStatus.CREATED)
   async confirmBooking(

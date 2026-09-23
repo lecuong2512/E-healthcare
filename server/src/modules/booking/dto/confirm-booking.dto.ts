@@ -36,4 +36,8 @@ export class ConfirmBookingDto implements IConfirmBookingRequest {
   @IsNumber({}, { message: 'Tổng tiền phải là số.' })
   @Min(0, { message: 'Tổng tiền không được âm.' })
   totalAmount?: number;
+
+  @IsOptional()
+  @IsString({ message: 'Mã voucher phải là chuỗi ký tự.' })
+  voucherCode?: string;
 }

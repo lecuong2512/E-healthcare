@@ -4,6 +4,7 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
+  CreateDateColumn,
 } from 'typeorm';
 import { UserEntity } from './user.entity';
 import { DoctorEntity } from './doctor.entity';
@@ -54,6 +55,30 @@ export class AppointmentEntity {
   @Column({ name: 'total_amount', type: 'numeric', precision: 12, scale: 2 })
   totalAmount!: number;
 
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+
   @Column({ name: 'checked_in_at', type: 'timestamptz', nullable: true })
   checkedInAt!: Date | null;
+
+  @Column({ name: 'cancelled_at', type: 'timestamptz', nullable: true })
+  cancelledAt!: Date | null;
+
+  @Column({ name: 'cancellation_reason', type: 'text', nullable: true })
+  cancellationReason!: string | null;
+
+  @Column({ name: 'cancelled_by', type: 'uuid', nullable: true })
+  cancelledBy!: string | null;
+
+  @Column({ name: 'refund_amount', type: 'numeric', precision: 12, scale: 2, default: 0 })
+  refundAmount!: number;
+
+  @Column({ name: 'refund_percent', type: 'numeric', precision: 5, scale: 2, default: 0 })
+  refundPercent!: number;
+
+  @Column({ name: 'discount_amount', type: 'numeric', precision: 12, scale: 2, default: 0 })
+  discountAmount!: number;
+
+  @Column({ name: 'voucher_code', type: 'varchar', length: 32, nullable: true })
+  voucherCode!: string | null;
 }
