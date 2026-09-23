@@ -1,39 +1,60 @@
-<main class="board">
-  <header class="board__header">
-    <div>
-      <p class="mb-1 text-xs font-bold tracking-[.18em] opacity-80">
-        E-HEALTHCARE MEDICAL
-      </p>
-      <h1>BẢNG GỌI SỐ KHÁM BỆNH</h1>
-    </div>
-    <div class="board__meta">
-      <time [attr.datetime]="now().toISOString()">
-        {{ now() | date: 'HH:mm' }}
-        <small>{{ now() | date: 'dd/MM/yyyy' }}</small>
-      </time>
-      <button
-        type="button"
-        class="min-h-12 min-w-12 rounded-full border border-white/40 bg-white/10 text-xl text-white focus-visible:outline focus-visible:outline-4 focus-visible:outline-white/30"
-        (click)="toggleMuted()"
-        [attr.aria-label]="muted() ? 'Bật chuông gọi số' : 'Tắt chuông gọi số'"
-      >
-        {{ muted() ? '🔇' : '🔊' }}
-      </button>
+<main class="queue-board">
+  <header class="queue-board__header">
+    <div class="queue-board__header-inner">
+      <div class="queue-board__brand" aria-label="E-Healthcare Medical">
+        <img
+          src="assets/figma/reception-logo.png"
+          alt=""
+          width="40"
+          height="40"
+        />
+        <div>
+          <p>E-Healthcare <span>Medical</span></p>
+          <small>Cổng thông tin y tế</small>
+        </div>
+      </div>
+
+      <div class="queue-board__title">
+        <p>Bảng hàng đợi</p>
+        <h1>Gọi số khám bệnh</h1>
+      </div>
+
+      <div class="queue-board__meta">
+        <div
+          class="queue-board__connection"
+          [attr.data-state]="store.connectionState()"
+          role="status"
+        >
+          <span aria-hidden="true"></span>
+          <div>
+            <strong>{{ connectionLabel() }}</strong>
+            @if (store.updatedAt()) {
+              <small>
+                Cập nhật {{ store.updatedAt() | date: 'HH:mm:ss':'+0700' }}
+              </small>
+            }
+          </div>
+        </div>
+
+        <time [attr.datetime]="now().toISOString()">
+          {{ now() | date: 'HH:mm':'+0700' }}
+          <small>Hôm nay · {{ now() | date: 'dd/MM/yyyy':'+0700' }}</small>
+        </time>
+
+        <button
+          type="button"
+          class="queue-board__sound"
+          (click)="toggleMuted()"
+          [attr.aria-label]="muted() ? 'Bật chuông gọi số' : 'Tắt chuông gọi số'"
+          [attr.title]="muted() ? 'Bật chuông gọi số' : 'Tắt chuông gọi số'"
+        >
+          <span aria-hidden="true">{{ muted() ? '🔇' : '🔊' }}</span>
+        </button>
+      </div>
     </div>
   </header>
 
-  <div
-    class="board__connection"
-    [attr.data-state]="store.connectionState()"
-    role="status"
-  >
-    <span></span>{{ connectionLabel() }}
-    @if (store.updatedAt()) {
-      <small>Cập nhật lúc {{ store.updatedAt() | date: 'HH:mm:ss' }}</small>
-    }
-  </div>
-
-  <section class="board__content" aria-live="polite">
+  <section class="queue-board__content" aria-live="polite">
     <app-queue-board-now-serving
       [tickets]="store.nowServing()"
       [lastCalledTicketId]="store.lastCalledTicketId()"
@@ -41,40 +62,52 @@
     <app-queue-board-next-up [tickets]="store.nextUp()" />
   </section>
 
-  <footer>
-    Vui lòng theo dõi số thứ tự và di chuyển đến đúng phòng khám khi được gọi.
+  <footer class="queue-board__footer">
+    <span aria-hidden="true">ℹ</span>
+    <p>
+      Vui lòng theo dõi số thứ tự và di chuyển đến đúng phòng khám khi được gọi.
+    </p>
   </footer>
 
   @if (!presentationStarted()) {
     <div
-      class="fixed inset-0 z-[100] grid place-items-center bg-slate-950/90 p-6 backdrop-blur-md"
+      class="presentation-launcher"
       role="dialog"
       aria-modal="true"
       aria-labelledby="launcher-title"
     >
-      <div
-        class="w-full max-w-xl rounded-3xl bg-white p-10 text-center shadow-2xl"
-      >
-        <span
-          class="mx-auto grid h-16 w-16 place-content-center rounded-2xl bg-sky-600 text-2xl font-extrabold text-white"
-          >E+</span
-        >
-        <h2 id="launcher-title" class="mb-2 mt-5 text-2xl font-bold">
-          Sẵn sàng hiển thị bảng gọi số
-        </h2>
-        <p class="leading-relaxed text-slate-600">
-          Thao tác này bật chế độ toàn màn hình và cho phép phát chuông gọi
-          bệnh nhân.
+      <div class="presentation-launcher__card">
+        <img
+          src="assets/figma/reception-logo.png"
+          alt=""
+          width="48"
+          height="48"
+        />
+        <p class="presentation-launcher__eyebrow">E-Healthcare Medical</p>
+        <h2 id="launcher-title">Sẵn sàng hiển thị bảng gọi số</h2>
+        <p class="presentation-launcher__description">
+          Bắt đầu chế độ trình chiếu toàn màn hình và cho phép phát chuông khi
+          có bệnh nhân được gọi vào phòng khám.
         </p>
+        <div class="presentation-launcher__sound-state">
+          <span aria-hidden="true">{{ muted() ? '🔇' : '🔊' }}</span>
+          <div>
+            <strong>Âm thanh gọi số</strong>
+            <small>{{ muted() ? 'Đang tắt' : 'Đang bật' }}</small>
+          </div>
+          <button type="button" (click)="toggleMuted()">
+            {{ muted() ? 'Bật âm thanh' : 'Tắt âm thanh' }}
+          </button>
+        </div>
         <button
           type="button"
-          class="min-h-12 rounded-xl bg-sky-600 px-6 py-3 font-bold text-white hover:bg-sky-700 focus-visible:outline focus-visible:outline-4 focus-visible:outline-sky-200"
+          class="presentation-launcher__start"
           (click)="startPresentation()"
         >
           Bắt đầu trình chiếu
         </button>
         @if (fullscreenError()) {
-          <p class="mt-4 text-amber-700" role="alert">
+          <p class="presentation-launcher__error" role="alert">
             {{ fullscreenError() }}
           </p>
         }

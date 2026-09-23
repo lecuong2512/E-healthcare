@@ -1,21 +1,32 @@
 <aside class="next" aria-labelledby="next-up-title">
-  <div class="section-title">
-    <span></span>
-    <h2 id="next-up-title">CHUẨN BỊ VÀO KHÁM</h2>
+  <div class="section-heading">
+    <div>
+      <span class="section-heading__marker" aria-hidden="true"></span>
+      <div>
+        <h2 id="next-up-title">Chuẩn bị vào khám</h2>
+        <p>Next up</p>
+      </div>
+    </div>
+    <span class="section-heading__count">{{ tickets.length }}/5</span>
   </div>
   @if (tickets.length) {
     <ol>
-      @for (ticket of tickets; track ticket.id) {
-        <li>
+      @for (ticket of tickets; track ticket.id; let position = $index) {
+        <li [class.next-up__item--first]="position === 0">
           <strong>{{ ticket.queueNumber }}</strong>
-          <div>
+          <div class="next-up__patient">
             <span>{{ ticket.maskedPatientName }}</span>
-            <small>Phòng {{ ticket.roomNumber }}</small>
+            <small>{{ ticket.specialtyName }}</small>
           </div>
+          <span class="next-up__room">Phòng {{ ticket.roomNumber }}</span>
         </li>
       }
     </ol>
   } @else {
-    <div class="empty"><p>Danh sách chờ đang trống</p></div>
+    <div class="empty">
+      <span aria-hidden="true">…</span>
+      <strong>Danh sách chờ đang trống</strong>
+      <p>Số tiếp theo sẽ xuất hiện tại đây.</p>
+    </div>
   }
 </aside>

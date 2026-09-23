@@ -6,7 +6,6 @@ import { QueueBoardTicketViewModel } from './queue-board.models';
   selector: 'app-queue-board-now-serving',
   standalone: true,
   templateUrl: './queue-board-now-serving.component.html',
-  styleUrl: './queue-board-now-serving.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class QueueBoardNowServingComponent {
