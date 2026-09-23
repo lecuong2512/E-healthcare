@@ -1,27 +1,30 @@
-// Design tokens dùng khi cần viết SCSS thủ công (nesting, mixin, media query
-// tùy biến) — GIÁ TRỊ PHẢI KHỚP với tailwind.config.js để 2 hệ thống không lệch nhau.
-// Khi đổi 1 bên (vd. đổi breakpoint), nhớ đổi luôn bên còn lại.
+// Responsive Breakpoints
+$breakpoint-mobile: 360px;
+$breakpoint-tablet: 768px;
+$breakpoint-desktop: 1366px;
 
-// Section 3.1 — Responsive Breakpoints
-$breakpoint-tablet: 768px; // Mobile < 768px
-$breakpoint-desktop: 1025px; // Tablet 768px - 1024px, Desktop > 1024px
-
-// NFR-UX-02 — vùng chạm tối thiểu trên mobile
+// Touch Target NFR
 $min-touch-target: 44px;
 
-// Medical Clean UI accent color (khớp sky-600 trong tailwind.config.js)
+// Medical Clean UI Color Tokens
 $color-primary: #0284c7;
-$color-primary-dark: #0369a1;
+$color-primary-hover: #0369a1;
+$color-secondary: #0284c7;
+$color-canvas: #f8fafc;
+$color-card: #ffffff;
+$color-border: #e2e8f0;
+$color-text-base: #0f172a;
+$color-text-sub: #64748b;
 
-// Mixin tiện dùng khi viết SCSS thuần thay vì nhớ cú pháp @media mỗi lần
+// Responsive Mixins
 @mixin tablet-up {
-  @media (min-width: $breakpoint-tablet) {
+  @media (min-width: #{$breakpoint-tablet}) {
     @content;
   }
 }
 
 @mixin desktop-up {
-  @media (min-width: $breakpoint-desktop) {
+  @media (min-width: #{$breakpoint-desktop}) {
     @content;
   }
 }
