@@ -23,7 +23,7 @@ import {
   AppointmentResponse,
 } from '@shared/interfaces';
 
-@Controller('appointments')
+@Controller('booking')
 export class BookingController {
   constructor(private readonly bookingService: BookingService) {}
 

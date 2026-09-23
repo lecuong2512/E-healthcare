@@ -30,10 +30,20 @@ export interface EmailAppointmentReminder24hPayload {
   notes?: string;
 }
 
+export interface EmailAppointmentCancellationPayload {
+  to: string;
+  patientName: string;
+  appointmentCode: string;
+  voucherCode: string;
+  refundPercent: number;
+  refundAmount: number;
+}
+
 export type EmailJobData =
   | { type: 'BOOKING_CONFIRMATION'; data: EmailBookingConfirmationPayload }
   | { type: 'ACCOUNT_ACTIVATION'; data: EmailAccountActivationPayload }
-  | { type: 'REMINDER_24H'; data: EmailAppointmentReminder24hPayload };
+  | { type: 'REMINDER_24H'; data: EmailAppointmentReminder24hPayload }
+  | { type: 'APPOINTMENT_CANCELLATION'; data: EmailAppointmentCancellationPayload };
 
 export interface SmsOtpPayload {
   phoneNumber: string;
@@ -49,9 +59,19 @@ export interface SmsAppointmentReminder2hPayload {
   roomNumber?: string;
 }
 
+export interface SmsAppointmentCancellationPayload {
+  phoneNumber: string;
+  patientName: string;
+  appointmentCode: string;
+  voucherCode: string;
+  refundPercent: number;
+  refundAmount: number;
+}
+
 export type SmsJobData =
   | { type: 'OTP'; data: SmsOtpPayload }
-  | { type: 'REMINDER_2H'; data: SmsAppointmentReminder2hPayload };
+  | { type: 'REMINDER_2H'; data: SmsAppointmentReminder2hPayload }
+  | { type: 'APPOINTMENT_CANCELLATION'; data: SmsAppointmentCancellationPayload };
 
 export interface PrescriptionMedicineItem {
   medicineName: string;

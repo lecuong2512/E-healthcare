@@ -5,6 +5,7 @@ import {
   EmailBookingConfirmationPayload,
   EmailAccountActivationPayload,
   EmailAppointmentReminder24hPayload,
+  EmailAppointmentCancellationPayload,
 } from '@shared/interfaces';
 
 @Injectable()
@@ -93,6 +94,15 @@ ${payload.notes || '- Vui lòng mang theo CCCD gắn chip và các kết quả x
 Trân trọng cảm ơn,
 Phòng khám E-Healthcare`;
 
+    await this.sendMail(payload.to, subject, text);
+  }
+
+  async sendAppointmentCancellation(payload: EmailAppointmentCancellationPayload): Promise<void> {
+    const subject = "[E-Healthcare] Thong bao huy lich hen #" + payload.appointmentCode;
+    const refund = payload.refundAmount > 0
+      ? "Khoan hoan tien: " + payload.refundAmount.toLocaleString("vi-VN") + " VND (" + payload.refundPercent + "%)."
+      : "Lich hen chua phat sinh khoan hoan tien.";
+    const text = "Kinh gui " + payload.patientName + ",\n\nCo so y te rat tiec phai huy lich hen #" + payload.appointmentCode + ".\n" + refund + "\nMa voucher boi thuong giam 20% cho lan dat kham sau: " + payload.voucherCode + ".\n\nTran trong,\nPhong kham E-Healthcare";
     await this.sendMail(payload.to, subject, text);
   }
 

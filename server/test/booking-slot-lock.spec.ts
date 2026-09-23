@@ -429,9 +429,9 @@ describe('Distributed Slot Locking (Section 5.1 & SRS-PAT-02)', () => {
       await app.close();
     });
 
-    it('POST /api/v1/appointments/reserve-slot trả về 201 Created khi đặt thành công', async () => {
+    it('POST /api/v1/booking/reserve-slot trả về 201 Created khi đặt thành công', async () => {
       const res = await request(app.getHttpServer())
-        .post('/api/v1/appointments/reserve-slot')
+        .post('/api/v1/booking/reserve-slot')
         .send({
           doctorId,
           slotId,
@@ -443,15 +443,15 @@ describe('Distributed Slot Locking (Section 5.1 & SRS-PAT-02)', () => {
       expect(res.body.data.ttlSeconds).toBe(600);
     });
 
-    it('POST /api/v1/appointments/reserve-slot trả về 409 Conflict khi bị trùng slot', async () => {
+    it('POST /api/v1/booking/reserve-slot trả về 409 Conflict khi bị trùng slot', async () => {
       // First reservation
       await request(app.getHttpServer())
-        .post('/api/v1/appointments/reserve-slot')
+        .post('/api/v1/booking/reserve-slot')
         .send({ doctorId, slotId, userId: userA });
 
       // Second reservation on same slot
       const res = await request(app.getHttpServer())
-        .post('/api/v1/appointments/reserve-slot')
+        .post('/api/v1/booking/reserve-slot')
         .send({ doctorId, slotId, userId: userB });
 
       expect(res.status).toBe(409);
@@ -460,26 +460,26 @@ describe('Distributed Slot Locking (Section 5.1 & SRS-PAT-02)', () => {
       );
     });
 
-    it('POST /api/v1/appointments/release-slot giải phóng thành công', async () => {
+    it('POST /api/v1/booking/release-slot giải phóng thành công', async () => {
       await request(app.getHttpServer())
-        .post('/api/v1/appointments/reserve-slot')
+        .post('/api/v1/booking/reserve-slot')
         .send({ doctorId, slotId, userId: userA });
 
       const res = await request(app.getHttpServer())
-        .post('/api/v1/appointments/release-slot')
+        .post('/api/v1/booking/release-slot')
         .send({ doctorId, slotId, userId: userA });
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
     });
 
-    it('GET /api/v1/appointments/slot-lock/:doctorId/:slotId trả về trạng thái khóa', async () => {
+    it('GET /api/v1/booking/slot-lock/:doctorId/:slotId trả về trạng thái khóa', async () => {
       await request(app.getHttpServer())
-        .post('/api/v1/appointments/reserve-slot')
+        .post('/api/v1/booking/reserve-slot')
         .send({ doctorId, slotId, userId: userA });
 
       const res = await request(app.getHttpServer())
-        .get(`/api/v1/appointments/slot-lock/${doctorId}/${slotId}`);
+        .get(`/api/v1/booking/slot-lock/${doctorId}/${slotId}`);
 
       expect(res.status).toBe(200);
       expect(res.body.isLocked).toBe(true);

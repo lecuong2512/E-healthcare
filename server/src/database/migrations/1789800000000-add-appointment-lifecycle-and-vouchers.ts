@@ -42,6 +42,7 @@ export class AddAppointmentLifecycleAndVouchers1789800000000 implements Migratio
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
+      DROP INDEX IF EXISTS idx_appointments_status_schedule;
       DROP TABLE IF EXISTS vouchers;
       ALTER TABLE appointments DROP CONSTRAINT IF EXISTS chk_appointments_refund_amount, DROP CONSTRAINT IF EXISTS chk_appointments_refund_percent, DROP CONSTRAINT IF EXISTS chk_appointments_discount_amount, DROP COLUMN IF EXISTS voucher_code, DROP COLUMN IF EXISTS discount_amount, DROP COLUMN IF EXISTS refund_percent, DROP COLUMN IF EXISTS refund_amount, DROP COLUMN IF EXISTS cancelled_by, DROP COLUMN IF EXISTS cancellation_reason, DROP COLUMN IF EXISTS cancelled_at;
 
