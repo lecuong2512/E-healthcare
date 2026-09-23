@@ -1,18 +1,34 @@
-<main class="min-h-dvh bg-slate-50 p-4 text-slate-900 sm:p-6 lg:p-8">
-  <div class="mx-auto max-w-[1600px]">
-    <header class="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+<div class="admin-shell">
+  <header class="sticky top-0 z-40 h-14 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div class="mx-auto flex h-full max-w-[1360px] items-center justify-between gap-4 px-4 sm:px-6">
+      <div class="flex items-center gap-2" aria-label="E-Healthcare Medical">
+        <span class="grid h-8 w-8 place-content-center rounded-lg bg-sky-600 text-xs font-extrabold text-white shadow-lg shadow-sky-100" aria-hidden="true">E+</span>
+        <span class="text-[15px] font-bold text-slate-900">E-Healthcare</span>
+        <span class="rounded-md bg-sky-100 px-2 py-0.5 text-[10px] font-bold text-sky-600 max-sm:hidden">Medical</span>
+      </div>
+      <div class="flex items-center gap-2.5 text-xs text-slate-500 max-sm:hidden">
+        <span>Quản trị hệ thống</span>
+        <span class="h-4 w-px bg-slate-200" aria-hidden="true"></span>
+        <strong>Kiểm toán & bảo mật</strong>
+      </div>
+    </div>
+  </header>
+
+<main class="audit-page min-h-dvh bg-slate-50 px-4 py-5 text-slate-900 sm:px-6 lg:px-8 lg:py-7">
+  <div class="mx-auto max-w-[1360px]">
+    <header class="page-heading mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
       <div>
-        <p class="mb-1 text-sm font-bold uppercase tracking-widest text-sky-700">
-          SRS-ADM-04
+        <p class="mb-1 text-xs font-bold uppercase tracking-[.16em] text-sky-600">
+          Audit Logs Viewer · SRS-ADM-04
         </p>
-        <h1 class="text-2xl font-bold sm:text-3xl">Nhật ký kiểm toán</h1>
-        <p class="mt-2 text-sm text-slate-600">
+        <h1 class="text-2xl font-bold tracking-tight sm:text-[1.75rem]">Nhật ký kiểm toán</h1>
+        <p class="mt-1.5 text-sm text-slate-600">
           Chỉ đọc · Múi giờ hiển thị: Asia/Ho_Chi_Minh (UTC+7)
         </p>
       </div>
       <button
         type="button"
-        class="min-h-11 rounded-lg bg-sky-700 px-5 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+        class="export-action min-h-11 rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
         [disabled]="store.totalItems() === 0 || store.exportState() === 'exporting'"
         (click)="store.requestExport()"
       >
@@ -20,13 +36,28 @@
       </button>
     </header>
 
+    <section class="audit-metrics mb-5" aria-label="Tổng quan nhật ký kiểm toán">
+      <div>
+        <span>Bản ghi theo bộ lọc</span>
+        <strong>{{ store.totalItems() }}</strong>
+      </div>
+      <div>
+        <span>Múi giờ hiển thị</span>
+        <strong>UTC+7</strong>
+      </div>
+      <div>
+        <span>Chế độ truy cập</span>
+        <strong class="text-emerald-700">Chỉ đọc</strong>
+      </div>
+    </section>
+
     @if (store.exportErrorMessage()) {
       <p class="mb-4 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-700" role="alert">
         {{ store.exportErrorMessage() }}
       </p>
     }
 
-    <section class="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="audit-filter-title">
+    <section class="audit-filter-card mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="audit-filter-title">
       <div class="mb-4 flex items-center justify-between gap-3">
         <h2 id="audit-filter-title" class="text-lg font-bold">Bộ lọc tra cứu</h2>
         <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
@@ -79,7 +110,7 @@
         </label>
 
         <div class="flex items-end gap-2">
-          <button type="submit" class="min-h-11 flex-1 rounded-lg bg-sky-700 px-4 font-semibold text-white hover:bg-sky-800">
+          <button type="submit" class="min-h-11 flex-1 rounded-xl bg-sky-600 px-4 font-semibold text-white shadow-sm hover:bg-sky-700">
             Áp dụng
           </button>
           <button type="button" class="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold hover:bg-slate-50" (click)="resetFilters()">
@@ -95,7 +126,7 @@
       }
     </section>
 
-    <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-labelledby="audit-result-title">
+    <section class="audit-result-card overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-labelledby="audit-result-title">
       <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-6">
         <div>
           <h2 id="audit-result-title" class="font-bold">Kết quả tra cứu</h2>
@@ -191,3 +222,4 @@
     </section>
   </div>
 </main>
+</div>
