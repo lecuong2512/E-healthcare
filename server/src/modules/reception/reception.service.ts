@@ -15,12 +15,14 @@ import { vietnamesePhoneVariants } from '../../common/utils/vn-phone.util';
 import { vietnamNow } from '../../common/utils/vn-time.util';
 import { LookupAppointmentDto } from './dto/lookup-appointment.dto';
 import { QueueNumberService } from './queue-number.service';
+import { QueueEventsService } from '../realtime/queue-events.service';
 
 @Injectable()
 export class ReceptionService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly queueNumbers: QueueNumberService,
+    private readonly queueEvents: QueueEventsService,
   ) {}
 
   async lookup(query: LookupAppointmentDto): Promise<ReceptionAppointment[]> {
@@ -94,7 +96,7 @@ export class ReceptionService {
   }
 
   async checkIn(appointmentId: string): Promise<CheckInResponse> {
-    return this.dataSource.transaction('READ COMMITTED', async (manager) => {
+    const result = await this.dataSource.transaction('READ COMMITTED', async (manager): Promise<CheckInResponse> => {
       const appointment = await manager
         .getRepository(AppointmentEntity)
         .createQueryBuilder('appointment')
@@ -156,5 +158,7 @@ export class ReceptionService {
         checkedInAt: checkedInAt.toISOString(),
       };
     });
+    await this.queueEvents.statusChanged(result.appointmentId, AppointmentStatus.CONFIRMED, 'RECEPTION_CHECKIN');
+    return result;
   }
 }

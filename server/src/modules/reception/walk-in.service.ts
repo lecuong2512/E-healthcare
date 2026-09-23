@@ -38,6 +38,7 @@ import { CounterPaymentService } from './counter-payment.service';
 import { AvailableDoctorsDto } from './dto/available-doctors.dto';
 import { WalkInDto } from './dto/walk-in.dto';
 import { QueueNumberService } from './queue-number.service';
+import { QueueEventsService } from '../realtime/queue-events.service';
 
 const ACTIVE_STATUSES = [
   AppointmentStatus.PENDING_PAYMENT,
@@ -67,6 +68,7 @@ export class WalkInService {
     private readonly redis: RedisService,
     private readonly queueNumbers: QueueNumberService,
     private readonly payments: CounterPaymentService,
+    private readonly queueEvents: QueueEventsService,
   ) {}
 
   async availableDoctors(query: AvailableDoctorsDto): Promise<AvailableWalkInDoctor[]> {
@@ -175,7 +177,7 @@ export class WalkInService {
     }
 
     try {
-      return await this.dataSource.transaction('READ COMMITTED', async (manager) => {
+      const result = await this.dataSource.transaction('READ COMMITTED', async (manager): Promise<WalkInBookingResponse> => {
         const lockedSlot = await manager.getRepository(DoctorScheduleEntity)
           .createQueryBuilder('schedule')
           .setLock('pessimistic_write')
@@ -244,6 +246,8 @@ export class WalkInService {
           receipt,
         };
       });
+      await this.queueEvents.statusChanged(result.appointmentId, null, 'WALK_IN');
+      return result;
     } catch (error) {
       if (uniqueConstraint(error, 'idx_appointments_walk_in_idempotency')) {
         const committed = await this.findIdempotent(receptionistId, idempotencyKey, requestHash);
