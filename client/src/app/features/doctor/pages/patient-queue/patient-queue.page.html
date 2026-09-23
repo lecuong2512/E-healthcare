@@ -1,0 +1,94 @@
+ <div class="space-y-6">
+      <!-- Workstation Header -->
+      <div class="bg-white border border-border rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h1 class="font-bold text-lg text-text-base">
+            BSCKII. Trần Văn Tiến — Buồng khám 204
+          </h1>
+          <p class="text-xs text-text-sub mt-0.5">Khoa Tim mạch · Tầng 2 · Khu B Bệnh viện</p>
+        </div>
+        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-sky-100 text-primary">
+          <span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+          Ca Sáng 08:00 – 12:00
+        </span>
+      </div>
+
+      <!-- 5 KPI Summary Cards -->
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        @for (m of metrics; track m.label) {
+          <div class="bg-white border border-border rounded-xl p-3 text-center shadow-sm">
+            <p class="text-xl font-bold font-mono" [ngStyle]="{ color: m.color }">{{ m.value }}</p>
+            <p class="text-xs text-text-sub mt-1">{{ m.label }}</p>
+          </div>
+        }
+      </div>
+
+      <!-- Realtime Patient Queue Table -->
+      <div class="bg-white rounded-2xl border border-border overflow-hidden shadow-sm">
+        <div class="px-5 py-4 border-b border-border flex items-center justify-between">
+          <h2 class="font-bold text-sm text-text-base flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            Hàng đợi bệnh nhân trực tiếp (Realtime Queue)
+          </h2>
+          <span class="text-xs text-text-sub">Tự động làm mới mỗi 15 giây</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-slate-600 border-b border-border">
+                <th class="text-center px-3 py-3 text-xs font-semibold w-12">STT</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold">Khung giờ</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold">Mã lịch hẹn</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold">Họ tên bệnh nhân</th>
+                <th class="text-center px-3 py-3 text-xs font-semibold">Giới tính</th>
+                <th class="text-center px-3 py-3 text-xs font-semibold">Năm sinh</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold">Triệu chứng ban đầu</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold">Trạng thái</th>
+                <th class="text-right px-4 py-3 text-xs font-semibold">Hành động</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              @for (p of patients; track p.code) {
+                <tr class="hover:bg-slate-50/70 transition" [class.bg-sky-50]="p.status === 'IN_CONSULTATION'">
+                  <td class="text-center px-3 py-3 font-mono font-bold text-xs text-slate-500">{{ p.stt }}</td>
+                  <td class="px-4 py-3 text-xs font-medium text-slate-700 whitespace-nowrap">{{ p.time }}</td>
+                  <td class="px-4 py-3 font-mono text-xs font-bold text-primary">{{ p.code }}</td>
+                  <td class="px-4 py-3 font-semibold text-text-base whitespace-nowrap">{{ p.name }}</td>
+                  <td class="text-center px-3 py-3 text-xs text-slate-600">{{ p.gender }}</td>
+                  <td class="text-center px-3 py-3 text-xs font-mono text-slate-600">{{ p.year }}</td>
+                  <td class="px-4 py-3 text-xs text-slate-600 max-w-[200px] truncate">{{ p.symptoms }}</td>
+                  <td class="px-4 py-3">
+                    <span
+                      class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      [ngClass]="statusClasses[p.status]"
+                    >
+                      {{ statusLabels[p.status] }}
+                    </span>
+                  </td>
+                  <td class="px-4 py-3 text-right">
+                    @if (p.status === 'CHECKED_IN') {
+                      <button
+                        type="button"
+                        (click)="startConsultation(p)"
+                        class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm whitespace-nowrap"
+                      >
+                        Tiếp nhận khám
+                      </button>
+                    } @else if (p.status === 'IN_CONSULTATION') {
+                      <button
+                        type="button"
+                        (click)="startConsultation(p)"
+                        class="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-sm whitespace-nowrap"
+                      >
+                        Đang khám →
+                      </button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
