@@ -1,24 +1,57 @@
-<main class="min-h-dvh bg-slate-50 p-4 text-slate-900 sm:p-6 lg:p-8">
-  <div class="mx-auto max-w-[1600px]">
-    <header class="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+<div class="reception-shell min-h-dvh">
+  <header class="sticky top-0 z-40 h-14 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div class="mx-auto flex h-full max-w-[1360px] items-center justify-between gap-4 px-4 sm:px-6">
+      <div class="flex items-center gap-2" aria-label="E-Healthcare Medical">
+        <span class="grid h-8 w-8 place-content-center rounded-lg bg-sky-600 text-xs font-extrabold text-white shadow-lg shadow-sky-100" aria-hidden="true">E+</span>
+        <span class="text-[15px] font-bold text-slate-900">E-Healthcare</span>
+        <span class="rounded-md bg-sky-100 px-2 py-0.5 text-[10px] font-bold text-sky-600 max-sm:hidden">Medical</span>
+      </div>
+      <div class="flex items-center gap-2.5 text-xs text-slate-500 max-sm:hidden">
+        <span>Phân hệ lễ tân</span>
+        <span class="h-4 w-px bg-slate-200" aria-hidden="true"></span>
+        <strong>Tiếp đón vãng lai</strong>
+      </div>
+    </div>
+  </header>
+
+<main class="walkin-page min-h-dvh bg-slate-50 px-4 py-5 text-slate-900 sm:px-6 lg:px-8 lg:py-7">
+  <div class="mx-auto max-w-[1360px]">
+    <header class="page-heading mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
       <div>
-        <p class="mb-1 text-sm font-bold uppercase tracking-widest text-emerald-700">
-          SRS-REC-02
+        <p class="mb-1 text-xs font-bold uppercase tracking-[.16em] text-sky-600">
+          Đặt lịch tại quầy · SRS-REC-02
         </p>
-        <h1 class="text-2xl font-bold sm:text-3xl">
+        <h1 class="text-2xl font-bold tracking-tight sm:text-[1.75rem]">
           Tiếp đón bệnh nhân vãng lai
         </h1>
-        <p class="mt-2 text-slate-600">
+        <p class="mt-1.5 text-sm text-slate-600">
           Tạo lịch trong ngày, thu phí và cấp số thứ tự tại quầy.
         </p>
       </div>
       <a
         routerLink="/receptionist/checkin"
-        class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 font-semibold hover:bg-slate-50"
+        class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:border-sky-300 hover:text-sky-700"
       >
         ← Quay lại quầy check-in
       </a>
     </header>
+
+    @if (!success) {
+      <ol class="mb-5 grid list-none grid-cols-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm max-md:grid-cols-1" aria-label="Tiến trình tiếp đón vãng lai">
+        <li class="flex min-h-[4.25rem] items-center gap-3 bg-sky-50 px-5 py-3">
+          <span class="grid h-8 w-8 shrink-0 place-content-center rounded-full bg-sky-600 text-xs font-extrabold text-white ring-4 ring-sky-100">1</span>
+          <div class="grid"><strong class="text-[13px] text-sky-700">Thông tin</strong><small class="text-[11px] text-slate-400">Bệnh nhân</small></div>
+        </li>
+        <li class="flex min-h-[4.25rem] items-center gap-3 border-l border-slate-200 px-5 py-3 max-md:border-l-0 max-md:border-t">
+          <span class="grid h-8 w-8 shrink-0 place-content-center rounded-full bg-slate-100 text-xs font-extrabold text-slate-500">2</span>
+          <div class="grid"><strong class="text-[13px] text-slate-700">Lịch khám</strong><small class="text-[11px] text-slate-400">Bác sĩ & khung giờ</small></div>
+        </li>
+        <li class="flex min-h-[4.25rem] items-center gap-3 border-l border-slate-200 px-5 py-3 max-md:border-l-0 max-md:border-t">
+          <span class="grid h-8 w-8 shrink-0 place-content-center rounded-full bg-slate-100 text-xs font-extrabold text-slate-500">3</span>
+          <div class="grid"><strong class="text-[13px] text-slate-700">Xác nhận</strong><small class="text-[11px] text-slate-400">Thanh toán tại quầy</small></div>
+        </li>
+      </ol>
+    }
 
     @if (success) {
       <section class="mx-auto max-w-3xl rounded-3xl border border-emerald-200 bg-white p-6 text-center shadow-sm sm:p-10" role="status">
@@ -59,11 +92,11 @@
         </button>
       </section>
     } @else {
-      <form [formGroup]="bookingForm" (ngSubmit)="submitBooking()" class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(24rem,0.9fr)]">
+      <form [formGroup]="bookingForm" (ngSubmit)="submitBooking()" class="booking-workspace grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(23rem,0.7fr)]">
         <div class="space-y-6">
-          <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="patient-info-title">
+          <section class="form-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="patient-info-title">
             <div class="mb-5">
-              <span class="step-number">1</span>
+              <span class="mr-2 inline-grid h-8 w-8 place-content-center rounded-full bg-sky-600 font-extrabold text-white ring-4 ring-sky-50">1</span>
               <h2 id="patient-info-title" class="inline text-lg font-bold">
                 Thông tin bệnh nhân
               </h2>
@@ -149,9 +182,9 @@
             }
           </section>
 
-          <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="doctor-slot-title">
+          <section class="form-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="doctor-slot-title">
             <div class="mb-5">
-              <span class="step-number">2</span>
+              <span class="mr-2 inline-grid h-8 w-8 place-content-center rounded-full bg-sky-600 font-extrabold text-white ring-4 ring-sky-50">2</span>
               <h2 id="doctor-slot-title" class="inline text-lg font-bold">
                 Chọn bác sĩ và khung giờ hôm nay
               </h2>
@@ -178,7 +211,7 @@
               </label>
               <button
                 type="button"
-                class="min-h-11 self-end rounded-xl bg-sky-700 px-5 font-semibold text-white disabled:opacity-50"
+                class="min-h-11 self-end rounded-xl bg-sky-600 px-5 font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-50"
                 [disabled]="loadingDoctors"
                 (click)="searchDoctors()"
               >
@@ -254,9 +287,9 @@
         </div>
 
         <aside class="space-y-6">
-          <section class="sticky top-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="payment-summary-title">
+          <section class="summary-card sticky top-20 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="payment-summary-title">
             <div class="mb-5">
-              <span class="step-number">3</span>
+              <span class="mr-2 inline-grid h-8 w-8 place-content-center rounded-full bg-sky-600 font-extrabold text-white ring-4 ring-sky-50">3</span>
               <h2 id="payment-summary-title" class="inline text-lg font-bold">
                 Xác nhận và thanh toán
               </h2>
@@ -314,7 +347,7 @@
               </p>
               <button
                 type="submit"
-                class="min-h-12 w-full rounded-xl bg-emerald-700 px-5 font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                class="min-h-12 w-full rounded-xl bg-sky-600 px-5 font-semibold text-white shadow-sm hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
                 [disabled]="submitting"
                 [attr.aria-busy]="submitting"
               >
@@ -403,3 +436,4 @@
     }
   </div>
 </main>
+</div>
