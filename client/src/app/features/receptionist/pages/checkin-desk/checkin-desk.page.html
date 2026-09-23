@@ -415,6 +415,40 @@
                   </div>
                 }
 
+                @if (receipt) {
+                  <section
+                    id="counter-payment-receipt"
+                    class="counter-payment-receipt my-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"
+                    aria-labelledby="receipt-title"
+                  >
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 id="receipt-title" class="font-bold text-emerald-950">
+                          Biên nhận thu tiền
+                        </h3>
+                        <p class="mt-1 font-mono text-sm text-emerald-800">
+                          {{ receipt.receiptCode }}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        class="receipt-print-button min-h-11 rounded-lg border border-emerald-300 bg-white px-4 font-semibold text-emerald-800 hover:bg-emerald-100"
+                        (click)="receiptPrintRequested.emit()"
+                      >
+                        In phiếu thu
+                      </button>
+                    </div>
+                    <dl class="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+                      <div><dt>Bệnh nhân</dt><dd>{{ receipt.patientName }}</dd></div>
+                      <div><dt>Mã lịch hẹn</dt><dd>{{ receipt.appointmentCode }}</dd></div>
+                      <div><dt>Số tiền</dt><dd>{{ receipt.amount | currencyVnd }}</dd></div>
+                      <div><dt>Tiền thừa</dt><dd>{{ receipt.changeAmount | currencyVnd }}</dd></div>
+                      <div><dt>Giao dịch</dt><dd>{{ receipt.transactionCode }}</dd></div>
+                      <div><dt>Thời điểm</dt><dd>{{ receipt.paidAt }}</dd></div>
+                    </dl>
+                  </section>
+                }
+
                 <div
                   class="mt-6 flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-5"
                 >

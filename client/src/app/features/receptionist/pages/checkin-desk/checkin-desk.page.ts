@@ -13,7 +13,12 @@ import {
   Validators,
 } from '@angular/forms';
 
-import { AppointmentStatus, PaymentStatus } from '@shared/enums';
+import {
+  AppointmentStatus,
+  CounterPaymentMethod,
+  PaymentStatus,
+} from '@shared/enums';
+import { CounterPaymentReceipt } from '@shared/interfaces';
 import { QrScannerComponent } from '../../../../shared/components/qr-scanner/qr-scanner.component';
 import { CurrencyVndPipe } from '../../../../shared/pipes/currency-vnd.pipe';
 import {
@@ -38,6 +43,12 @@ function appointmentsOrEmpty(
 function appointmentOrNull(
   value: ReceptionAppointmentViewModel | null | undefined,
 ): ReceptionAppointmentViewModel | null {
+  return value ?? null;
+}
+
+function receiptOrNull(
+  value: CounterPaymentReceipt | null | undefined,
+): CounterPaymentReceipt | null {
   return value ?? null;
 }
 
@@ -78,6 +89,8 @@ export class CheckinDeskPage {
   selectedAppointment: ReceptionAppointmentViewModel | null = null;
   @Input({ transform: booleanAttribute }) loading = false;
   @Input({ transform: booleanAttribute }) paymentPending = false;
+  @Input({ transform: receiptOrNull })
+  receipt: CounterPaymentReceipt | null = null;
   @Input({ transform: booleanAttribute }) checkInPending = false;
   @Input() errorMessage: string | null = null;
   @Input({ transform: queueSummaryOrNull })
@@ -92,6 +105,7 @@ export class CheckinDeskPage {
   @Output() appointmentSelected =
     new EventEmitter<ReceptionAppointmentViewModel>();
   @Output() paymentRequested = new EventEmitter<CounterPaymentIntent>();
+  @Output() receiptPrintRequested = new EventEmitter<void>();
   @Output() checkInRequested = new EventEmitter<string>();
   @Output() refreshRequested = new EventEmitter<string>();
   @Output() queueRefreshRequested = new EventEmitter<void>();
@@ -279,6 +293,7 @@ export class CheckinDeskPage {
 
     this.paymentRequested.emit({
       appointmentId: appointment.id,
+      method: CounterPaymentMethod.CASH,
       amountTendered: this.cashReceived(),
     });
   }

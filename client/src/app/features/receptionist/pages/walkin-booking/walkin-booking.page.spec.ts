@@ -86,7 +86,7 @@ describe('WalkinBookingPage', () => {
     expect(intents[0].idempotencyKey).not.toBe(intents[1].idempotencyKey);
   });
 
-  it('creates a new key when selecting a duplicate patient candidate', () => {
+  it('keeps the intent key when selecting a duplicate patient candidate', () => {
     const intents: Array<{
       idempotencyKey: string;
       patientId?: string;
@@ -98,7 +98,7 @@ describe('WalkinBookingPage', () => {
     component.selectCandidate('patient-2');
 
     expect(intents[1].patientId).toBe('patient-2');
-    expect(intents[1].idempotencyKey).not.toBe(intents[0].idempotencyKey);
+    expect(intents[1].idempotencyKey).toBe(intents[0].idempotencyKey);
   });
 
   it('calculates cash change from the selected doctor fee', () => {

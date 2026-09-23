@@ -15,12 +15,13 @@ import {
 } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
-import { Gender } from '@shared/enums';
+import { CounterPaymentMethod, Gender } from '@shared/enums';
 import { CurrencyVndPipe } from '../../../../shared/pipes/currency-vnd.pipe';
 import {
   WalkInBookingIntent,
   WalkInDoctorSearchIntent,
   WalkInDoctorViewModel,
+  WalkInDraftIntent,
   WalkInPatientCandidateViewModel,
   WalkInSuccessViewModel,
 } from '../../models/reception-presentation.models';
@@ -36,10 +37,12 @@ import {
 export class WalkinBookingPage {
   private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly doctorsState = signal<readonly WalkInDoctorViewModel[]>([]);
+  private pendingDraft: WalkInDraftIntent | null = null;
 
   @Input()
   set doctors(value: readonly WalkInDoctorViewModel[]) {
     this.doctorsState.set(value);
+    this.applyDraftSelection();
   }
 
   get doctors(): readonly WalkInDoctorViewModel[] {
@@ -48,6 +51,20 @@ export class WalkinBookingPage {
 
   @Input() candidates: readonly WalkInPatientCandidateViewModel[] = [];
   @Input() success: WalkInSuccessViewModel | null = null;
+  @Input()
+  set draft(value: WalkInDraftIntent | null) {
+    this.pendingDraft = value;
+    if (!value) {
+      return;
+    }
+
+    this.bookingForm.patchValue({
+      fullName: value.fullName,
+      phone: value.phone,
+    });
+    this.searchForm.patchValue({ specialtyName: value.specialtyName });
+    this.applyDraftSelection();
+  }
   @Input() loadingDoctors = false;
   @Input() submitting = false;
   @Input() errorMessage: string | null = null;
@@ -155,7 +172,7 @@ export class WalkinBookingPage {
       return;
     }
 
-    const intentWithoutKey = {
+    const intentFingerprint = {
       scheduleId: value.scheduleId,
       fullName: value.fullName.trim(),
       phone: value.phone.replace(/\s/g, ''),
@@ -163,12 +180,16 @@ export class WalkinBookingPage {
       birthYear: value.birthYear,
       gender: value.gender,
       reasonForVisit: value.reasonForVisit.trim(),
+      paymentMethod: CounterPaymentMethod.CASH,
       amountTendered: value.amountTendered,
+    };
+    const intentWithoutKey = {
+      ...intentFingerprint,
       ...(this.selectedPatientId()
         ? { patientId: this.selectedPatientId()! }
         : {}),
     };
-    const fingerprint = JSON.stringify(intentWithoutKey);
+    const fingerprint = JSON.stringify(intentFingerprint);
 
     if (fingerprint !== this.lastFingerprint()) {
       this.lastFingerprint.set(fingerprint);
@@ -187,9 +208,9 @@ export class WalkinBookingPage {
 
   selectCandidate(patientId: string): void {
     this.selectedPatientId.set(patientId);
-    // Adding patientId changes the payload. Generate a new key to avoid
-    // reusing one idempotency key with two different request bodies.
-    this.lastFingerprint.set(null);
+    // PATIENT_SELECTION_REQUIRED does not commit an appointment. The retry is
+    // still the same receptionist intent, so keep its idempotency key while
+    // supplementing the confirmed patientId required by the backend.
     this.submitBooking();
   }
 
@@ -231,5 +252,27 @@ export class WalkinBookingPage {
     this.currentIdempotencyKey.set(null);
     this.lastIntent.set(null);
     this.resetRequested.emit();
+  }
+
+  private applyDraftSelection(): void {
+    const draft = this.pendingDraft;
+    if (!draft) {
+      return;
+    }
+
+    const doctor = this.doctorsState().find(
+      (item) => item.doctorId === draft.doctorId,
+    );
+    const slot = doctor?.slots.find(
+      (item) => item.scheduleId === draft.scheduleId,
+    );
+
+    if (doctor) {
+      this.chooseDoctor(doctor.doctorId);
+    }
+    if (slot) {
+      this.chooseSlot(slot.scheduleId);
+      this.pendingDraft = null;
+    }
   }
 }

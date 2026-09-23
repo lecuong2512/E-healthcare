@@ -1,5 +1,6 @@
 import {
   AppointmentStatus,
+  CounterPaymentMethod,
   Gender,
   PaymentStatus,
 } from '@shared/enums';
@@ -33,6 +34,7 @@ export interface ReceptionAppointmentViewModel {
 
 export interface CounterPaymentIntent {
   readonly appointmentId: string;
+  readonly method: CounterPaymentMethod;
   readonly amountTendered: number;
 }
 
@@ -100,6 +102,7 @@ export interface WalkInBookingIntent {
   readonly birthYear: number;
   readonly gender: Gender;
   readonly reasonForVisit: string;
+  readonly paymentMethod: CounterPaymentMethod;
   readonly amountTendered: number;
   readonly patientId?: string;
 }
