@@ -2,6 +2,8 @@ import {
   Controller,
   Body,
   Headers,
+  HttpCode,
+  HttpStatus,
   Get,
   Param,
   ParseUUIDPipe,
@@ -27,6 +29,8 @@ import { WalkInDto } from './dto/walk-in.dto';
 import { ReceptionService } from './reception.service';
 import { WalkInService } from './walk-in.service';
 import { receptionAuditContext } from './reception-audit.service';
+import { CheckInQrService } from './check-in-qr.service';
+import { CheckInQrDto } from './dto/check-in-qr.dto';
 
 @Controller('reception')
 @Roles(Role.RECEPTIONIST)
@@ -35,6 +39,7 @@ export class ReceptionController {
     private readonly service: ReceptionService,
     private readonly payments: CounterPaymentService,
     private readonly walkIn: WalkInService,
+    private readonly qr: CheckInQrService,
   ) {}
 
   @Get('appointments/lookup')
@@ -43,6 +48,23 @@ export class ReceptionController {
     @Req() request: AuthenticatedRequest,
   ): Promise<ReceptionAppointment[]> {
     return this.service.lookup(query, receptionAuditContext(request));
+  }
+
+  @Post('qr/lookup')
+  @HttpCode(HttpStatus.OK)
+  lookupByQr(
+    @Body() dto: CheckInQrDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ReceptionAppointment> {
+    return this.qr.lookup(dto.qrToken, receptionAuditContext(request));
+  }
+
+  @Post('qr/check-in')
+  checkInByQr(
+    @Body() dto: CheckInQrDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CheckInResponse> {
+    return this.qr.checkIn(dto.qrToken, receptionAuditContext(request));
   }
 
   @Post('appointments/:appointmentId/check-in')
