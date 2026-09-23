@@ -150,12 +150,12 @@ Việc dồn các task bổ sung vào Sprint 3 giúp:
 - **Thành viên phụ trách:** **Lê Việt Cường**
 - **Thời lượng dự kiến:** 2 ngày (23/09 - 24/09)
 - **Checklist chi tiết:**
-  - [ ] Tích hợp BullMQ & Redis connection pool vào NestJS server.
-  - [ ] Tách biệt các hàng đợi xử lý ngầm (Queue Workers):
+  - [x] Tích hợp BullMQ & Redis connection pool vào NestJS server.
+  - [x] Tách biệt các hàng đợi xử lý ngầm (Queue Workers):
     - `email-queue`: Gửi email xác nhận đặt lịch, email kích hoạt tài khoản, email nhắc hẹn trước 24h.
     - `sms-queue`: Gửi mã OTP xác thực, SMS nhắc hẹn trước 2h.
     - `pdf-queue`: Sinh đơn thuốc điện tử và hồ sơ bệnh án định dạng PDF có mã QR.
-  - [ ] Cron Job quét tự động:
+  - [x] Cron Job quét tự động:
     - Quét lịch hẹn `CONFIRMED` quá 30 phút mà bệnh nhân không check-in quầy -> tự động đánh dấu `NO_SHOW` vào cuối ngày (Section 5.2).
     - Quét dọn dẹp các slot giữ chỗ mồ côi (nếu xảy ra lỗi kết nối mạng bất thường).
 
