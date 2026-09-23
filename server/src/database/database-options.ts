@@ -23,6 +23,10 @@ import { DoctorEntity } from "./entities/doctor.entity";
 import { DoctorScheduleEntity } from "./entities/doctor-schedule.entity";
 import { AppointmentEntity } from "./entities/appointment.entity";
 
+import { MedicalRecordEntity } from "./entities/medical-record.entity";
+import { PrescriptionEntity } from "./entities/prescription.entity";
+import { PrescriptionItemEntity } from "./entities/prescription-item.entity";
+import { AddEmrPrescriptionTables1790065218000 } from "./migrations/1790065218000-add-emr-prescription-tables";
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -42,6 +46,9 @@ export function createDataSource(url: string): DataSource {
       DoctorEntity,
       DoctorScheduleEntity,
       AppointmentEntity,
+      MedicalRecordEntity,
+      PrescriptionEntity,
+      PrescriptionItemEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -54,6 +61,7 @@ export function createDataSource(url: string): DataSource {
       AllowRegistrationWithBothContacts1789479000000,
       AddSrsAuth03PhrFields1789560000000,
       AddDoctorScheduleAndSearchIndexes1789565400000,
+      AddEmrPrescriptionTables1790065218000,
     ],
   });
 }
