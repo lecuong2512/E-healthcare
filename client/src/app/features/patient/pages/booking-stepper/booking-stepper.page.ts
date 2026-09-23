@@ -134,6 +134,14 @@ export class BookingStepperPage implements OnDestroy {
     { id: 'cash',     label: 'Tiền mặt tại viện', icon: '💵' , iconPath: null},
   ];
 
+  readonly voucherCode = signal('');
+  readonly appliedVoucher = signal<{ code: string; discount: number } | null>(null);
+  readonly voucherMessage = signal<string | null>(null);
+  readonly vouchers = [
+    { code: 'WELCOME50', label: 'Giảm 50.000đ cho lần đầu đặt lịch', discount: 50000 },
+    { code: 'HEALTH10', label: 'Giảm 10% phí khám', discountRate: 0.1 },
+  ];
+
   // ─── Countdown timer ─────────────────────────────────────
   readonly countdownSeconds = signal<number>(TOTAL_SECONDS);
   readonly loading = signal(false);
@@ -245,6 +253,38 @@ export class BookingStepperPage implements OnDestroy {
   selectPayment(id: string) {
     this.paymentMethod.set(id);
   }
+
+  applyVoucher(code = this.voucherCode()) {
+    const normalizedCode = code.trim().toUpperCase();
+    const voucher = this.vouchers.find(item => item.code === normalizedCode);
+
+    if (!voucher) {
+      this.appliedVoucher.set(null);
+      this.voucherMessage.set('Mã voucher không hợp lệ hoặc đã hết hạn.');
+      return;
+    }
+
+    const fee = this.selectedDoctor()?.fee ?? 0;
+    const discount = voucher.discount ?? Math.round(fee * (voucher.discountRate ?? 0));
+    this.voucherCode.set(normalizedCode);
+    this.appliedVoucher.set({ code: normalizedCode, discount: Math.min(discount, fee) });
+    this.voucherMessage.set(`Đã áp dụng mã ${normalizedCode}.`);
+  }
+
+  selectVoucher(code: string) {
+    this.voucherCode.set(code);
+    this.applyVoucher(code);
+  }
+
+  removeVoucher() {
+    this.voucherCode.set('');
+    this.appliedVoucher.set(null);
+    this.voucherMessage.set(null);
+  }
+
+  readonly bookingFee = computed(() => this.selectedDoctor()?.fee ?? 0);
+  readonly discountAmount = computed(() => this.appliedVoucher()?.discount ?? 0);
+  readonly payableAmount = computed(() => Math.max(0, this.bookingFee() - this.discountAmount()));
 
   submitBooking() {
     if (this.selectedSlotId() === null || this.patientForm.invalid) return;

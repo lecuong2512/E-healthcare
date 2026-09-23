@@ -65,6 +65,23 @@ describe('BookingStepperPage', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/patient/payment-qr', 'momo']);
   });
 
+  it('applies a voucher and recalculates the payable amount', () => {
+    component.selectedDoctorId.set(component.doctors[0].id);
+
+    component.selectVoucher('WELCOME50');
+
+    expect(component.appliedVoucher()?.code).toBe('WELCOME50');
+    expect(component.discountAmount()).toBe(50000);
+    expect(component.payableAmount()).toBe(300000);
+  });
+
+  it('rejects an unknown voucher', () => {
+    component.selectVoucher('UNKNOWN');
+
+    expect(component.appliedVoucher()).toBeNull();
+    expect(component.voucherMessage()).toContain('không hợp lệ');
+  });
+
   it('rejects oversized upload files', () => {
     const input = document.createElement('input');
     Object.defineProperty(input, 'files', {
