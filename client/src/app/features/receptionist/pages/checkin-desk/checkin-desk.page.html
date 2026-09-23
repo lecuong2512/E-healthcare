@@ -1,351 +1,507 @@
-<main class="min-h-dvh bg-slate-50 p-4 text-slate-900 sm:p-6 lg:p-8">
-  <div class="mx-auto max-w-[1500px]">
-    <header class="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-      <div>
-        <p class="mb-1 text-sm font-bold uppercase tracking-widest text-sky-700">
-          Quầy lễ tân
-        </p>
-        <h1 class="text-2xl font-bold sm:text-3xl">Tiếp đón và check-in</h1>
-        <p class="mt-2 text-slate-600">
-          Tra cứu lịch hẹn, xác nhận thanh toán và cấp số thứ tự khám.
-        </p>
-      </div>
-      <a
-        routerLink="/receptionist/walkin"
-        class="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white hover:bg-emerald-700 focus-visible:outline focus-visible:outline-4 focus-visible:outline-emerald-200"
-      >
-        + Tiếp đón bệnh nhân vãng lai
-      </a>
-    </header>
-
-    <section
-      class="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-      aria-labelledby="queue-summary-title"
+<div class="reception-shell flex min-h-dvh flex-col bg-slate-50 text-slate-900">
+  <header class="h-14 shrink-0 border-b border-slate-200 bg-white">
+    <div
+      class="mx-auto flex h-full max-w-[1280px] items-center justify-between px-4 sm:px-6"
     >
-      <div>
-        <div class="flex flex-wrap items-center gap-2">
-          <h2 id="queue-summary-title" class="font-bold">Hàng đợi tại quầy</h2>
-          <span
-            class="queue-connection"
-            [attr.data-state]="queueConnectionState"
-            role="status"
-          >
-            <span aria-hidden="true"></span>{{ queueConnectionLabel() }}
-          </span>
-        </div>
-        @if (queueSummary) {
-          <dl class="mt-3 flex flex-wrap gap-x-8 gap-y-2 text-sm">
-            <div><dt class="text-slate-500">Đang chờ</dt><dd class="text-lg font-bold">{{ queueSummary.waitingCount }}</dd></div>
-            <div><dt class="text-slate-500">Đang khám</dt><dd class="text-lg font-bold">{{ queueSummary.inConsultationCount }}</dd></div>
-            <div><dt class="text-slate-500">Số vừa cấp</dt><dd class="text-lg font-bold">{{ queueSummary.lastIssuedQueueNumber ?? '—' }}</dd></div>
-          </dl>
-          <p class="mt-2 text-xs text-slate-500">Cập nhật {{ queueSummary.updatedAtLabel }}</p>
-        } @else {
-          <p class="mt-2 text-sm text-slate-500">Đang chờ snapshot hàng đợi từ hệ thống.</p>
-        }
+      <div class="flex items-center gap-2" aria-label="E-Healthcare Medical">
+        <img
+          src="assets/figma/reception-logo.png"
+          alt=""
+          class="h-8 w-8 rounded-lg object-contain"
+        />
+        <span class="text-base font-semibold leading-6 text-slate-900">
+          E-Healthcare
+        </span>
+        <span
+          class="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium leading-4 text-sky-600"
+        >
+          Medical
+        </span>
       </div>
-      <button
-        type="button"
-        class="min-h-11 shrink-0 rounded-xl border border-slate-300 px-4 font-semibold hover:bg-slate-50"
-        (click)="queueRefreshRequested.emit()"
+      <span
+        class="grid h-8 w-8 place-content-center rounded-full bg-sky-600 text-sm font-semibold leading-5 text-white"
+        aria-label="Tài khoản lễ tân"
       >
-        Đồng bộ hàng đợi
-      </button>
-    </section>
+        TN
+      </span>
+    </div>
+  </header>
 
-    <div class="grid gap-6 xl:grid-cols-[minmax(22rem,0.9fr)_minmax(0,1.5fr)]">
-      <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="lookup-title">
-        <div class="mb-5">
-          <h2 id="lookup-title" class="text-lg font-bold">Tra cứu lịch hẹn</h2>
-          <p class="mt-1 text-sm text-slate-600">
-            Mã QR chỉ được sử dụng để tra cứu và không được lưu trên thiết bị.
-          </p>
-        </div>
+  <main class="flex-1">
+    <div class="mx-auto max-w-[1280px] p-4 sm:p-6">
+      <header class="mb-5">
+        <h1 class="text-lg font-semibold leading-7 text-slate-900">
+          Quầy lễ tân — Check-in &amp; Đặt lịch trực tiếp
+        </h1>
+        <p class="pt-0.5 text-xs leading-4 text-slate-500">
+          SRS-REC-01 · SRS-REC-02
+        </p>
+      </header>
 
-        <div class="mb-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="Phương thức tra cứu">
-          <button
-            type="button"
-            role="tab"
-            class="min-h-11 rounded-lg px-3 font-semibold"
-            [class.bg-white]="lookupMode() === 'QR'"
-            [class.text-sky-700]="lookupMode() === 'QR'"
-            [attr.aria-selected]="lookupMode() === 'QR'"
-            (click)="setLookupMode('QR')"
+      <div class="grid items-start gap-5 lg:grid-cols-2">
+        <section
+          class="figma-card p-4"
+          aria-labelledby="qr-checkin-title"
+        >
+          <h2
+            id="qr-checkin-title"
+            class="text-sm font-semibold leading-5 text-slate-900"
           >
-            Quét QR
-          </button>
-          <button
-            type="button"
-            role="tab"
-            class="min-h-11 rounded-lg px-3 font-semibold"
-            [class.bg-white]="lookupMode() === 'MANUAL'"
-            [class.text-sky-700]="lookupMode() === 'MANUAL'"
-            [attr.aria-selected]="lookupMode() === 'MANUAL'"
-            (click)="setLookupMode('MANUAL')"
-          >
-            Tra cứu thủ công
-          </button>
-        </div>
+            Quét mã QR Check-in
+          </h2>
 
-        @if (lookupMode() === 'QR') {
-          <app-qr-scanner (scanned)="handleQrScanned($event)" />
-        } @else {
-          <form (ngSubmit)="submitManualLookup()" class="space-y-4">
-            <fieldset>
-              <legend class="mb-2 text-sm font-semibold">Tìm kiếm theo</legend>
-              <div class="grid grid-cols-2 gap-2">
-                <label class="lookup-choice">
-                  <input
-                    type="radio"
-                    name="lookupKind"
-                    value="APPOINTMENT_CODE"
-                    [checked]="manualLookupKind() === 'APPOINTMENT_CODE'"
-                    (change)="setManualLookupKind('APPOINTMENT_CODE')"
-                  />
-                  Mã lịch hẹn
-                </label>
-                <label class="lookup-choice">
-                  <input
-                    type="radio"
-                    name="lookupKind"
-                    value="PHONE"
-                    [checked]="manualLookupKind() === 'PHONE'"
-                    (change)="setManualLookupKind('PHONE')"
-                  />
-                  Số điện thoại
-                </label>
-              </div>
-            </fieldset>
+          <div class="mx-auto mt-4 max-w-[260px]">
+            <app-qr-scanner
+              [compact]="true"
+              (scanned)="handleQrScanned($event)"
+            />
+          </div>
 
-            <label class="grid gap-1.5 text-sm font-semibold" for="manual-query">
-              {{
-                manualLookupKind() === 'PHONE'
-                  ? 'Số điện thoại bệnh nhân'
-                  : 'Mã lịch hẹn'
-              }}
+          <form (ngSubmit)="submitManualLookup()" class="mt-4">
+            <label
+              for="manual-query"
+              class="block text-xs font-medium leading-4 text-slate-500"
+            >
+              Hoặc nhập thủ công
+            </label>
+            <div class="mt-2 flex items-stretch gap-2">
               <input
                 id="manual-query"
                 type="text"
                 autocomplete="off"
                 maxlength="64"
                 [formControl]="manualQuery"
-                [placeholder]="
-                  manualLookupKind() === 'PHONE'
-                    ? 'Ví dụ: 0912345678'
-                    : 'Ví dụ: APT-260922-0001'
-                "
-                class="min-h-12 rounded-xl border border-slate-300 px-4 font-normal uppercase focus:border-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-100"
+                placeholder="SĐT hoặc mã lịch hẹn..."
+                class="figma-control min-w-0 flex-1"
               />
-            </label>
+              <button
+                type="submit"
+                class="figma-primary-button shrink-0 px-4"
+                [disabled]="loading"
+                [attr.aria-busy]="loading"
+              >
+                {{ loading ? 'Đang tra cứu…' : 'Tra cứu' }}
+              </button>
+            </div>
             @if (manualQuery.touched && manualQuery.invalid) {
-              <p class="text-sm font-medium text-red-700" role="alert">
+              <p class="mt-2 text-sm font-medium text-red-700" role="alert">
                 {{
                   manualQuery.hasError('phone')
                     ? 'Số điện thoại không đúng định dạng Việt Nam.'
-                    : 'Vui lòng nhập thông tin cần tra cứu.'
+                    : 'Vui lòng nhập số điện thoại hoặc mã lịch hẹn.'
                 }}
               </p>
             }
+          </form>
+        </section>
+
+        <section
+          class="figma-card p-4"
+          aria-labelledby="walkin-title"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <h2
+              id="walkin-title"
+              class="text-sm font-semibold leading-5 text-slate-900"
+            >
+              Đặt lịch trực tiếp (Walk-in)
+            </h2>
+            <span
+              class="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium leading-4 text-sky-600"
+            >
+              Không cần hẹn trước
+            </span>
+          </div>
+
+          <form (ngSubmit)="submitWalkInDraft()" class="mt-4 space-y-3">
+            <label class="figma-field">
+              <span>Họ và tên bệnh nhân</span>
+              <input
+                type="text"
+                autocomplete="name"
+                maxlength="120"
+                [formControl]="walkInFullName"
+                placeholder="Nguyễn Thị C"
+                class="figma-control"
+              />
+            </label>
+
+            <label class="figma-field">
+              <span>Số điện thoại</span>
+              <input
+                type="tel"
+                autocomplete="tel"
+                [formControl]="walkInPhone"
+                placeholder="09xx xxx xxx"
+                class="figma-control"
+              />
+            </label>
+
+            <label class="figma-field">
+              <span>Chuyên khoa</span>
+              <select
+                class="figma-control"
+                [formControl]="walkInSpecialty"
+                (change)="changeWalkInSpecialty($event)"
+              >
+                <option value="">Chọn chuyên khoa</option>
+                @for (
+                  specialty of walkInSpecialtyOptions();
+                  track specialty
+                ) {
+                  <option [value]="specialty">{{ specialty }}</option>
+                }
+              </select>
+            </label>
+
+            <label class="figma-field">
+              <span>Bác sĩ</span>
+              <select
+                class="figma-control"
+                [formControl]="walkInDoctorId"
+                (change)="changeWalkInDoctor($event)"
+              >
+                <option value="">Chọn bác sĩ</option>
+                @for (doctor of walkInDoctorOptions(); track doctor.doctorId) {
+                  <option [value]="doctor.doctorId">
+                    {{ doctor.doctorName }}
+                  </option>
+                }
+              </select>
+            </label>
+
+            <label class="figma-field">
+              <span>Khung giờ gần nhất</span>
+              <select
+                class="figma-control"
+                [formControl]="walkInScheduleId"
+              >
+                <option value="">Chọn khung giờ</option>
+                @for (slot of walkInSlotOptions(); track slot.scheduleId) {
+                  <option [value]="slot.scheduleId">
+                    {{ slot.startTime }} – {{ slot.endTime }}
+                  </option>
+                }
+              </select>
+            </label>
+
+            @if (
+              walkInFullName.touched &&
+              (walkInFullName.invalid ||
+                walkInPhone.invalid ||
+                walkInSpecialty.invalid ||
+                walkInDoctorId.invalid ||
+                walkInScheduleId.invalid)
+            ) {
+              <p class="text-sm font-medium text-red-700" role="alert">
+                Vui lòng nhập đầy đủ và kiểm tra thông tin đặt lịch.
+              </p>
+            }
+
             <button
               type="submit"
-              class="min-h-12 w-full rounded-xl bg-sky-700 px-5 font-semibold text-white hover:bg-sky-800 disabled:opacity-50"
-              [disabled]="loading"
-              [attr.aria-busy]="loading"
+              class="figma-primary-button w-full"
+              [disabled]="walkInPending"
+              [attr.aria-busy]="walkInPending"
             >
-              {{ loading ? 'Đang tra cứu…' : 'Tra cứu lịch hẹn' }}
+              {{
+                walkInPending
+                  ? 'Đang chuẩn bị lịch…'
+                  : 'Tạo lịch trực tiếp & Cấp số'
+              }}
             </button>
           </form>
-        }
+        </section>
+      </div>
 
-        @if (errorMessage) {
-          <div class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800" role="alert">
-            <strong>Không thể xử lý yêu cầu.</strong>
-            <p class="mt-1">{{ errorMessage }}</p>
-          </div>
-        }
-      </section>
-
-      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm" aria-labelledby="appointment-title">
-        <div class="border-b border-slate-200 px-4 py-5 sm:px-6">
-          <h2 id="appointment-title" class="text-lg font-bold">
-            Thông tin lịch khám
-          </h2>
-          <p class="mt-1 text-sm text-slate-600">
-            Kiểm tra đúng bệnh nhân và lịch khám trước khi thao tác.
-          </p>
-        </div>
-
-        @if (loading) {
-          <div class="grid min-h-80 place-content-center text-center text-slate-600" role="status">
-            <span class="mx-auto mb-3 h-9 w-9 animate-spin rounded-full border-4 border-sky-200 border-t-sky-700"></span>
-            Đang tải thông tin lịch hẹn…
-          </div>
-        } @else if (appointments.length > 1 && !selectedAppointment) {
-          <div class="p-4 sm:p-6">
-            <p class="mb-4 font-semibold">
-              Tìm thấy {{ appointments.length }} lịch khám hôm nay. Hãy chọn đúng lịch:
+      @if (
+        loading ||
+        appointments.length ||
+        selectedAppointment ||
+        errorMessage
+      ) {
+        <section
+          class="figma-card mt-6 overflow-hidden"
+          aria-labelledby="appointment-title"
+        >
+          <div class="border-b border-slate-200 px-5 py-4 sm:px-6">
+            <h2 id="appointment-title" class="text-lg font-bold">
+              Thông tin lịch khám
+            </h2>
+            <p class="mt-1 text-sm text-slate-600">
+              Kiểm tra đúng bệnh nhân và lịch khám trước khi thao tác.
             </p>
-            <div class="grid gap-3">
-              @for (appointment of appointments; track appointment.id) {
-                <button
-                  type="button"
-                  class="grid min-h-20 gap-2 rounded-xl border border-slate-200 p-4 text-left hover:border-sky-500 hover:bg-sky-50 sm:grid-cols-[1fr_auto]"
-                  (click)="selectAppointment(appointment)"
-                >
-                  <span>
-                    <strong class="block">{{ appointment.patientName }}</strong>
-                    <small class="text-slate-600">
-                      {{ appointment.appointmentCode }} ·
-                      {{ appointment.startTime }}–{{ appointment.endTime }}
-                    </small>
-                  </span>
-                  <span class="font-semibold text-sky-700">
-                    {{ appointment.doctorName }}
-                  </span>
-                </button>
-              }
-            </div>
           </div>
-        } @else if (selectedAppointment) {
-          <div class="p-4 sm:p-6">
-            <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p class="text-sm text-slate-500">Mã lịch hẹn</p>
-                <p class="font-mono text-lg font-bold text-sky-800">
-                  {{ selectedAppointment.appointmentCode }}
-                </p>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <span class="status-badge">
-                  {{ statusLabel(selectedAppointment.status) }}
-                </span>
-                <span
-                  class="status-badge"
-                  [class.status-badge--success]="
-                    selectedAppointment.paymentStatus === PaymentStatus.PAID
-                  "
-                >
-                  {{ paymentLabel(selectedAppointment.paymentStatus) }}
-                </span>
-              </div>
+
+          @if (errorMessage) {
+            <div
+              class="m-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+              role="alert"
+            >
+              <strong>Không thể xử lý yêu cầu.</strong>
+              <p class="mt-1">{{ errorMessage }}</p>
             </div>
+          }
 
-            <dl class="detail-grid">
-              <div>
-                <dt>Bệnh nhân</dt>
-                <dd>{{ selectedAppointment.patientName }}</dd>
-                <small>{{ selectedAppointment.patientPhone || 'Không có số điện thoại' }}</small>
-              </div>
-              <div>
-                <dt>Bác sĩ phụ trách</dt>
-                <dd>{{ selectedAppointment.doctorName }}</dd>
-                <small>{{ selectedAppointment.specialtyName }}</small>
-              </div>
-              <div>
-                <dt>Thời gian khám</dt>
-                <dd>
-                  {{ selectedAppointment.startTime }}–{{ selectedAppointment.endTime }}
-                </dd>
-                <small>{{ selectedAppointment.date }}</small>
-              </div>
-              <div>
-                <dt>Phòng khám</dt>
-                <dd>{{ selectedAppointment.roomNumber }}</dd>
-              </div>
-            </dl>
-
-            @if (selectedAppointment.status === AppointmentStatus.CHECKED_IN) {
-              <div class="my-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center text-emerald-900" role="status">
-                <p class="font-semibold">Bệnh nhân đã check-in thành công</p>
-                <p class="mt-2 text-sm">Số thứ tự</p>
-                <strong class="text-6xl">{{ selectedAppointment.queueNumber }}</strong>
-              </div>
-            } @else {
-              @if (selectedAppointment.requiresPayment) {
-                <section class="my-5 rounded-2xl border border-amber-200 bg-amber-50 p-4" aria-labelledby="payment-title">
-                  <h3 id="payment-title" class="font-bold text-amber-950">
-                    Thu tiền tại quầy
-                  </h3>
-                  <div class="mt-3 grid gap-4 sm:grid-cols-3">
-                    <div>
-                      <span class="text-sm text-amber-800">Cần thanh toán</span>
-                      <strong class="block text-lg">
-                        {{ selectedAppointment.totalAmount | currencyVnd }}
-                      </strong>
-                    </div>
-                    <label class="grid gap-1 text-sm font-semibold">
-                      Tiền khách đưa
-                      <input
-                        type="number"
-                        inputmode="numeric"
-                        min="0"
-                        step="1000"
-                        class="min-h-11 rounded-lg border border-amber-300 bg-white px-3"
-                        [value]="cashReceived()"
-                        (input)="updateCashReceived($event)"
-                      />
-                    </label>
-                    <div>
-                      <span class="text-sm text-amber-800">Tiền thừa</span>
-                      <strong class="block text-lg">
-                        {{ changeAmount() | currencyVnd }}
-                      </strong>
-                    </div>
-                  </div>
+          @if (loading) {
+            <div
+              class="grid min-h-64 place-content-center text-center text-slate-600"
+              role="status"
+            >
+              <span
+                class="mx-auto mb-3 h-9 w-9 animate-spin rounded-full border-4 border-sky-200 border-t-sky-700"
+              ></span>
+              Đang tải thông tin lịch hẹn…
+            </div>
+          } @else if (appointments.length > 1 && !selectedAppointment) {
+            <div class="p-5 sm:p-6">
+              <p class="mb-4 font-semibold">
+                Tìm thấy {{ appointments.length }} lịch khám hôm nay. Hãy chọn
+                đúng lịch:
+              </p>
+              <div class="grid gap-3">
+                @for (appointment of appointments; track appointment.id) {
                   <button
                     type="button"
-                    class="mt-4 min-h-11 rounded-lg bg-amber-600 px-5 font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
-                    [disabled]="
-                      cashReceived() < selectedAppointment.totalAmount ||
-                      paymentPending
-                    "
-                    (click)="collectPayment()"
+                    class="grid min-h-20 gap-2 rounded-xl border border-slate-200 p-4 text-left hover:border-sky-500 hover:bg-sky-50 sm:grid-cols-[1fr_auto]"
+                    (click)="selectAppointment(appointment)"
                   >
-                    {{ paymentPending ? 'Đang xác nhận…' : 'Xác nhận đã thu tiền' }}
+                    <span>
+                      <strong class="block">{{ appointment.patientName }}</strong>
+                      <small class="text-slate-600">
+                        {{ appointment.appointmentCode }} ·
+                        {{ appointment.startTime }}–{{ appointment.endTime }}
+                      </small>
+                    </span>
+                    <span class="font-semibold text-sky-700">
+                      {{ appointment.doctorName }}
+                    </span>
                   </button>
-                  <p class="mt-2 text-xs text-amber-900">
-                    Không tự động gửi lại giao dịch khi kết nối gián đoạn; cần tải lại lịch hẹn trước.
+                }
+              </div>
+            </div>
+          } @else if (selectedAppointment) {
+            <div class="p-5 sm:p-6">
+              <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p class="text-sm text-slate-500">Mã lịch hẹn</p>
+                  <p class="font-mono text-lg font-bold text-sky-800">
+                    {{ selectedAppointment.appointmentCode }}
                   </p>
-                </section>
-              }
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <span class="status-badge">
+                    {{ statusLabel(selectedAppointment.status) }}
+                  </span>
+                  <span
+                    class="status-badge"
+                    [class.status-badge--success]="
+                      selectedAppointment.paymentStatus === PaymentStatus.PAID
+                    "
+                  >
+                    {{ paymentLabel(selectedAppointment.paymentStatus) }}
+                  </span>
+                </div>
+              </div>
 
-              @if (selectedAppointment.blockedReason) {
-                <div class="my-4 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800" role="alert">
-                  <strong>Chưa thể check-in:</strong>
-                  {{ selectedAppointment.blockedReason }}
+              <dl class="detail-grid">
+                <div>
+                  <dt>Bệnh nhân</dt>
+                  <dd>{{ selectedAppointment.patientName }}</dd>
+                  <small>
+                    {{
+                      selectedAppointment.patientPhone ||
+                        'Không có số điện thoại'
+                    }}
+                  </small>
+                </div>
+                <div>
+                  <dt>Bác sĩ phụ trách</dt>
+                  <dd>{{ selectedAppointment.doctorName }}</dd>
+                  <small>{{ selectedAppointment.specialtyName }}</small>
+                </div>
+                <div>
+                  <dt>Thời gian khám</dt>
+                  <dd>
+                    {{ selectedAppointment.startTime }}–{{
+                      selectedAppointment.endTime
+                    }}
+                  </dd>
+                  <small>{{ selectedAppointment.date }}</small>
+                </div>
+                <div>
+                  <dt>Phòng khám</dt>
+                  <dd>{{ selectedAppointment.roomNumber }}</dd>
+                </div>
+              </dl>
+
+              @if (
+                selectedAppointment.status === AppointmentStatus.CHECKED_IN
+              ) {
+                <div
+                  class="my-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center text-emerald-900"
+                  role="status"
+                >
+                  <p class="font-semibold">
+                    Bệnh nhân đã check-in thành công
+                  </p>
+                  <p class="mt-2 text-sm">Số thứ tự</p>
+                  <strong class="text-6xl">
+                    {{ selectedAppointment.queueNumber }}
+                  </strong>
+                </div>
+              } @else {
+                @if (selectedAppointment.requiresPayment) {
+                  <section
+                    class="my-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"
+                    aria-labelledby="payment-title"
+                  >
+                    <h3 id="payment-title" class="font-bold text-amber-950">
+                      Thu tiền tại quầy
+                    </h3>
+                    <div class="mt-3 grid gap-4 sm:grid-cols-3">
+                      <div>
+                        <span class="text-sm text-amber-800">
+                          Cần thanh toán
+                        </span>
+                        <strong class="block text-lg">
+                          {{ selectedAppointment.totalAmount | currencyVnd }}
+                        </strong>
+                      </div>
+                      <label class="grid gap-1 text-sm font-semibold">
+                        Tiền khách đưa
+                        <input
+                          type="number"
+                          inputmode="numeric"
+                          min="0"
+                          step="1000"
+                          class="min-h-11 rounded-lg border border-amber-300 bg-white px-3"
+                          [value]="cashReceived()"
+                          (input)="updateCashReceived($event)"
+                        />
+                      </label>
+                      <div>
+                        <span class="text-sm text-amber-800">Tiền thừa</span>
+                        <strong class="block text-lg">
+                          {{ changeAmount() | currencyVnd }}
+                        </strong>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      class="mt-4 min-h-11 rounded-lg bg-amber-600 px-5 font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                      [disabled]="
+                        cashReceived() < selectedAppointment.totalAmount ||
+                        paymentPending
+                      "
+                      (click)="collectPayment()"
+                    >
+                      {{
+                        paymentPending
+                          ? 'Đang xác nhận…'
+                          : 'Xác nhận đã thu tiền'
+                      }}
+                    </button>
+                  </section>
+                }
+
+                @if (selectedAppointment.blockedReason) {
+                  <div
+                    class="my-4 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800"
+                    role="alert"
+                  >
+                    <strong>Chưa thể check-in:</strong>
+                    {{ selectedAppointment.blockedReason }}
+                  </div>
+                }
+
+                <div
+                  class="mt-6 flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-5"
+                >
+                  <button
+                    type="button"
+                    class="min-h-11 rounded-xl border border-slate-300 px-5 font-semibold hover:bg-slate-50"
+                    (click)="refreshRequested.emit(selectedAppointment.id)"
+                  >
+                    Tải lại trạng thái
+                  </button>
+                  <button
+                    type="button"
+                    class="min-h-11 rounded-xl bg-sky-600 px-6 font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    [disabled]="
+                      !selectedAppointment.canCheckIn || checkInPending
+                    "
+                    [attr.aria-busy]="checkInPending"
+                    (click)="checkIn()"
+                  >
+                    {{
+                      checkInPending
+                        ? 'Đang check-in…'
+                        : 'Xác nhận check-in'
+                    }}
+                  </button>
                 </div>
               }
+            </div>
+          }
+        </section>
+      }
 
-              <div class="mt-6 flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-5">
-                <button
-                  type="button"
-                  class="min-h-11 rounded-xl border border-slate-300 px-5 font-semibold hover:bg-slate-50"
-                  (click)="refreshRequested.emit(selectedAppointment.id)"
-                >
-                  Tải lại trạng thái
-                </button>
-                <button
-                  type="button"
-                  class="min-h-11 rounded-xl bg-emerald-600 px-6 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  [disabled]="!selectedAppointment.canCheckIn || checkInPending"
-                  [attr.aria-busy]="checkInPending"
-                  (click)="checkIn()"
-                >
-                  {{ checkInPending ? 'Đang check-in…' : 'Xác nhận check-in' }}
-                </button>
-              </div>
+      @if (queueSummary || queueConnectionState !== 'disconnected') {
+        <section
+          class="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-5 py-4 text-sm"
+          aria-labelledby="queue-summary-title"
+        >
+          <div class="flex flex-wrap items-center gap-4">
+            <h2 id="queue-summary-title" class="font-bold">
+              Hàng đợi tại quầy
+            </h2>
+            <span
+              class="queue-connection"
+              [attr.data-state]="queueConnectionState"
+              role="status"
+            >
+              <span aria-hidden="true"></span>{{ queueConnectionLabel() }}
+            </span>
+            @if (queueSummary) {
+              <span class="text-slate-500">
+                Đang chờ
+                <strong class="text-slate-900">
+                  {{ queueSummary.waitingCount }}
+                </strong>
+              </span>
+              <span class="text-slate-500">
+                Đang khám
+                <strong class="text-slate-900">
+                  {{ queueSummary.inConsultationCount }}
+                </strong>
+              </span>
+              <span class="text-slate-500">
+                Số vừa cấp
+                <strong class="text-slate-900">
+                  {{ queueSummary.lastIssuedQueueNumber ?? '—' }}
+                </strong>
+              </span>
             }
           </div>
-        } @else {
-          <div class="grid min-h-80 place-content-center p-8 text-center text-slate-500">
-            <span class="mx-auto mb-3 grid h-16 w-16 place-content-center rounded-2xl bg-sky-50 text-3xl" aria-hidden="true">⌕</span>
-            <p class="font-semibold text-slate-700">Chưa có lịch hẹn được chọn</p>
-            <p class="mt-1 max-w-sm text-sm">
-              Quét QR hoặc tra cứu thủ công để bắt đầu quy trình tiếp đón.
-            </p>
-          </div>
-        }
-      </section>
+          <button
+            type="button"
+            class="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold hover:bg-slate-50"
+            (click)="queueRefreshRequested.emit()"
+          >
+            Đồng bộ hàng đợi
+          </button>
+        </section>
+      }
     </div>
-  </div>
-</main>
+  </main>
+
+  <footer class="border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
+    <div
+      class="mx-auto flex max-w-[1280px] items-center justify-between gap-4 text-xs leading-4 text-slate-400"
+    >
+      <span>E-Health Medical Portal</span>
+      <span>WCAG 2.1 Level AA · © 2026</span>
+    </div>
+  </footer>
+</div>
