@@ -6,6 +6,7 @@ import {
   EmailBookingConfirmationPayload,
   EmailAccountActivationPayload,
   EmailAppointmentReminder24hPayload,
+  EmailAppointmentCancellationPayload,
 } from '@shared/interfaces';
 import { EmailSenderService } from '../services/email-sender.service';
 
@@ -36,6 +37,12 @@ export class EmailProcessor extends WorkerHost {
       case JobName.EMAIL_SEND_REMINDER_24H: {
         const payload = job.data as EmailAppointmentReminder24hPayload;
         await this.emailSenderService.sendAppointmentReminder24h(payload);
+        return { success: true, appointmentCode: payload.appointmentCode };
+      }
+
+      case JobName.EMAIL_SEND_APPOINTMENT_CANCELLATION: {
+        const payload = job.data as EmailAppointmentCancellationPayload;
+        await this.emailSenderService.sendAppointmentCancellation(payload);
         return { success: true, appointmentCode: payload.appointmentCode };
       }
 

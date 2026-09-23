@@ -113,7 +113,7 @@ describe('AppointmentCronService Schedulers (Section 5.2, Section 7.1, SRS-PAT-0
 
       (mockAppointmentRepo.find as jest.Mock).mockResolvedValue(appointments);
 
-      const referenceTime = new Date('2026-09-23T09:15:00');
+      const referenceTime = new Date('2026-09-23T02:15:00.000Z');
       const count = await cronService.scanAndMarkNoShow(referenceTime);
 
       expect(count).toBe(1);

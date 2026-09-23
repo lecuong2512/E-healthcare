@@ -5,6 +5,7 @@ import { QueueName, JobName } from '@shared/enums';
 import {
   SmsOtpPayload,
   SmsAppointmentReminder2hPayload,
+  SmsAppointmentCancellationPayload,
 } from '@shared/interfaces';
 import { SmsSenderService } from '../services/sms-sender.service';
 
@@ -29,6 +30,12 @@ export class SmsProcessor extends WorkerHost {
       case JobName.SMS_SEND_REMINDER_2H: {
         const payload = job.data as SmsAppointmentReminder2hPayload;
         await this.smsSenderService.sendAppointmentReminder2h(payload);
+        return { success: true, appointmentCode: payload.appointmentCode };
+      }
+
+      case JobName.SMS_SEND_APPOINTMENT_CANCELLATION: {
+        const payload = job.data as SmsAppointmentCancellationPayload;
+        await this.smsSenderService.sendAppointmentCancellation(payload);
         return { success: true, appointmentCode: payload.appointmentCode };
       }
 

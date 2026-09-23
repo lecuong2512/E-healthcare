@@ -3,6 +3,7 @@ import { environment } from '../../../config/environment';
 import {
   SmsOtpPayload,
   SmsAppointmentReminder2hPayload,
+  SmsAppointmentCancellationPayload,
 } from '@shared/interfaces';
 
 @Injectable()
@@ -22,6 +23,13 @@ export class SmsSenderService {
     const message = `EHEALTH: Nhac hen quy khach ${payload.patientName} co ca kham luc ${payload.time}${room} voi BS ${payload.doctorName}. Ma hen: ${payload.appointmentCode}. Vui long chuan bi di chuyen va mang theo CCCD/ma QR.`;
 
     await this.dispatchSms(payload.phoneNumber, message, maskedPhone, 'REMINDER_2H');
+  }
+
+  async sendAppointmentCancellation(payload: SmsAppointmentCancellationPayload): Promise<void> {
+    const maskedPhone = this.maskPhoneNumber(payload.phoneNumber);
+    const refund = payload.refundAmount > 0 ? " Hoan " + payload.refundPercent + "%: " + payload.refundAmount.toLocaleString("vi-VN") + "d." : "";
+    const message = "EHEALTH: Xin loi, co so y te da huy lich #" + payload.appointmentCode + "." + refund + " Voucher giam 20%: " + payload.voucherCode + ".";
+    await this.dispatchSms(payload.phoneNumber, message, maskedPhone, "APPOINTMENT_CANCELLATION");
   }
 
   private async dispatchSms(

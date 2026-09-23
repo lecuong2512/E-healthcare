@@ -1,24 +1,16 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { AppointmentLifecycleService } from './appointment-lifecycle.service';
 
 @Injectable()
-export class AppointmentPaymentExpiryScheduler implements OnApplicationBootstrap, OnApplicationShutdown {
+export class AppointmentPaymentExpiryScheduler {
   private readonly logger = new Logger(AppointmentPaymentExpiryScheduler.name);
-  private timer?: NodeJS.Timeout;
   private running = false;
 
   constructor(private readonly lifecycle: AppointmentLifecycleService) {}
 
-  onApplicationBootstrap(): void {
-    this.timer = setInterval(() => void this.run(), 60_000);
-    void this.run();
-  }
-
-  onApplicationShutdown(): void {
-    if (this.timer) clearInterval(this.timer);
-  }
-
-  private async run(): Promise<void> {
+  @Cron('*/2 * * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
+  async expirePendingPayments(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {

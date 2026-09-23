@@ -8,6 +8,7 @@ import { CreateRegistrationOtpSendLimit1789477800000 } from "./migrations/178947
 import { CreateAuthSessionsAndGoogle1789478400000 } from "./migrations/1789478400000-create-auth-sessions-and-google";
 import { AllowRegistrationWithBothContacts1789479000000 } from "./migrations/1789479000000-allow-registration-with-both-contacts";
 import { AddDoctorScheduleAndSearchIndexes1789565400000 } from "./migrations/1789565400000-add-doctor-schedule-and-search-indexes";
+import { EnableUnaccentDoctorSearch1789707600000 } from './migrations/1789707600000-enable-unaccent-doctor-search';
 import {
   AuthSessionEntity,
   GoogleOAuthFlowEntity,
@@ -26,7 +27,6 @@ import { VoucherEntity } from './entities/voucher.entity';
 import { RefundRequestEntity } from './entities/refund-request.entity';
 import { AppointmentNotificationEntity } from './entities/appointment-notification.entity';
 import { AddAppointmentLifecycleAndVouchers1789800000000 } from './migrations/1789800000000-add-appointment-lifecycle-and-vouchers';
-import { AddCancelledByPatientStatus1789800600000 } from './migrations/1789800600000-add-cancelled-by-patient-status';
 import { AddClinicCancellationOutbox1789801200000 } from './migrations/1789801200000-add-clinic-cancellation-outbox';
 import { AddAppointmentCreatedAt1789801800000 } from './migrations/1789801800000-add-appointment-created-at';
 
@@ -71,8 +71,8 @@ export function createDataSource(url: string): DataSource {
       AllowRegistrationWithBothContacts1789479000000,
       AddSrsAuth03PhrFields1789560000000,
       AddDoctorScheduleAndSearchIndexes1789565400000,
+      EnableUnaccentDoctorSearch1789707600000,
       AddAppointmentLifecycleAndVouchers1789800000000,
-      AddCancelledByPatientStatus1789800600000,
       AddClinicCancellationOutbox1789801200000,
       AddAppointmentCreatedAt1789801800000,
       AddEmrPrescriptionTables1790065218000,

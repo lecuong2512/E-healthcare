@@ -63,7 +63,7 @@ export class AppointmentCronService {
 
       // Construct appointment start & end time
       // date format: 'YYYY-MM-DD', time format: 'HH:mm:ss' or 'HH:mm'
-      const apptEndDateTime = new Date(`${scheduleDate}T${endTime}`);
+      const apptEndDateTime = new Date(`${scheduleDate}T${endTime}+07:00`);
       if (isNaN(apptEndDateTime.getTime())) {
         continue;
       }
@@ -83,6 +83,11 @@ export class AppointmentCronService {
 
     this.logger.log(`scanAndMarkNoShow finished: ${count} appointments marked as NO_SHOW`);
     return count;
+  }
+
+  @Cron('59 23 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
+  async closeDayNoShowScan(): Promise<number> {
+    return this.scanAndMarkNoShow();
   }
 
   /**

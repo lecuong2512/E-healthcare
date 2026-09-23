@@ -6,8 +6,10 @@ import {
   EmailBookingConfirmationPayload,
   EmailAccountActivationPayload,
   EmailAppointmentReminder24hPayload,
+  EmailAppointmentCancellationPayload,
   SmsOtpPayload,
   SmsAppointmentReminder2hPayload,
+  SmsAppointmentCancellationPayload,
   PrescriptionPdfPayload,
   MedicalRecordPdfPayload,
 } from '@shared/interfaces';
@@ -59,6 +61,15 @@ export class NotificationProducerService {
     );
   }
 
+  async enqueueAppointmentCancellationEmail(payload: EmailAppointmentCancellationPayload) {
+    this.logger.log('Enqueuing appointment cancellation email for appt: ' + payload.appointmentCode);
+    return this.emailQueue.add(
+      JobName.EMAIL_SEND_APPOINTMENT_CANCELLATION,
+      payload,
+      DEFAULT_QUEUE_JOB_OPTIONS,
+    );
+  }
+
   async enqueueOtp(payload: SmsOtpPayload) {
     // Mask phone number for security in logs
     const masked = payload.phoneNumber ? `${payload.phoneNumber.slice(0, 3)}****${payload.phoneNumber.slice(-3)}` : '***';
@@ -77,6 +88,15 @@ export class NotificationProducerService {
     this.logger.log(`Enqueuing 2h reminder SMS for appt: ${payload.appointmentCode}`);
     return this.smsQueue.add(
       JobName.SMS_SEND_REMINDER_2H,
+      payload,
+      DEFAULT_QUEUE_JOB_OPTIONS,
+    );
+  }
+
+  async enqueueAppointmentCancellationSms(payload: SmsAppointmentCancellationPayload) {
+    this.logger.log('Enqueuing appointment cancellation SMS for appt: ' + payload.appointmentCode);
+    return this.smsQueue.add(
+      JobName.SMS_SEND_APPOINTMENT_CANCELLATION,
       payload,
       DEFAULT_QUEUE_JOB_OPTIONS,
     );
