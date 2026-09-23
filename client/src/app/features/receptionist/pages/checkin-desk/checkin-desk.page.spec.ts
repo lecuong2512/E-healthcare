@@ -2,7 +2,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { AppointmentStatus, PaymentStatus } from '@shared/enums';
-import { ReceptionAppointmentViewModel } from '../../models/reception-presentation.models';
+import {
+  ReceptionAppointmentViewModel,
+  WalkInDoctorViewModel,
+} from '../../models/reception-presentation.models';
 import { CheckinDeskPage } from './checkin-desk.page';
 
 const appointment: ReceptionAppointmentViewModel = {
@@ -25,6 +28,21 @@ const appointment: ReceptionAppointmentViewModel = {
   blockedReason: 'Cần hoàn tất thanh toán.',
 };
 
+const walkInDoctor: WalkInDoctorViewModel = {
+  doctorId: 'doctor-1',
+  doctorName: 'BS. Trần Minh Bình',
+  specialtyName: 'Tim mạch',
+  roomNumber: 'P.201',
+  consultationFee: 350_000,
+  slots: [
+    {
+      scheduleId: 'schedule-1',
+      startTime: '10:30',
+      endTime: '11:00',
+    },
+  ],
+};
+
 describe('CheckinDeskPage', () => {
   let fixture: ComponentFixture<CheckinDeskPage>;
   let component: CheckinDeskPage;
@@ -41,6 +59,17 @@ describe('CheckinDeskPage', () => {
   });
 
   afterEach(() => fixture.destroy());
+
+  it('renders the unified receptionist surface from the approved Figma frame', () => {
+    const content = (fixture.nativeElement as HTMLElement).textContent ?? '';
+
+    expect(content).toContain(
+      'Quầy lễ tân — Check-in & Đặt lịch trực tiếp',
+    );
+    expect(content).toContain('Quét mã QR Check-in');
+    expect(content).toContain('Đặt lịch trực tiếp (Walk-in)');
+    expect(content).toContain('SRS-REC-01 · SRS-REC-02');
+  });
 
   it('emits a signed QR lookup without exposing the token in the DOM', () => {
     const lookupSpy = jasmine.createSpy('lookup');
@@ -73,6 +102,27 @@ describe('CheckinDeskPage', () => {
     expect(lookupSpy).toHaveBeenCalledWith({
       kind: 'PHONE',
       value: '0912345678',
+    });
+  });
+
+  it('emits a validated walk-in draft for the selected doctor and slot', () => {
+    const walkInSpy = jasmine.createSpy('walkInDraft');
+    component.walkInDraftRequested.subscribe(walkInSpy);
+    component.walkInDoctors = [walkInDoctor];
+    component.walkInFullName.setValue('Nguyễn Thị C');
+    component.walkInPhone.setValue('0912345678');
+    component.walkInSpecialty.setValue('Tim mạch');
+    component.walkInDoctorId.setValue('doctor-1');
+    component.walkInScheduleId.setValue('schedule-1');
+
+    component.submitWalkInDraft();
+
+    expect(walkInSpy).toHaveBeenCalledOnceWith({
+      fullName: 'Nguyễn Thị C',
+      phone: '0912345678',
+      specialtyName: 'Tim mạch',
+      doctorId: 'doctor-1',
+      scheduleId: 'schedule-1',
     });
   });
 

@@ -1,59 +1,117 @@
-<section class="qr-scanner" aria-labelledby="qr-scanner-title">
-  <div class="qr-scanner__heading flex-col items-stretch sm:flex-row sm:items-center">
-    <div>
-      <p class="m-0 text-xs font-bold uppercase tracking-widest text-sky-600">Check-in nhanh</p>
-      <h2 id="qr-scanner-title" class="mb-0 mt-1 text-lg font-bold text-slate-900">Quét mã QR lịch hẹn</h2>
-    </div>
-    <span class="self-start text-xs text-slate-600">Không lưu ảnh camera</span>
-  </div>
-
-  <div class="qr-scanner__preview" [class.qr-scanner__preview--active]="cameraState() === 'active'">
-    <video #preview muted playsinline aria-label="Hình ảnh camera để quét mã QR"></video>
-    @if (cameraState() !== 'active') {
-      <div class="qr-scanner__placeholder" aria-hidden="true">
-        <span class="qr-scanner__finder"></span>
-        <span>Đưa mã QR vào giữa khung hình</span>
+<section
+  class="qr-scanner"
+  [class.qr-scanner--compact]="compact"
+  aria-labelledby="qr-scanner-title"
+>
+  @if (!compact) {
+    <div class="qr-scanner__heading flex-col items-stretch sm:flex-row sm:items-center">
+      <div>
+        <p class="m-0 text-xs font-bold uppercase tracking-widest text-sky-600">
+          Check-in nhanh
+        </p>
+        <h2
+          id="qr-scanner-title"
+          class="mb-0 mt-1 text-lg font-bold text-slate-900"
+        >
+          Quét mã QR lịch hẹn
+        </h2>
       </div>
-    }
-  </div>
-
-  <div class="qr-scanner__actions">
-    @if (cameraState() === 'active') {
-      <button type="button" class="qr-scanner__button qr-scanner__button--secondary" (click)="stopCamera()">
-        Tắt camera
-      </button>
-    } @else {
-      <button
-        type="button"
-        class="qr-scanner__button"
-        [disabled]="cameraState() === 'requesting'"
-        [attr.aria-busy]="cameraState() === 'requesting'"
-        (click)="startCamera()"
-      >
-        {{ cameraState() === 'requesting' ? 'Đang mở camera…' : 'Mở camera' }}
-      </button>
-    }
-  </div>
-
-  <div class="qr-scanner__divider"><span>hoặc máy quét USB</span></div>
-
-  <form class="qr-scanner__keyboard" (submit)="$event.preventDefault(); submitKeyboardValue()">
-    <label for="qr-keyboard-input">Mã từ máy quét</label>
-    <div class="qr-scanner__input-row flex-col items-stretch sm:flex-row sm:items-center">
-      <input
-        id="qr-keyboard-input"
-        name="qrToken"
-        type="password"
-        autocomplete="off"
-        spellcheck="false"
-        maxlength="2048"
-        placeholder="Quét mã rồi nhấn Enter"
-        [value]="keyboardValue"
-        (input)="keyboardValue = $any($event.target).value"
-      />
-      <button type="submit" class="qr-scanner__button">Tiếp tục</button>
+      <span class="self-start text-xs text-slate-600">Không lưu ảnh camera</span>
     </div>
-  </form>
+  } @else {
+    <h2 id="qr-scanner-title" class="sr-only">Quét mã QR lịch hẹn</h2>
+  }
+
+  <div
+    class="qr-scanner__preview"
+    [class.qr-scanner__preview--active]="cameraState() === 'active'"
+  >
+    <video
+      #preview
+      muted
+      playsinline
+      aria-label="Hình ảnh camera để quét mã QR"
+    ></video>
+    @if (cameraState() !== 'active') {
+      @if (compact) {
+        <span class="qr-scanner__mock-grid" aria-hidden="true">
+          @for (cell of mockQrCells; track $index) {
+            <i [class.qr-scanner__mock-cell--visible]="cell"></i>
+          }
+        </span>
+        <button
+          type="button"
+          class="qr-scanner__compact-launch"
+          [disabled]="cameraState() === 'requesting'"
+          [attr.aria-busy]="cameraState() === 'requesting'"
+          (click)="startCamera()"
+        >
+          <span class="qr-scanner__finder" aria-hidden="true"></span>
+          <span class="qr-scanner__compact-label">
+            {{
+              cameraState() === 'requesting'
+                ? 'Đang mở camera…'
+                : 'Đưa mã QR vào khung hình'
+            }}
+          </span>
+        </button>
+      } @else {
+        <div class="qr-scanner__placeholder" aria-hidden="true">
+          <span class="qr-scanner__finder"></span>
+          <span>Đưa mã QR vào giữa khung hình</span>
+        </div>
+      }
+    }
+  </div>
+
+  @if (!compact) {
+    <div class="qr-scanner__actions">
+      @if (cameraState() === 'active') {
+        <button
+          type="button"
+          class="qr-scanner__button qr-scanner__button--secondary"
+          (click)="stopCamera()"
+        >
+          Tắt camera
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="qr-scanner__button"
+          [disabled]="cameraState() === 'requesting'"
+          [attr.aria-busy]="cameraState() === 'requesting'"
+          (click)="startCamera()"
+        >
+          {{ cameraState() === 'requesting' ? 'Đang mở camera…' : 'Mở camera' }}
+        </button>
+      }
+    </div>
+
+    <div class="qr-scanner__divider"><span>hoặc máy quét USB</span></div>
+
+    <form
+      class="qr-scanner__keyboard"
+      (submit)="$event.preventDefault(); submitKeyboardValue()"
+    >
+      <label for="qr-keyboard-input">Mã từ máy quét</label>
+      <div
+        class="qr-scanner__input-row flex-col items-stretch sm:flex-row sm:items-center"
+      >
+        <input
+          id="qr-keyboard-input"
+          name="qrToken"
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="2048"
+          placeholder="Quét mã rồi nhấn Enter"
+          [value]="keyboardValue"
+          (input)="keyboardValue = $any($event.target).value"
+        />
+        <button type="submit" class="qr-scanner__button">Tiếp tục</button>
+      </div>
+    </form>
+  }
 
   @if (errorMessage()) {
     <p class="qr-scanner__error" role="alert">{{ errorMessage() }}</p>

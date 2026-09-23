@@ -66,6 +66,18 @@ export interface WalkInDoctorSearchIntent {
   readonly doctorName: string;
 }
 
+/**
+ * Draft captured from the compact receptionist workspace before the
+ * full patient/payment confirmation flow is opened.
+ */
+export interface WalkInDraftIntent {
+  readonly fullName: string;
+  readonly phone: string;
+  readonly specialtyName: string;
+  readonly doctorId: string;
+  readonly scheduleId: string;
+}
+
 export interface WalkInSlotViewModel {
   readonly scheduleId: string;
   readonly startTime: string;

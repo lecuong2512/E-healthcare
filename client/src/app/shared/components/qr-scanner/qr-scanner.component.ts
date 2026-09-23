@@ -4,6 +4,7 @@ import {
   ElementRef,
   EventEmitter,
   InjectionToken,
+  Input,
   Output,
   ViewChild,
   inject,
@@ -39,6 +40,7 @@ type CameraState = 'idle' | 'requesting' | 'active' | 'error';
   styleUrl: './qr-scanner.component.scss',
 })
 export class QrScannerComponent {
+  @Input() compact = false;
   @Output() scanned = new EventEmitter<string>();
 
   @ViewChild('preview') private preview?: ElementRef<HTMLVideoElement>;
@@ -50,6 +52,13 @@ export class QrScannerComponent {
 
   readonly cameraState = signal<CameraState>('idle');
   readonly errorMessage = signal<string | null>(null);
+  readonly mockQrCells = [
+    true, false, true, true, false,
+    false, true, true, false, true,
+    true, true, false, false, true,
+    false, true, false, true, true,
+    true, false, true, false, true,
+  ] as const;
   keyboardValue = '';
 
   constructor() {

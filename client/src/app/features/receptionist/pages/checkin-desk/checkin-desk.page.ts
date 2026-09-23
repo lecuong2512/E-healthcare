@@ -4,6 +4,7 @@ import {
   EventEmitter,
   Input,
   Output,
+  booleanAttribute,
   signal,
 } from '@angular/core';
 import {
@@ -11,7 +12,6 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 
 import { AppointmentStatus, PaymentStatus } from '@shared/enums';
 import { QrScannerComponent } from '../../../../shared/components/qr-scanner/qr-scanner.component';
@@ -22,17 +22,48 @@ import {
   ReceptionLookupIntent,
   ReceptionQueueConnectionState,
   ReceptionQueueSummaryViewModel,
+  WalkInDoctorViewModel,
+  WalkInDraftIntent,
 } from '../../models/reception-presentation.models';
 
 type LookupMode = 'QR' | 'MANUAL';
 type ManualLookupKind = 'APPOINTMENT_CODE' | 'PHONE';
+
+function appointmentsOrEmpty(
+  value: readonly ReceptionAppointmentViewModel[] | null | undefined,
+): readonly ReceptionAppointmentViewModel[] {
+  return value ?? [];
+}
+
+function appointmentOrNull(
+  value: ReceptionAppointmentViewModel | null | undefined,
+): ReceptionAppointmentViewModel | null {
+  return value ?? null;
+}
+
+function queueSummaryOrNull(
+  value: ReceptionQueueSummaryViewModel | null | undefined,
+): ReceptionQueueSummaryViewModel | null {
+  return value ?? null;
+}
+
+function queueConnectionOrDisconnected(
+  value: ReceptionQueueConnectionState | null | undefined,
+): ReceptionQueueConnectionState {
+  return value ?? 'disconnected';
+}
+
+function walkInDoctorsOrEmpty(
+  value: readonly WalkInDoctorViewModel[] | null | undefined,
+): readonly WalkInDoctorViewModel[] {
+  return value ?? [];
+}
 
 @Component({
   selector: 'app-checkin-desk-page',
   standalone: true,
   imports: [
     ReactiveFormsModule,
-    RouterLink,
     QrScannerComponent,
     CurrencyVndPipe,
   ],
@@ -41,15 +72,21 @@ type ManualLookupKind = 'APPOINTMENT_CODE' | 'PHONE';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CheckinDeskPage {
-  @Input() appointments: readonly ReceptionAppointmentViewModel[] = [];
-  @Input() selectedAppointment: ReceptionAppointmentViewModel | null = null;
-  @Input() loading = false;
-  @Input() paymentPending = false;
-  @Input() checkInPending = false;
+  @Input({ transform: appointmentsOrEmpty })
+  appointments: readonly ReceptionAppointmentViewModel[] = [];
+  @Input({ transform: appointmentOrNull })
+  selectedAppointment: ReceptionAppointmentViewModel | null = null;
+  @Input({ transform: booleanAttribute }) loading = false;
+  @Input({ transform: booleanAttribute }) paymentPending = false;
+  @Input({ transform: booleanAttribute }) checkInPending = false;
   @Input() errorMessage: string | null = null;
-  @Input() queueSummary: ReceptionQueueSummaryViewModel | null = null;
-  @Input() queueConnectionState: ReceptionQueueConnectionState =
-    'disconnected';
+  @Input({ transform: queueSummaryOrNull })
+  queueSummary: ReceptionQueueSummaryViewModel | null = null;
+  @Input({ transform: queueConnectionOrDisconnected })
+  queueConnectionState: ReceptionQueueConnectionState = 'disconnected';
+  @Input({ transform: walkInDoctorsOrEmpty })
+  walkInDoctors: readonly WalkInDoctorViewModel[] = [];
+  @Input({ transform: booleanAttribute }) walkInPending = false;
 
   @Output() lookupRequested = new EventEmitter<ReceptionLookupIntent>();
   @Output() appointmentSelected =
@@ -58,6 +95,7 @@ export class CheckinDeskPage {
   @Output() checkInRequested = new EventEmitter<string>();
   @Output() refreshRequested = new EventEmitter<string>();
   @Output() queueRefreshRequested = new EventEmitter<void>();
+  @Output() walkInDraftRequested = new EventEmitter<WalkInDraftIntent>();
 
   readonly lookupMode = signal<LookupMode>('QR');
   readonly manualLookupKind = signal<ManualLookupKind>('APPOINTMENT_CODE');
@@ -66,6 +104,35 @@ export class CheckinDeskPage {
     nonNullable: true,
     validators: [Validators.required, Validators.maxLength(64)],
   });
+  readonly walkInFullName = new FormControl('', {
+    nonNullable: true,
+    validators: [Validators.required, Validators.maxLength(120)],
+  });
+  readonly walkInPhone = new FormControl('', {
+    nonNullable: true,
+    validators: [
+      Validators.required,
+      Validators.pattern(/^(0|\+84)\d{9}$/),
+    ],
+  });
+  readonly walkInSpecialty = new FormControl('', {
+    nonNullable: true,
+    validators: [Validators.required],
+  });
+  readonly walkInDoctorId = new FormControl(
+    { value: '', disabled: true },
+    {
+      nonNullable: true,
+      validators: [Validators.required],
+    },
+  );
+  readonly walkInScheduleId = new FormControl(
+    { value: '', disabled: true },
+    {
+      nonNullable: true,
+      validators: [Validators.required],
+    },
+  );
 
   changeAmount(): number {
     return Math.max(
@@ -99,17 +166,94 @@ export class CheckinDeskPage {
       return;
     }
 
-    if (
-      this.manualLookupKind() === 'PHONE' &&
-      !/^(0|\+84)\d{9}$/.test(value.replace(/\s/g, ''))
-    ) {
+    const normalizedValue = value.replace(/\s/g, '');
+    const looksLikePhone = /^(0|\+84)\d+$/.test(normalizedValue);
+    const lookupKind =
+      this.manualLookupKind() === 'PHONE' || looksLikePhone
+        ? 'PHONE'
+        : 'APPOINTMENT_CODE';
+
+    if (lookupKind === 'PHONE' && !/^(0|\+84)\d{9}$/.test(normalizedValue)) {
       this.manualQuery.setErrors({ phone: true });
       return;
     }
 
     this.lookupRequested.emit({
-      kind: this.manualLookupKind(),
-      value,
+      kind: lookupKind,
+      value: lookupKind === 'PHONE' ? normalizedValue : value,
+    });
+  }
+
+  walkInSpecialtyOptions(): readonly string[] {
+    return [...new Set(this.walkInDoctors.map((doctor) => doctor.specialtyName))];
+  }
+
+  walkInDoctorOptions(): readonly WalkInDoctorViewModel[] {
+    const specialtyName = this.walkInSpecialty.value;
+    return specialtyName
+      ? this.walkInDoctors.filter(
+          (doctor) => doctor.specialtyName === specialtyName,
+        )
+      : [];
+  }
+
+  walkInSlotOptions() {
+    return (
+      this.walkInDoctors.find(
+        (doctor) => doctor.doctorId === this.walkInDoctorId.value,
+      )?.slots ?? []
+    );
+  }
+
+  changeWalkInSpecialty(event: Event): void {
+    const specialtyName = (event.target as HTMLSelectElement).value;
+    this.walkInSpecialty.setValue(specialtyName);
+    this.walkInDoctorId.reset();
+    this.walkInScheduleId.reset();
+    this.walkInScheduleId.disable();
+
+    if (specialtyName) {
+      this.walkInDoctorId.enable();
+    } else {
+      this.walkInDoctorId.disable();
+    }
+  }
+
+  changeWalkInDoctor(event: Event): void {
+    const doctorId = (event.target as HTMLSelectElement).value;
+    this.walkInDoctorId.setValue(doctorId);
+    this.walkInScheduleId.reset();
+
+    if (doctorId) {
+      this.walkInScheduleId.enable();
+    } else {
+      this.walkInScheduleId.disable();
+    }
+  }
+
+  submitWalkInDraft(): void {
+    const controls = [
+      this.walkInFullName,
+      this.walkInPhone,
+      this.walkInSpecialty,
+      this.walkInDoctorId,
+      this.walkInScheduleId,
+    ];
+
+    if (
+      controls.some((control) => control.invalid || !control.value.trim()) ||
+      this.walkInPending
+    ) {
+      controls.forEach((control) => control.markAsTouched());
+      return;
+    }
+
+    this.walkInDraftRequested.emit({
+      fullName: this.walkInFullName.value.trim(),
+      phone: this.walkInPhone.value.replace(/\s/g, ''),
+      specialtyName: this.walkInSpecialty.value,
+      doctorId: this.walkInDoctorId.value,
+      scheduleId: this.walkInScheduleId.value,
     });
   }
 
