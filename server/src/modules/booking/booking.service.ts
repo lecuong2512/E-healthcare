@@ -11,10 +11,12 @@ import { RedisService } from '../../common/redis/redis.service';
 import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
 import { DoctorEntity } from '../../database/entities/doctor.entity';
+import { VoucherEntity } from '../../database/entities/voucher.entity';
 import {
   SlotStatus,
   AppointmentStatus,
   PaymentStatus,
+  PaymentMethod,
 } from '@shared/enums';
 import {
   ReserveSlotDto,
@@ -173,7 +175,7 @@ export class BookingService {
     dto: ConfirmBookingDto,
     authenticatedUserId?: string,
   ): Promise<AppointmentResponse> {
-    const patientId = dto.patientId || authenticatedUserId;
+    const patientId = authenticatedUserId ?? dto.patientId;
     if (!patientId) {
       throw new BadRequestException('patientId là bắt buộc để chốt lịch hẹn.');
     }
@@ -226,13 +228,22 @@ export class BookingService {
       slot.status = SlotStatus.BOOKED;
       await queryRunner.manager.save(DoctorScheduleEntity, slot);
 
-      // Determine consultation fee if not provided
-      let totalAmount = dto.totalAmount;
-      if (totalAmount === undefined || totalAmount === null) {
-        const doctor = await queryRunner.manager
-          .getRepository(DoctorEntity)
-          .findOne({ where: { id: dto.doctorId } });
-        totalAmount = doctor ? Number(doctor.consultationFee) : 0;
+      // Always price from the doctor record; never trust a browser-supplied amount.
+      const doctor = await queryRunner.manager
+        .getRepository(DoctorEntity)
+        .findOne({ where: { id: dto.doctorId } });
+      if (!doctor) throw new NotFoundException('Không tìm thấy bác sĩ.');
+      let totalAmount = Number(doctor.consultationFee);
+
+      let discountAmount = 0;
+      let voucher: VoucherEntity | null = null;
+      if (dto.voucherCode) {
+        voucher = await queryRunner.manager.getRepository(VoucherEntity).createQueryBuilder('voucher')
+          .setLock('pessimistic_write').where('voucher.code = :code AND voucher.user_id = :patientId', { code: dto.voucherCode.trim().toUpperCase(), patientId })
+          .getOne();
+        if (!voucher || voucher.isUsed || voucher.expiresAt <= new Date()) throw new BadRequestException('Voucher không hợp lệ hoặc đã hết hạn.');
+        discountAmount = Math.round(Number(totalAmount) * Number(voucher.discountPercent)) / 100;
+        totalAmount = Math.max(0, Number(totalAmount) - discountAmount);
       }
 
       // Generate unique appointment code: APT-YYMMDD-XXXX
@@ -243,18 +254,29 @@ export class BookingService {
         patientId,
         doctorId: dto.doctorId,
         scheduleId: dto.slotId,
-        status: AppointmentStatus.CONFIRMED,
+        status: dto.paymentMethod === PaymentMethod.PAY_AT_CLINIC ? AppointmentStatus.CONFIRMED : AppointmentStatus.PENDING_PAYMENT,
         reasonForVisit: dto.reasonForVisit,
         paymentStatus: PaymentStatus.UNPAID,
         paymentMethod: dto.paymentMethod,
         totalAmount,
+        discountAmount,
+        voucherCode: voucher?.code ?? null,
         checkedInAt: null,
+        cancelledAt: null,
+        cancellationReason: null,
+        cancelledBy: null,
+        refundAmount: 0,
+        refundPercent: 0,
       });
 
       const saved = await queryRunner.manager.save(
         AppointmentEntity,
         appointment,
       );
+      if (voucher) {
+        voucher.isUsed = true; voucher.usedAt = new Date(); voucher.redeemedAppointmentId = saved.id;
+        await queryRunner.manager.save(VoucherEntity, voucher);
+      }
 
       await queryRunner.commitTransaction();
 
@@ -272,6 +294,9 @@ export class BookingService {
         paymentStatus: saved.paymentStatus,
         paymentMethod: saved.paymentMethod,
         totalAmount: Number(saved.totalAmount),
+        discountAmount: Number(saved.discountAmount),
+        finalAmount: Number(saved.totalAmount),
+        voucherCode: saved.voucherCode,
         checkedInAt: saved.checkedInAt,
       };
     } catch (error) {

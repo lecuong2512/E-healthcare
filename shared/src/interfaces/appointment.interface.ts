@@ -48,6 +48,7 @@ export interface ConfirmBookingRequest {
   reasonForVisit: string;
   paymentMethod: PaymentMethod;
   totalAmount?: number;
+  voucherCode?: string;
 }
 
 export type IConfirmBookingRequest = ConfirmBookingRequest;
@@ -63,7 +64,26 @@ export interface AppointmentResponse {
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;
   totalAmount: number;
+  discountAmount?: number;
+  finalAmount?: number;
+  voucherCode?: string | null;
   checkedInAt?: Date | string | null;
+  cancelledAt?: Date | string | null;
+  cancellationReason?: string | null;
+  refundAmount?: number;
+  refundPercent?: number;
 }
 
 export type IAppointmentResponse = AppointmentResponse;
+
+export interface CancelAppointmentRequest {
+  reason?: string;
+}
+
+export interface VoucherResponse {
+  id: string;
+  code: string;
+  discountPercent: number;
+  isUsed: boolean;
+  expiresAt: Date | string;
+}

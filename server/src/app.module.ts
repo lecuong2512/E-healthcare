@@ -3,6 +3,7 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { AuthModule } from "./modules/auth/auth.module";
 import { BookingModule } from "./modules/booking/booking.module";
 import { PhrModule } from "./modules/phr/phr.module";
+import { AppointmentModule } from "./modules/appointment/appointment.module";
 import { APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AccessTokenGuard } from "./common/guards/access-token.guard";
@@ -21,6 +22,7 @@ import { NotificationModule } from "./modules/notification/notification.module";
     DoctorModule,
     BookingModule,
     PhrModule,
+    AppointmentModule,
     ClinicalModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
   ],

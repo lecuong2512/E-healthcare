@@ -22,6 +22,13 @@ import { SpecialtyEntity } from "./entities/specialty.entity";
 import { DoctorEntity } from "./entities/doctor.entity";
 import { DoctorScheduleEntity } from "./entities/doctor-schedule.entity";
 import { AppointmentEntity } from "./entities/appointment.entity";
+import { VoucherEntity } from './entities/voucher.entity';
+import { RefundRequestEntity } from './entities/refund-request.entity';
+import { AppointmentNotificationEntity } from './entities/appointment-notification.entity';
+import { AddAppointmentLifecycleAndVouchers1789800000000 } from './migrations/1789800000000-add-appointment-lifecycle-and-vouchers';
+import { AddCancelledByPatientStatus1789800600000 } from './migrations/1789800600000-add-cancelled-by-patient-status';
+import { AddClinicCancellationOutbox1789801200000 } from './migrations/1789801200000-add-clinic-cancellation-outbox';
+import { AddAppointmentCreatedAt1789801800000 } from './migrations/1789801800000-add-appointment-created-at';
 
 import { MedicalRecordEntity } from "./entities/medical-record.entity";
 import { PrescriptionEntity } from "./entities/prescription.entity";
@@ -46,6 +53,9 @@ export function createDataSource(url: string): DataSource {
       DoctorEntity,
       DoctorScheduleEntity,
       AppointmentEntity,
+      VoucherEntity,
+      RefundRequestEntity,
+      AppointmentNotificationEntity,
       MedicalRecordEntity,
       PrescriptionEntity,
       PrescriptionItemEntity,
@@ -61,6 +71,10 @@ export function createDataSource(url: string): DataSource {
       AllowRegistrationWithBothContacts1789479000000,
       AddSrsAuth03PhrFields1789560000000,
       AddDoctorScheduleAndSearchIndexes1789565400000,
+      AddAppointmentLifecycleAndVouchers1789800000000,
+      AddCancelledByPatientStatus1789800600000,
+      AddClinicCancellationOutbox1789801200000,
+      AddAppointmentCreatedAt1789801800000,
       AddEmrPrescriptionTables1790065218000,
     ],
   });
