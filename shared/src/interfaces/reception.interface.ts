@@ -51,6 +51,11 @@ export interface CheckInResponse {
   checkedInAt: string;
 }
 
+export interface CheckInQrResponse {
+  qrToken: string;
+  expiresAt: string;
+}
+
 export interface CollectCounterPaymentRequest {
   method: CounterPaymentMethod;
   amountTendered: number;

@@ -8,13 +8,16 @@ import { ReceptionService } from './reception.service';
 import { WalkInService } from './walk-in.service';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { ReceptionAuditService } from './reception-audit.service';
+import { CheckInQrService } from './check-in-qr.service';
+import { PatientCheckInQrController } from './patient-check-in-qr.controller';
 
 @Module({
   imports: [DatabaseModule, RedisModule, RealtimeModule],
-  controllers: [ReceptionController],
+  controllers: [ReceptionController, PatientCheckInQrController],
   providers: [
     CounterPaymentService, QueueNumberService, ReceptionService, WalkInService,
     ReceptionAuditService,
+    CheckInQrService,
   ],
 })
 export class ReceptionModule {}
