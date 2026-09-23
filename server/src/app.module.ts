@@ -12,6 +12,7 @@ import { DoctorModule } from "./modules/doctor/doctor.module";
 import { ClinicalModule } from "./modules/clinical/clinical.module";
 import { QueueModule } from "./modules/queue/queue.module";
 import { NotificationModule } from "./modules/notification/notification.module";
+import { ReceptionModule } from "./modules/reception/reception.module";
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { NotificationModule } from "./modules/notification/notification.module";
     PhrModule,
     AppointmentModule,
     ClinicalModule,
+    ReceptionModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
   ],
   providers: [

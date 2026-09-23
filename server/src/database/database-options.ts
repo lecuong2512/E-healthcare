@@ -9,6 +9,7 @@ import { CreateAuthSessionsAndGoogle1789478400000 } from "./migrations/178947840
 import { AllowRegistrationWithBothContacts1789479000000 } from "./migrations/1789479000000-allow-registration-with-both-contacts";
 import { AddDoctorScheduleAndSearchIndexes1789565400000 } from "./migrations/1789565400000-add-doctor-schedule-and-search-indexes";
 import { EnableUnaccentDoctorSearch1789707600000 } from './migrations/1789707600000-enable-unaccent-doctor-search';
+import { AddReceptionQueueAndCounterPayment1789923600000 } from "./migrations/1789923600000-add-reception-queue-and-counter-payment";
 import {
   AuthSessionEntity,
   GoogleOAuthFlowEntity,
@@ -29,6 +30,8 @@ import { AppointmentNotificationEntity } from './entities/appointment-notificati
 import { AddAppointmentLifecycleAndVouchers1789800000000 } from './migrations/1789800000000-add-appointment-lifecycle-and-vouchers';
 import { AddClinicCancellationOutbox1789801200000 } from './migrations/1789801200000-add-clinic-cancellation-outbox';
 import { AddAppointmentCreatedAt1789801800000 } from './migrations/1789801800000-add-appointment-created-at';
+import { DoctorQueueCounterEntity } from "./entities/doctor-queue-counter.entity";
+import { CounterPaymentTransactionEntity } from "./entities/counter-payment-transaction.entity";
 
 import { MedicalRecordEntity } from "./entities/medical-record.entity";
 import { PrescriptionEntity } from "./entities/prescription.entity";
@@ -59,6 +62,8 @@ export function createDataSource(url: string): DataSource {
       MedicalRecordEntity,
       PrescriptionEntity,
       PrescriptionItemEntity,
+      DoctorQueueCounterEntity,
+      CounterPaymentTransactionEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -76,6 +81,7 @@ export function createDataSource(url: string): DataSource {
       AddClinicCancellationOutbox1789801200000,
       AddAppointmentCreatedAt1789801800000,
       AddEmrPrescriptionTables1790065218000,
+      AddReceptionQueueAndCounterPayment1789923600000,
     ],
   });
 }
