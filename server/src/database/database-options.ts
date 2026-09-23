@@ -30,6 +30,10 @@ import { AddCancelledByPatientStatus1789800600000 } from './migrations/178980060
 import { AddClinicCancellationOutbox1789801200000 } from './migrations/1789801200000-add-clinic-cancellation-outbox';
 import { AddAppointmentCreatedAt1789801800000 } from './migrations/1789801800000-add-appointment-created-at';
 
+import { MedicalRecordEntity } from "./entities/medical-record.entity";
+import { PrescriptionEntity } from "./entities/prescription.entity";
+import { PrescriptionItemEntity } from "./entities/prescription-item.entity";
+import { AddEmrPrescriptionTables1790065218000 } from "./migrations/1790065218000-add-emr-prescription-tables";
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -52,6 +56,9 @@ export function createDataSource(url: string): DataSource {
       VoucherEntity,
       RefundRequestEntity,
       AppointmentNotificationEntity,
+      MedicalRecordEntity,
+      PrescriptionEntity,
+      PrescriptionItemEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -68,6 +75,7 @@ export function createDataSource(url: string): DataSource {
       AddCancelledByPatientStatus1789800600000,
       AddClinicCancellationOutbox1789801200000,
       AddAppointmentCreatedAt1789801800000,
+      AddEmrPrescriptionTables1790065218000,
     ],
   });
 }

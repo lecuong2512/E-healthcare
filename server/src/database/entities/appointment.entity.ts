@@ -81,4 +81,7 @@ export class AppointmentEntity {
 
   @Column({ name: 'voucher_code', type: 'varchar', length: 32, nullable: true })
   voucherCode!: string | null;
+
+  @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
+  completedAt!: Date | null;
 }
