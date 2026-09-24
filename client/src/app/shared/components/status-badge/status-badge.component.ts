@@ -2,7 +2,14 @@ import { Component, Input } from '@angular/core';
 import { NgClass } from '@angular/common';
 
 export type SlotStatus = 'available' | 'held' | 'booked';
-
+export type StatusVariant =
+  | 'AVAILABLE'
+  | 'HOLDING'
+  | 'BOOKED'
+  | 'CHECKED_IN'
+  | 'IN_CONSULTATION'
+  | 'COMPLETED'
+  | 'NO_SHOW';
 /**
  * Phân màu trạng thái slot: Xanh (trống) / Vàng (giữ chỗ) / Xám (đã đặt).
  * Dùng trong lịch làm việc bác sĩ (SRS-DOC-01) và booking stepper (SRS-PAT-02).
