@@ -89,8 +89,8 @@ import { FormsModule } from '@angular/forms';
   `,
 })
 export class AllergyAlertModalComponent {
-  @Input() drugName = 'Amoxicillin 500mg';
-  @Input() allergyGroup = 'Penicillin';
+  @Input() drugName = 'NaN';
+  @Input() allergyGroup = 'NaN';
   @Output() cancel = new EventEmitter<void>();
   @Output() override = new EventEmitter<string>();
 
