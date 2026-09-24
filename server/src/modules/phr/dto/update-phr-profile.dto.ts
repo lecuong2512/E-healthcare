@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsString,
   MaxLength,
+  Matches,
 } from 'class-validator';
 
 import { Gender } from '@shared/enums';
@@ -34,7 +35,7 @@ export class UpdatePhrProfileDto {
   healthInsurance!: string;
 
   @IsString()
-  @MaxLength(3)
+  @Matches(/^(A|B|AB|O)[+-]$/)
   bloodType!: string;
 
   @IsString()
