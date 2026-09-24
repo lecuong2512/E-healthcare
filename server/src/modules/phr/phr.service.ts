@@ -1,5 +1,6 @@
 ﻿import {
   Injectable,
+  BadRequestException,
   NotFoundException,
 } from "@nestjs/common";
 import { DataSource } from "typeorm";
@@ -51,6 +52,11 @@ export class PhrService {
     userId: string,
     request: UpdatePhrProfileRequest,
   ): Promise<PhrProfile> {
+    const birthday = new Date(`${request.dateOfBirth}T00:00:00Z`);
+    const cutoff = new Date();
+    cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 15);
+    if (birthday > cutoff)
+      throw new BadRequestException({ code: "INVALID_DATE_OF_BIRTH", message: "Bệnh nhân phải từ 15 tuổi trở lên." });
     const userRepo = this.dataSource.getRepository(UserEntity);
     const phrRepo = this.dataSource.getRepository(
       PersonalHealthProfileEntity,
