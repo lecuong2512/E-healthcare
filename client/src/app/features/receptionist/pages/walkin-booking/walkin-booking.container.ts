@@ -48,6 +48,7 @@ export class WalkinBookingContainer implements OnInit, OnDestroy {
   private readonly printer = viewChild(PrintReceiptComponent);
   private readonly injector = inject(Injector);
   private printedData: PrintReceiptData | null = null;
+  private destroyed = false;
 
   constructor() {
     effect(() => {
@@ -56,8 +57,10 @@ export class WalkinBookingContainer implements OnInit, OnDestroy {
       if (!data || !printer || data === this.printedData) return;
       this.printedData = data;
       afterNextRender(() => {
-        if (this.facade.printData() === data && printer.data() === data) {
-          void printer.print().catch((error: unknown) => this.facade.reportPrintError(error));
+        if (!this.destroyed && this.facade.printData() === data && printer.data() === data) {
+          void printer.print().catch((error: unknown) => {
+            if (!this.destroyed) this.facade.reportPrintError(error);
+          });
         }
       }, { injector: this.injector });
     });
@@ -69,6 +72,7 @@ export class WalkinBookingContainer implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.facade.endWalkInSession();
   }
 }

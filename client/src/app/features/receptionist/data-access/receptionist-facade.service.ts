@@ -148,12 +148,15 @@ export class ReceptionistFacade {
 
   loadClinicPrintInfo(): void {
     if (this._clinicPrintInfo()) return;
+    const session = this.printSession;
     this.api.getClinicProfile().subscribe({
       next: (profile) => {
         this._clinicPrintInfo.set(profile);
-        this._printError.set(null);
+        if (session === this.printSession) this._printError.set(null);
       },
-      error: () => this._printError.set('Chưa tải được thông tin phòng khám. Nghiệp vụ đã hoàn tất; vui lòng thử tải lại để in.'),
+      error: () => {
+        if (session === this.printSession) this._printError.set('Chưa tải được thông tin phòng khám. Vui lòng thử tải lại trước khi in.');
+      },
     });
   }
 
@@ -438,6 +441,7 @@ export class ReceptionistFacade {
 
   beginWalkInSession(): void {
     this.walkInSession++;
+    this.clearPrintState();
     this._walkInSubmitting.set(false);
     this._walkInCandidates.set([]);
     this._walkInSuccess.set(null);
@@ -449,6 +453,7 @@ export class ReceptionistFacade {
 
   endWalkInSession(): void {
     this.walkInSession++;
+    this.clearPrintState();
     this.doctorSearch?.unsubscribe();
     this._walkInCandidates.set([]);
     this._walkInSuccess.set(null);

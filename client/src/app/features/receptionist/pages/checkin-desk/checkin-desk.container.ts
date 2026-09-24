@@ -23,7 +23,7 @@ import { PrintReceiptData } from '../../models/reception-print.model';
   imports: [CheckinDeskPage, WalkInBookingModalComponent, PrintReceiptComponent],
   template: `
     @if (facade.printError()) {
-      <div role="alert" class="m-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">{{ facade.printError() }} Có thể in lại phiếu.</div>
+      <div role="alert" class="m-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">{{ facade.printError() }}</div>
     }
     <app-checkin-desk-page
       [appointments]="facade.appointments()"
@@ -62,6 +62,7 @@ export class CheckinDeskContainer implements OnInit, OnDestroy {
   private readonly printer = viewChild(PrintReceiptComponent);
   private readonly injector = inject(Injector);
   private printedData: PrintReceiptData | null = null;
+  private destroyed = false;
 
   constructor() {
     effect(() => {
@@ -70,19 +71,24 @@ export class CheckinDeskContainer implements OnInit, OnDestroy {
       if (!data || !printer || data === this.printedData) return;
       this.printedData = data;
       afterNextRender(() => {
-        if (this.facade.printData() === data && printer.data() === data) {
-          void printer.print().catch((error: unknown) => this.facade.reportPrintError(error));
+        if (!this.destroyed && this.facade.printData() === data && printer.data() === data) {
+          void printer.print().catch((error: unknown) => {
+            if (!this.destroyed) this.facade.reportPrintError(error);
+          });
         }
       }, { injector: this.injector });
     });
   }
 
   ngOnInit(): void {
+    this.facade.clearPrintState();
     this.releaseQueue = this.facade.connectQueue();
     this.facade.loadClinicPrintInfo();
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
+    this.facade.clearPrintState();
     this.releaseQueue?.();
     this.releaseQueue = null;
   }

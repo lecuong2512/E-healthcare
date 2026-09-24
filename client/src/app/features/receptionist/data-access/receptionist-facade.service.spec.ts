@@ -190,6 +190,53 @@ describe('ReceptionistFacade', () => {
     expect(facade.printError()).toContain('Chưa tải được thông tin phòng khám');
   });
 
+  it('clears prepared print data when a Walk-in session starts and ends', () => {
+    api.lookupAppointments.and.returnValue(of([APPOINTMENT]));
+    api.checkIn.and.returnValue(of(CHECK_IN));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: APPOINTMENT.appointmentCode });
+    facade.checkIn(APPOINTMENT.id);
+    expect(facade.printData()?.type).toBe('CHECKIN_TICKET');
+
+    facade.beginWalkInSession();
+    expect(facade.printData()).toBeNull();
+
+    facade.prepareCheckinPrint(APPOINTMENT.id);
+    expect(facade.printData()?.type).toBe('CHECKIN_TICKET');
+    facade.endWalkInSession();
+    expect(facade.printData()).toBeNull();
+  });
+
+  it('does not publish a pending print after leaving a Walk-in session', () => {
+    const profile = new Subject<{ clinicName: string; address: string }>();
+    api.getClinicProfile.and.returnValue(profile);
+    api.lookupAppointments.and.returnValue(of([APPOINTMENT]));
+    api.checkIn.and.returnValue(of(CHECK_IN));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: APPOINTMENT.appointmentCode });
+    facade.checkIn(APPOINTMENT.id);
+
+    facade.endWalkInSession();
+    profile.next({ clinicName: 'Phòng khám kiểm thử', address: 'Địa chỉ kiểm thử' });
+    expect(facade.printData()).toBeNull();
+  });
+
+  it('uses an initialization message when clinic profile preload fails', () => {
+    api.getClinicProfile.and.returnValue(throwError(() => new HttpErrorResponse({ status: 503 })));
+    facade.loadClinicPrintInfo();
+    expect(facade.printError()).toBe('Chưa tải được thông tin phòng khám. Vui lòng thử tải lại trước khi in.');
+    facade.beginWalkInSession();
+    expect(facade.printError()).toBeNull();
+  });
+
+  it('ignores a clinic profile preload failure after the print session changes', () => {
+    const profile = new Subject<{ clinicName: string; address: string }>();
+    api.getClinicProfile.and.returnValue(profile);
+    facade.loadClinicPrintInfo();
+    facade.beginWalkInSession();
+
+    profile.error(new HttpErrorResponse({ status: 503 }));
+    expect(facade.printError()).toBeNull();
+  });
+
   it('gets the authoritative A5 receipt when reprinting a paid counter appointment', () => {
     api.lookupAppointments.and.returnValue(of([APPOINTMENT]));
     api.getReceipt.and.returnValue(of(RECEIPT));
