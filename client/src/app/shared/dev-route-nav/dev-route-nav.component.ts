@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { Role } from '@shared/enums';
 import { TokenStoreService } from 'src/app/core/services/token-store.service';
@@ -21,129 +21,145 @@ import { environment } from 'src/environments/environment';
   imports: [RouterLink],
   template: `
     @if (!isProd) {
-      <div
-        class="fixed bottom-0 left-0 right-0 z-50 border-t-2 border-dashed border-amber-400 bg-amber-50 p-3 text-xs"
-      >
-        <div class="mb-2 flex flex-wrap items-center gap-2">
-          <span class="font-semibold text-amber-700"
-            >⚠ DEV ROUTE NAV — role hiện tại:</span
-          >
-          <span class="rounded bg-amber-200 px-2 py-0.5 font-mono">{{
-            currentRole() ?? 'chưa đăng nhập'
-          }}</span>
-
+      <div class="fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
+        <!-- Nút toggle: đặt pointer-events-auto để bấm được, nằm sát mép trên -->
+        <div class="flex justify-end pr-4">
           <button
             type="button"
-            class="ml-auto rounded bg-slate-200 px-2 py-1"
-            (click)="devLoginAs(Role.PATIENT)"
+            (click)="isCollapsed.set(!isCollapsed())"
+            class="pointer-events-auto rounded-t border-2 border-b-0 border-dashed border-amber-400 bg-amber-200 px-3 py-1 font-mono text-xs font-semibold text-amber-900 shadow-md transition-colors hover:bg-amber-300"
           >
-            Bệnh nhân
-          </button>
-          <button
-            type="button"
-            class="rounded bg-slate-200 px-2 py-1"
-            (click)="devLoginAs(Role.DOCTOR)"
-          >
-            Bác sĩ
-          </button>
-          <button
-            type="button"
-            class="rounded bg-slate-200 px-2 py-1"
-            (click)="devLoginAs(Role.RECEPTIONIST)"
-          >
-            Lễ tân
-          </button>
-          <button
-            type="button"
-            class="rounded bg-slate-200 px-2 py-1"
-            (click)="devLoginAs(Role.ADMIN)"
-          >
-            Admin
-          </button>
-          <button
-            type="button"
-            class="rounded bg-red-200 px-2 py-1"
-            (click)="clear()"
-          >
-            Đăng xuất
+            {{ isCollapsed() ? '▲ Hiện Dev Nav' : '▼ Ẩn Dev Nav' }}
           </button>
         </div>
 
-        <div class="flex flex-wrap gap-3">
-          <h3>Patient</h3>
-          <a routerLink="/patient" class="text-sky-700 underline">/patient</a>
-          <a routerLink="/patient/doctor-search" class="text-sky-700 underline"
-            >doctor-search</a
+        <!-- Khung nav giữ nguyên hoàn toàn giao diện cũ -->
+        @if (!isCollapsed()) {
+          <div
+            class="pointer-events-auto border-t-2 border-dashed border-amber-400 bg-amber-50 p-3 text-xs"
           >
-          <a routerLink="/patient/booking" class="text-sky-700 underline"
-            >booking</a
-          >
-          <a routerLink="/patient/history" class="text-sky-700 underline"
-            >history</a
-          >
-          <a routerLink="/patient/profile" class="text-sky-700 underline"
-            >profile</a
-          >
-        </div>
+            <div class="mb-2 flex flex-wrap items-center gap-2">
+              <span class="font-semibold text-amber-700"
+                >⚠ DEV ROUTE NAV — role hiện tại:</span
+              >
+              <span class="rounded bg-amber-200 px-2 py-0.5 font-mono">{{
+                currentRole() ?? 'chưa đăng nhập'
+              }}</span>
 
-        <div class="flex flex-wrap gap-3">
-          <h3>Doctor</h3>
-          <a routerLink="/doctor" class="text-sky-700 underline">/doctor</a>
-          <a routerLink="/doctor/schedule" class="text-sky-700 underline"
-            >schedule</a
-          >
-          <a routerLink="/doctor/queue" class="text-sky-700 underline">queue</a>
-          <a
-            routerLink="/doctor/consultation/123"
-            class="text-sky-700 underline"
-            >consultation/123</a
-          >
-        </div>
+              <button
+                type="button"
+                class="ml-auto rounded bg-slate-200 px-2 py-1"
+                (click)="devLoginAs(Role.PATIENT)"
+              >
+                Bệnh nhân
+              </button>
+              <button
+                type="button"
+                class="rounded bg-slate-200 px-2 py-1"
+                (click)="devLoginAs(Role.DOCTOR)"
+              >
+                Bác sĩ
+              </button>
+              <button
+                type="button"
+                class="rounded bg-slate-200 px-2 py-1"
+                (click)="devLoginAs(Role.RECEPTIONIST)"
+              >
+                Lễ tân
+              </button>
+              <button
+                type="button"
+                class="rounded bg-slate-200 px-2 py-1"
+                (click)="devLoginAs(Role.ADMIN)"
+              >
+                Admin
+              </button>
+              <button
+                type="button"
+                class="rounded bg-red-200 px-2 py-1"
+                (click)="clear()"
+              >
+                Đăng xuất
+              </button>
+            </div>
 
-        <div class="flex flex-wrap gap-3">
-          <h3>Receptionist</h3>
-          <a routerLink="/receptionist" class="text-sky-700 underline"
-            >/receptionist</a
-          >
-          <a routerLink="/receptionist/checkin" class="text-sky-700 underline"
-            >checkin</a
-          >
-          <a routerLink="/receptionist/walkin" class="text-sky-700 underline"
-            >walkin</a
-          >
-          <a
-            routerLink="/receptionist/queue-board"
-            class="text-sky-700 underline"
-            >queue-board</a
-          >
-        </div>
+            <div class="flex flex-wrap gap-3">
+              <h3>Patient</h3>
+              <a routerLink="/patient" class="text-sky-700 underline">/patient</a>
+              <a routerLink="/patient/doctor-search" class="text-sky-700 underline"
+                >doctor-search</a
+              >
+              <a routerLink="/patient/booking" class="text-sky-700 underline"
+                >booking</a
+              >
+              <a routerLink="/patient/history" class="text-sky-700 underline"
+                >history</a
+              >
+              <a routerLink="/patient/profile" class="text-sky-700 underline"
+                >profile</a
+              >
+            </div>
 
-        <div class="flex flex-wrap gap-3">
-          <h3>Admin</h3>
-          <a routerLink="/admin" class="text-sky-700 underline">/admin</a>
-          <a routerLink="/admin/dashboard" class="text-sky-700 underline"
-            >dashboard</a
-          >
-          <a routerLink="/admin/catalogs" class="text-sky-700 underline"
-            >catalogs</a
-          >
-          <a routerLink="/admin/staff" class="text-sky-700 underline">staff</a>
-          <a routerLink="/admin/audit-logs" class="text-sky-700 underline"
-            >audit-logs</a
-          >
-        </div>
+            <div class="flex flex-wrap gap-3">
+              <h3>Doctor</h3>
+              <a routerLink="/doctor" class="text-sky-700 underline">/doctor</a>
+              <a routerLink="/doctor/schedule" class="text-sky-700 underline"
+                >schedule</a
+              >
+              <a routerLink="/doctor/queue" class="text-sky-700 underline">queue</a>
+              <a
+                routerLink="/doctor/consultation/123"
+                class="text-sky-700 underline"
+                >consultation/123</a
+              >
+            </div>
 
-        <div class="flex flex-wrap gap-3 text-slate-500">
-          <span
-            >Chưa chọn role — bấm 1 trong 4 nút ở trên để bắt đầu test.</span
-          >
-          <a routerLink="/login" class="text-sky-700 underline">/login</a>
-          <a routerLink="/register" class="text-sky-700 underline">/register</a>
-          <a routerLink="/403" class="text-sky-700 underline">/403</a>
-          <a routerLink="/khong-ton-tai" class="text-sky-700 underline"
-            >404 test</a
-          >
-        </div>
+            <div class="flex flex-wrap gap-3">
+              <h3>Receptionist</h3>
+              <a routerLink="/receptionist" class="text-sky-700 underline"
+                >/receptionist</a
+              >
+              <a routerLink="/receptionist/checkin" class="text-sky-700 underline"
+                >checkin</a
+              >
+              <a routerLink="/receptionist/walkin" class="text-sky-700 underline"
+                >walkin</a
+              >
+              <a
+                routerLink="/receptionist/queue-board"
+                class="text-sky-700 underline"
+                >queue-board</a
+              >
+            </div>
+
+            <div class="flex flex-wrap gap-3">
+              <h3>Admin</h3>
+              <a routerLink="/admin" class="text-sky-700 underline">/admin</a>
+              <a routerLink="/admin/dashboard" class="text-sky-700 underline"
+                >dashboard</a
+              >
+              <a routerLink="/admin/catalogs" class="text-sky-700 underline"
+                >catalogs</a
+              >
+              <a routerLink="/admin/staff" class="text-sky-700 underline">staff</a>
+              <a routerLink="/admin/audit-logs" class="text-sky-700 underline"
+                >audit-logs</a
+              >
+            </div>
+
+            <div class="flex flex-wrap gap-3 text-slate-500">
+              <span
+                >Chưa chọn role — bấm 1 trong 4 nút ở trên để bắt đầu test.</span
+              >
+              <a routerLink="/login" class="text-sky-700 underline">/login</a>
+              <a routerLink="/register" class="text-sky-700 underline">/register</a>
+              <a routerLink="/403" class="text-sky-700 underline">/403</a>
+              <a routerLink="/khong-ton-tai" class="text-sky-700 underline"
+                >404 test</a
+              >
+            </div>
+          </div>
+        }
       </div>
     }
   `,
@@ -155,6 +171,8 @@ export class DevRouteNavComponent {
   protected readonly currentRole = this.tokenStore.userRole;
   protected readonly Role = Role;
 
+  protected readonly isCollapsed = signal(false);
+
   private readonly roleHome: Record<Role, string> = {
     [Role.PATIENT]: '/patient',
     [Role.DOCTOR]: '/doctor',
@@ -164,7 +182,6 @@ export class DevRouteNavComponent {
 
   devLoginAs(role: Role): void {
     this.tokenStore.setSession('dev-fake-token', role);
-    // this.router.navigateByUrl(this.roleHome[role] ?? '/');
   }
 
   clear(): void {
