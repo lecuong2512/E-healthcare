@@ -1,5 +1,6 @@
 import { Injectable, InjectionToken, effect, inject, signal } from '@angular/core';
 import { Socket, io } from 'socket.io-client';
+import { QUEUE_AUTH_EXPIRED_EVENT } from '@shared/constants/queue-socket.constants';
 
 import { environment } from '../../../environments/environment';
 import { TokenStoreService } from './token-store.service';
@@ -9,6 +10,7 @@ export type SocketConnectionState =
   | 'connecting'
   | 'connected'
   | 'reconnecting'
+  | 'expired'
   | 'error';
 
 type SocketClientFactory = (
@@ -33,6 +35,7 @@ export class SocketService {
   private readonly tokenStore = inject(TokenStoreService);
   private readonly socketFactory = inject(SOCKET_CLIENT_FACTORY);
   private readonly sockets = new Map<string, Socket>();
+  private readonly expiredNamespaces = new Set<string>();
   private readonly _connectionStates = signal<
     Readonly<Record<string, SocketConnectionState>>
   >({});
@@ -53,6 +56,7 @@ export class SocketService {
         previousToken = currentToken;
 
         for (const [namespace, socket] of this.sockets) {
+          this.expiredNamespaces.delete(namespace);
           if (!currentToken) {
             socket.disconnect();
             this.setState(namespace, 'disconnected');
@@ -75,7 +79,7 @@ export class SocketService {
     const existingSocket = this.sockets.get(normalizedNamespace);
 
     if (existingSocket) {
-      if (!existingSocket.connected && this.tokenStore.accessToken()) {
+      if (!existingSocket.connected && this.tokenStore.accessToken() && !this.expiredNamespaces.has(normalizedNamespace)) {
         this.setState(normalizedNamespace, 'connecting');
         existingSocket.connect();
       }
@@ -131,9 +135,19 @@ export class SocketService {
     namespace: string,
     socket: Socket,
   ): void {
-    socket.on('connect', () => this.setState(namespace, 'connected'));
+    socket.on('connect', () => {
+      this.expiredNamespaces.delete(namespace);
+      this.setState(namespace, 'connected');
+    });
+    socket.on(QUEUE_AUTH_EXPIRED_EVENT, () => {
+      this.expiredNamespaces.add(namespace);
+      this.setState(namespace, 'expired');
+      socket.disconnect();
+    });
     socket.on('connect_error', () => this.setState(namespace, 'error'));
-    socket.on('disconnect', () => this.setState(namespace, 'disconnected'));
+    socket.on('disconnect', () => {
+      if (!this.expiredNamespaces.has(namespace)) this.setState(namespace, 'disconnected');
+    });
     socket.io.on('reconnect_attempt', () =>
       this.setState(namespace, 'reconnecting'),
     );
@@ -150,6 +164,7 @@ export class SocketService {
     socket.io.removeAllListeners();
     socket.disconnect();
     this.sockets.delete(namespace);
+    this.expiredNamespaces.delete(namespace);
     this.setState(namespace, 'disconnected');
   }
 
