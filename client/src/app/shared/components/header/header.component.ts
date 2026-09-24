@@ -9,10 +9,10 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
   style="background-color: #ffffff; border-color: #e2e8f0"
 >
   <div
-    class="max-w-screen-xl mx-auto px-4 lg:px-6 h-14 flex items-center justify-between gap-3 lg:gap-6"
+    class="w-full mx-auto px-4 lg:px-6 h-14 flex items-center justify-between gap-3 lg:gap-6"
   >
     <!-- Logo -->
-    <div class="flex items-center gap-2 shrink-0">
+    <div class="flex items-center gap-2 shrink-0 ml-1">
       <div
         class="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
       >
