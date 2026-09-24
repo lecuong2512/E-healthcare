@@ -1,6 +1,7 @@
 import { Injectable, effect, inject, signal } from '@angular/core';
 import { Subscription, finalize, map } from 'rxjs';
 import { Socket } from 'socket.io-client';
+import { PaymentMethod, PaymentStatus } from '@shared/enums';
 
 import {
   APPOINTMENT_STATUS_CHANGED_EVENT,
@@ -220,7 +221,8 @@ export class ReceptionistFacade {
   }
 
   loadReceipt(appointmentId: string): void {
-    if (this._paymentPending()) return;
+    const appointment = this.findAppointment(appointmentId);
+    if (this._paymentPending() || appointment?.paymentStatus !== PaymentStatus.PAID || appointment.paymentMethod !== PaymentMethod.PAY_AT_CLINIC) return;
     this._checkInError.set(null);
     this.api.getReceipt(appointmentId).subscribe({
       next: (receipt) => {

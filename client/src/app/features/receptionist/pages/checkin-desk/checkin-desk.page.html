@@ -225,7 +225,7 @@
                 </div>
               </dl>
 
-              @if (selectedAppointment.paymentStatus === PaymentStatus.PAID && !receipt) {
+              @if (selectedAppointment.paymentStatus === PaymentStatus.PAID && selectedAppointment.paymentMethod === PaymentMethod.PAY_AT_CLINIC && !receipt) {
                 <button type="button" class="my-4 min-h-11 rounded-lg border border-emerald-300 px-4 font-semibold text-emerald-800"
                   (click)="receiptLoadRequested.emit(selectedAppointment.id)">In/Tải lại phiếu thu</button>
               }

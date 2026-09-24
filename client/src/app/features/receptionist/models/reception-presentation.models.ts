@@ -2,6 +2,7 @@ import {
   AppointmentStatus,
   CounterPaymentMethod,
   Gender,
+  PaymentMethod,
   PaymentStatus,
 } from '@shared/enums';
 
@@ -25,6 +26,7 @@ export interface ReceptionAppointmentViewModel {
   readonly startTime: string;
   readonly endTime: string;
   readonly paymentStatus: PaymentStatus;
+  readonly paymentMethod: PaymentMethod;
   readonly totalAmount: number;
   readonly queueNumber: number | null;
   readonly requiresPayment: boolean;
