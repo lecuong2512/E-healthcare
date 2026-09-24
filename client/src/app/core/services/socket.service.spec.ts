@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Socket } from 'socket.io-client';
+import { QUEUE_AUTH_EXPIRED_EVENT } from '@shared/constants/queue-socket.constants';
 
 import {
   SOCKET_CLIENT_FACTORY,
@@ -121,6 +122,23 @@ describe('SocketService', () => {
 
     expect(fakeSocket.disconnectSpy).toHaveBeenCalledTimes(1);
     expect(fakeSocket.connectSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps auth expiry visible and reconnects only after token refresh', () => {
+    tokenStore.setSession('first-token', 'RECEPTIONIST');
+    TestBed.flushEffects();
+    service.connect('/queue');
+    fakeSocket.emit(QUEUE_AUTH_EXPIRED_EVENT);
+
+    expect(service.connectionStates()['/queue']).toBe('expired');
+    expect(fakeSocket.disconnectSpy).toHaveBeenCalledTimes(1);
+    service.connect('/queue');
+    expect(fakeSocket.connectSpy).toHaveBeenCalledTimes(1);
+
+    tokenStore.setSession('refreshed-token', 'RECEPTIONIST');
+    TestBed.flushEffects();
+    expect(fakeSocket.connectSpy).toHaveBeenCalledTimes(2);
+    expect(service.connectionStates()['/queue']).toBe('connected');
   });
 
   it('removes and disconnects registered sockets during logout cleanup', () => {
