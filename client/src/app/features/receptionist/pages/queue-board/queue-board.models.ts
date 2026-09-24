@@ -21,6 +21,7 @@ export type QueueBoardConnectionState =
   | 'error';
 
 export type QueueBoardTicketStatus =
+  | 'CONFIRMED'
   | 'CHECKED_IN'
   | 'IN_CONSULTATION'
   | 'COMPLETED';

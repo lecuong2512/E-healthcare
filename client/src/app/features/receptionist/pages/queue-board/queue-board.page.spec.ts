@@ -7,6 +7,7 @@ import {
 
 import { QueueBoardTicketViewModel } from './queue-board.models';
 import { QueueBoardPage } from './queue-board.page';
+import { QueueBoardRealtimeService } from './queue-board-realtime.service';
 
 const servingTicket: QueueBoardTicketViewModel = {
   id: 'ticket-12',
@@ -24,6 +25,12 @@ describe('QueueBoardPage', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [QueueBoardPage],
+      providers: [
+        {
+          provide: QueueBoardRealtimeService,
+          useValue: { connect: jasmine.createSpy().and.returnValue(() => undefined) },
+        },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(QueueBoardPage);

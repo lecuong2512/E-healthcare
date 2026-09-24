@@ -11,10 +11,15 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { fromEvent, map, merge } from 'rxjs';
 
 import { QueueBoardStatusEventViewModel } from './queue-board.models';
+import {
+  mapPublicQueueSnapshot,
+  mapPublicQueueStatusChanged,
+} from './queue-board.mapper';
 import { QueueBoardNextUpComponent } from './queue-board-next-up.component';
 import { QueueBoardNowServingComponent } from './queue-board-now-serving.component';
 import { QueueBoardPresentationStore } from './queue-board-presentation.store';
 import { QueueBoardRealtimeCoordinator } from './queue-board-realtime.coordinator';
+import { QueueBoardRealtimeService } from './queue-board-realtime.service';
 
 @Component({
   selector: 'app-queue-board-page',
@@ -28,6 +33,7 @@ export class QueueBoardPage {
   private readonly destroyRef = inject(DestroyRef);
   readonly store = inject(QueueBoardPresentationStore);
   private readonly realtimeCoordinator = inject(QueueBoardRealtimeCoordinator);
+  private readonly realtime = inject(QueueBoardRealtimeService);
   private audioContext?: AudioContext;
   private flashTimer?: ReturnType<typeof setTimeout>;
   private renderFrame?: number;
@@ -40,8 +46,20 @@ export class QueueBoardPage {
   readonly lastRenderLatencyMs = signal<number | null>(null);
 
   constructor() {
+    const disconnectRealtime = this.realtime.connect({
+      snapshot: (snapshot) => {
+        this.store.hydrate(mapPublicQueueSnapshot(snapshot));
+        this.realtimeCoordinator.resetAfterSnapshot();
+      },
+      statusChanged: (event) => {
+        const mappedEvent = mapPublicQueueStatusChanged(event);
+        if (mappedEvent) this.applyRealtimeEvent(mappedEvent);
+      },
+      connectionState: (state) => this.store.setConnectionState(state),
+    });
     const clockTimer = setInterval(() => this.now.set(new Date()), 30_000);
     this.destroyRef.onDestroy(() => {
+      disconnectRealtime();
       clearInterval(clockTimer);
       clearTimeout(this.flashTimer);
       if (this.renderFrame !== undefined) {
