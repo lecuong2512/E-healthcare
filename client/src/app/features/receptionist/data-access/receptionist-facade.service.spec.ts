@@ -22,6 +22,7 @@ import { SocketService } from '../../../core/services/socket.service';
 import { AvailableWalkInDoctor } from '@shared/interfaces';
 import { ReceptionistApiService } from './receptionist-api.service';
 import { ReceptionistFacade } from './receptionist-facade.service';
+import { APPOINTMENT, CHECK_IN, RECEIPT } from '../testing/reception-print.fixtures';
 
 class FakeQueueSocket {
   connected = true;
@@ -73,6 +74,7 @@ describe('ReceptionistFacade', () => {
         'checkIn',
         'collectPayment',
         'getReceipt',
+        'getClinicProfile',
         'getWalkInDoctors',
         'createWalkIn',
         'getQueue',
@@ -80,6 +82,7 @@ describe('ReceptionistFacade', () => {
     );
     api.lookupAppointments.and.returnValue(of([]));
     api.getWalkInDoctors.and.returnValue(of([]));
+    api.getClinicProfile.and.returnValue(of({ clinicName: 'Phòng khám kiểm thử', address: 'Địa chỉ kiểm thử' }));
     api.getQueue.and.returnValue(
       of({ scope: 'RECEPTION', date: '2026-09-24', items: [] }),
     );
@@ -157,6 +160,45 @@ describe('ReceptionistFacade', () => {
     facade.lookup({ kind: 'APPOINTMENT_CODE', value: 'APT-ONLINE' });
     facade.loadReceipt('appointment-online');
     expect(api.getReceipt).not.toHaveBeenCalled();
+    expect(facade.printData()).toBeNull();
+  });
+
+  it('prepares K80 after check-in and reprints without another check-in request', () => {
+    api.lookupAppointments.and.returnValue(of([APPOINTMENT]));
+    api.checkIn.and.returnValue(of(CHECK_IN));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: APPOINTMENT.appointmentCode });
+    facade.checkIn(APPOINTMENT.id);
+    expect(facade.selectedAppointment()?.status).toBe(AppointmentStatus.CHECKED_IN);
+    expect(facade.printData()).toEqual(jasmine.objectContaining({
+      type: 'CHECKIN_TICKET', queueNumber: CHECK_IN.queueNumber,
+      qrValue: APPOINTMENT.appointmentCode,
+    }));
+    facade.prepareCheckinPrint(APPOINTMENT.id);
+    expect(api.checkIn).toHaveBeenCalledTimes(1);
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: APPOINTMENT.appointmentCode });
+    expect(facade.printData()).toBeNull();
+  });
+
+  it('keeps a completed check-in when clinic profile is unavailable', () => {
+    api.lookupAppointments.and.returnValue(of([APPOINTMENT]));
+    api.checkIn.and.returnValue(of(CHECK_IN));
+    api.getClinicProfile.and.returnValue(throwError(() => new HttpErrorResponse({ status: 503 })));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: APPOINTMENT.appointmentCode });
+    facade.checkIn(APPOINTMENT.id);
+    expect(facade.selectedAppointment()?.status).toBe(AppointmentStatus.CHECKED_IN);
+    expect(facade.printData()).toBeNull();
+    expect(facade.printError()).toContain('Chưa tải được thông tin phòng khám');
+  });
+
+  it('gets the authoritative A5 receipt when reprinting a paid counter appointment', () => {
+    api.lookupAppointments.and.returnValue(of([APPOINTMENT]));
+    api.getReceipt.and.returnValue(of(RECEIPT));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: APPOINTMENT.appointmentCode });
+    facade.loadReceipt(APPOINTMENT.id);
+    expect(api.getReceipt).toHaveBeenCalledOnceWith(APPOINTMENT.id);
+    expect(facade.printData()).toEqual(jasmine.objectContaining({
+      type: 'PAYMENT_RECEIPT', receiptCode: RECEIPT.receiptCode,
+    }));
   });
 
   it('retains the authoritative payment receipt after refreshing the appointment', () => {
@@ -221,6 +263,7 @@ describe('ReceptionistFacade', () => {
     });
 
     expect(facade.lastReceipt()).toEqual(receipt);
+    expect(facade.printData()).toEqual(jasmine.objectContaining({ type: 'PAYMENT_RECEIPT', receiptCode: receipt.receiptCode }));
     expect(facade.selectedAppointment()?.paymentStatus).toBe(PaymentStatus.PAID);
   });
 
@@ -246,6 +289,7 @@ describe('ReceptionistFacade', () => {
     const intent = { appointmentId: 'appointment-1', method: CounterPaymentMethod.CASH, amountTendered: 350_000 };
     facade.collectPayment(intent);
     expect(facade.lastReceipt()).toEqual(receipt);
+    expect(facade.printData()).toEqual(jasmine.objectContaining({ type: 'PAYMENT_RECEIPT', receiptCode: receipt.receiptCode }));
     expect(facade.checkInError()).toContain('Đã thu tiền');
     facade.collectPayment(intent);
     expect(api.collectPayment).toHaveBeenCalledTimes(1);

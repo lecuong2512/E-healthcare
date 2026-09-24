@@ -28,6 +28,7 @@ const appointment: ReceptionAppointmentViewModel = {
   paymentMethod: PaymentMethod.PAY_AT_CLINIC,
   totalAmount: 350_000,
   queueNumber: null,
+  checkedInAt: null,
   requiresPayment: true,
   canCheckIn: false,
   blockedReason: 'Cần hoàn tất thanh toán.',
@@ -148,9 +149,7 @@ describe('CheckinDeskPage', () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(host.textContent).toContain('RCT-260924-0001');
     expect(host.textContent).toContain('TXN-260924-0001');
-    const printButton = Array.from(host.querySelectorAll('button')).find(
-      (button) => button.textContent?.includes('In phiếu thu'),
-    ) as HTMLButtonElement;
+    const printButton = host.querySelector('.receipt-print-button') as HTMLButtonElement;
     printButton.click();
     expect(printSpy).toHaveBeenCalledTimes(1);
   });
