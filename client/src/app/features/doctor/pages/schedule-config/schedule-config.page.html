@@ -1,0 +1,181 @@
+<main class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+  <header class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+    <div>
+      <p class="text-sm font-semibold text-sky-700">BÁC SĨ · LỊCH LÀM VIỆC</p>
+      <h1 class="mt-1 text-2xl font-bold tracking-tight text-slate-900">Khai báo ca khám</h1>
+      <p class="mt-1 text-sm text-slate-500">Quản lý ca trực và khung giờ tiếp nhận bệnh nhân.</p>
+    </div>
+    <button type="button" (click)="openRegistration()" class="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-800">+ Đăng ký ca làm việc</button>
+  </header>
+
+  <section class="grid gap-3 sm:grid-cols-3">
+    <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-medium uppercase tracking-wide text-slate-500">Ca sáng</p><p class="mt-1 text-lg font-bold text-slate-900">08:00 – 12:00</p></div>
+    <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-medium uppercase tracking-wide text-slate-500">Ca chiều</p><p class="mt-1 text-lg font-bold text-slate-900">13:30 – 17:30</p></div>
+    <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-medium uppercase tracking-wide text-slate-500">Ca tối (tùy chọn)</p><p class="mt-1 text-lg font-bold text-slate-900">18:00 – 21:00</p></div>
+  </section>
+
+  @if (formMessage) {
+    <div class="flex items-start justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900" role="status">
+      <span>{{ formMessage }}</span><button type="button" (click)="formMessage = ''" aria-label="Đóng thông báo" class="font-bold">×</button>
+    </div>
+  }
+
+  <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div class="flex flex-col gap-4 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div><h2 class="text-lg font-bold text-slate-900">Lịch trực</h2><p class="text-sm text-slate-500">{{ heading }}</p></div>
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="inline-flex rounded-lg border border-slate-200 p-1">
+          <button type="button" (click)="setView('week')" [class.bg-sky-700]="viewMode === 'week'" [class.text-white]="viewMode === 'week'" class="rounded-md px-3 py-1.5 text-sm font-medium">Tuần</button>
+          <button type="button" (click)="setView('month')" [class.bg-sky-700]="viewMode === 'month'" [class.text-white]="viewMode === 'month'" class="rounded-md px-3 py-1.5 text-sm font-medium">Tháng</button>
+        </div>
+        <button type="button" (click)="movePeriod(-1)" aria-label="Kỳ trước" class="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50">‹</button>
+        <button type="button" (click)="goToCurrentWeek()" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Tuần này</button>
+        <button type="button" (click)="movePeriod(1)" aria-label="Kỳ sau" class="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50">›</button>
+      </div>
+    </div>
+
+    @if (viewMode === 'week') {
+      <div class="overflow-x-auto">
+        <div class="min-w-[1000px]">
+          <div class="grid grid-cols-8 border-b border-slate-200 bg-slate-50">
+            <div class="p-3 text-xs font-semibold uppercase text-slate-500">Ca trực</div>
+            @for (date of weekDates; track date.toISOString()) {
+              <div class="border-l border-slate-200 p-3 text-center">
+                <p class="text-xs font-medium text-slate-500">{{ weekdayLabel(date) }}</p>
+                <p class="mt-0.5 text-sm font-bold text-slate-900">{{ formatDate(date) }}</p>
+              </div>
+            }
+          </div>
+          @for (shift of shifts; track shift) {
+            <div class="grid grid-cols-8 border-b border-slate-200 last:border-b-0">
+              <div class="bg-slate-50/70 p-3">
+                <p class="text-sm font-bold text-slate-800">{{ shiftLabel(shift) }}</p>
+                <p class="mt-1 text-xs text-slate-500">{{ shift === 'MORNING' ? '08:00 – 12:00' : shift === 'AFTERNOON' ? '13:30 – 17:30' : '18:00 – 21:00' }}</p>
+              </div>
+              @for (date of weekDates; track date.toISOString()) {
+                <div class="min-h-36 border-l border-slate-200 p-2">
+                  @if (getShiftSlots(date, shift).length) {
+                    <div class="rounded-lg border p-2" [class.border-emerald-200]="!isShiftLocked(date, shift)" [class.bg-emerald-50]="!isShiftLocked(date, shift)" [class.border-sky-200]="isShiftLocked(date, shift)" [class.bg-sky-50]="isShiftLocked(date, shift)">
+                      <div class="flex items-start justify-between gap-1">
+                        <span class="text-xs font-bold" [class.text-emerald-800]="!isShiftLocked(date, shift)" [class.text-sky-800]="isShiftLocked(date, shift)">{{ getShiftSummary(date, shift) }}</span>
+                        @if (isShiftLocked(date, shift)) { <span class="text-[10px] text-sky-800" title="Ca đã có bệnh nhân đặt">🔒</span> }
+                      </div>
+                      <p class="mt-1 text-[11px] text-slate-600">{{ getShiftSlots(date, shift).length }} slot · {{ getShiftSlots(date, shift)[0].duration }} phút</p>
+                      <p class="text-[11px] text-slate-600">Buồng {{ getShiftSlots(date, shift)[0].roomNumber }}</p>
+                      <div class="mt-2 flex gap-1">
+                        <button type="button" (click)="openEdit(getShiftSlots(date, shift)[0])" [disabled]="isShiftLocked(date, shift)" class="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-40">Sửa</button>
+                        <button type="button" (click)="cancelShift(date, shift)" [disabled]="isShiftLocked(date, shift)" class="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-40">Hủy ca</button>
+                      </div>
+                    </div>
+                  } @else {
+                    <span class="text-xs text-slate-300">—</span>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="p-4">
+        <div class="grid grid-cols-7 border-l border-t border-slate-200">
+          @for (day of weekdays; track day) { <div class="border-b border-r border-slate-200 bg-slate-50 p-2 text-center text-xs font-semibold text-slate-600">{{ day }}</div> }
+          @for (date of monthDates; track $index) {
+            <div class="min-h-28 border-b border-r border-slate-200 p-2" [class.bg-slate-50]="!date">
+              @if (date) {
+                <p class="text-sm font-bold text-slate-800">{{ monthCellDate(date) }}</p>
+                @for (shift of shifts; track shift) {
+                  @if (getShiftSlots(date, shift).length) {
+                    <div class="mt-1 rounded px-1.5 py-1 text-[10px]" [class.bg-sky-100]="isShiftLocked(date, shift)" [class.text-sky-900]="isShiftLocked(date, shift)" [class.bg-emerald-100]="!isShiftLocked(date, shift)" [class.text-emerald-900]="!isShiftLocked(date, shift)">
+                      {{ shiftLabel(shift) }} · {{ getShiftSlots(date, shift).length }} slot
+                    </div>
+                  }
+                }
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+    <footer class="flex flex-wrap gap-x-5 gap-y-2 border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
+      <span><span class="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-emerald-400"></span>Còn trống – có thể sửa/hủy</span>
+      <span><span class="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-sky-400"></span>Đã có bệnh nhân – khóa sửa/hủy</span>
+      <span class="basis-full text-slate-500">Ca đã có bệnh nhân đặt cần Admin xử lý hủy và kích hoạt quy trình dời lịch khẩn cấp.</span>
+    </footer>
+  </section>
+</main>
+
+@if (showRegistrationForm) {
+  <div class="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4" (click)="showRegistrationForm = false">
+    <section role="dialog" aria-modal="true" aria-labelledby="schedule-form-title" class="my-6 max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6" (click)="$event.stopPropagation()">
+      <div class="flex items-start justify-between gap-4">
+        <div><p class="text-xs font-bold uppercase tracking-wide text-sky-700">Lịch tuần kế tiếp</p><h2 id="schedule-form-title" class="mt-1 text-xl font-bold text-slate-900">Đăng ký ca làm việc</h2><p class="mt-1 text-sm text-slate-500">Chọn lịch, cấu hình slot và kiểm tra xem trước trước khi lưu.</p></div>
+        <button type="button" (click)="showRegistrationForm = false" aria-label="Đóng" class="rounded-lg px-2 text-2xl leading-none text-slate-500 hover:bg-slate-100">×</button>
+      </div>
+
+      <div class="mt-5 grid gap-4 sm:grid-cols-2">
+        <label class="text-sm font-semibold text-slate-700">Kiểu đăng ký
+          <select [(ngModel)]="registrationMode" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal">
+            <option value="weekday">Theo thứ trong tuần sau</option><option value="date">Theo ngày cụ thể</option>
+          </select>
+        </label>
+        @if (registrationMode === 'weekday') {
+          <label class="text-sm font-semibold text-slate-700">Ngày trong tuần
+            <select [(ngModel)]="selectedWeekday" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal">@for (day of weekdays; track day; let index = $index) { <option [ngValue]="index">{{ day }}</option> }</select>
+          </label>
+        } @else {
+          <label class="text-sm font-semibold text-slate-700">Ngày làm việc
+            <input type="date" [min]="todayKey" [(ngModel)]="selectedDate" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal" />
+          </label>
+        }
+        <label class="text-sm font-semibold text-slate-700">Ca làm việc
+          <select [(ngModel)]="selectedShift" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal">
+            <option value="MORNING">Ca sáng · 08:00 – 12:00</option><option value="AFTERNOON">Ca chiều · 13:30 – 17:30</option><option value="EVENING">Ca tối · 18:00 – 21:00</option>
+          </select>
+        </label>
+        <label class="text-sm font-semibold text-slate-700">Thời lượng mỗi slot
+          <select [(ngModel)]="slotDuration" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal">@for (duration of durations; track duration) { <option [ngValue]="duration">{{ duration }} phút</option> }</select>
+        </label>
+        <label class="text-sm font-semibold text-slate-700">Số bệnh nhân tối đa trong ca
+          <input type="number" min="1" [max]="maxAllowedPatients" [(ngModel)]="maxPatients" class="mt-1.5 w-full rounded-lg border border-slate-300 p-2.5 font-normal" />
+        </label>
+        <label class="text-sm font-semibold text-slate-700">Phòng khám / Buồng khám
+          <select [(ngModel)]="roomNumber" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal">@for (room of roomOptions; track room) { <option [value]="room">Buồng {{ room }}</option> }</select>
+        </label>
+      </div>
+
+      <div class="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div><h3 class="text-sm font-bold text-slate-900">Xem trước khung giờ</h3><p class="mt-0.5 text-xs text-slate-500">{{ formatDate(parseDate(targetDate)) }} · {{ shiftLabel(selectedShift) }} · Buồng {{ roomNumber }}</p></div>
+          <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">{{ previewSlots.length }} slot · tối đa {{ previewSlots.length }} bệnh nhân</span>
+        </div>
+        <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          @for (slot of previewSlots; track slot.startTime) { <div class="rounded-lg border border-emerald-200 bg-white px-2 py-2 text-center font-mono text-xs font-semibold text-emerald-800">{{ slot.startTime }} – {{ slot.endTime }}</div> }
+        </div>
+        <p class="mt-2 text-xs text-slate-500">{{ previewSlots.length }} slot được tạo từ đầu ca; mỗi slot tiếp nhận tối đa 1 bệnh nhân.</p>
+      </div>
+
+      <div class="mt-4 rounded-lg border px-3 py-2.5 text-sm" [class.border-rose-200]="isAfterDeadline || isTargetDateInPast" [class.bg-rose-50]="isAfterDeadline || isTargetDateInPast" [class.text-rose-800]="isAfterDeadline || isTargetDateInPast" [class.border-amber-200]="!isAfterDeadline && !isTargetDateInPast" [class.bg-amber-50]="!isAfterDeadline && !isTargetDateInPast" [class.text-amber-900]="!isAfterDeadline && !isTargetDateInPast">
+        <p class="font-semibold">⏰ Hạn đăng ký</p><p class="mt-0.5 text-xs">{{ deadlineWarning }} @if (isAfterDeadline) { <span class="font-bold">Đã quá hạn, không thể đăng ký lịch tuần sau.</span> } @if (isTargetDateInPast) { <span class="font-bold">Không thể đăng ký ngày trong quá khứ.</span> }</p>
+      </div>
+      @if (formMessage) { <p class="mt-3 text-sm text-rose-700" role="alert">{{ formMessage }}</p> }
+      <div class="mt-5 flex justify-end gap-2"><button type="button" (click)="showRegistrationForm = false" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Đóng</button><button type="button" (click)="registerShift()" [disabled]="isAfterDeadline || isTargetDateInPast || !roomNumber || previewSlots.length === 0" class="rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50">Xác nhận đăng ký</button></div>
+    </section>
+  </div>
+}
+
+@if (editingSlot) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" (click)="editingSlot = null">
+    <section role="dialog" aria-modal="true" class="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" (click)="$event.stopPropagation()">
+      <h2 class="text-lg font-bold text-slate-900">Sửa ca làm việc</h2><p class="mt-1 text-sm text-slate-500">Ca này chưa có bệnh nhân đặt, có thể điều chỉnh thông tin và tạo lại slot.</p>
+      <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        <label class="text-sm font-semibold text-slate-700">Ngày làm việc<input type="date" [(ngModel)]="editDate" class="mt-1.5 w-full rounded-lg border border-slate-300 p-2.5 font-normal" /></label>
+        <label class="text-sm font-semibold text-slate-700">Ca trực<select [(ngModel)]="editShift" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal"><option value="MORNING">Ca sáng</option><option value="AFTERNOON">Ca chiều</option><option value="EVENING">Ca tối</option></select></label>
+        <label class="text-sm font-semibold text-slate-700">Thời lượng slot<select [(ngModel)]="editDuration" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal"><option [ngValue]="15">15 phút</option><option [ngValue]="30">30 phút</option></select></label>
+        <label class="text-sm font-semibold text-slate-700">Số bệnh nhân tối đa<input type="number" min="1" [max]="editMaxAllowedPatients" [(ngModel)]="editMaxPatients" class="mt-1.5 w-full rounded-lg border border-slate-300 p-2.5 font-normal" /></label>
+        <label class="text-sm font-semibold text-slate-700 sm:col-span-2">Phòng khám / Buồng khám<select [(ngModel)]="editRoomNumber" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal">@for (room of roomOptions; track room) { <option [value]="room">Buồng {{ room }}</option> }</select></label>
+      </div>
+      <div class="mt-5 flex justify-end gap-2"><button type="button" (click)="editingSlot = null" class="rounded-lg border px-4 py-2 text-sm">Đóng</button><button type="button" (click)="saveEdit()" class="rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white">Lưu thay đổi</button></div>
+    </section>
+  </div>
+}
