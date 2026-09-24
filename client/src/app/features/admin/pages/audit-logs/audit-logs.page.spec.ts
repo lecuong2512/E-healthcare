@@ -31,6 +31,23 @@ describe('AuditLogsPage', () => {
     expect(content).not.toContain('Xóa nhật ký');
   });
 
+  it('offers the SRS-ADM-04 actions from the shared contract', () => {
+    const values = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        'select[formControlName="action"] option',
+      ),
+      (option) => (option as HTMLOptionElement).value,
+    );
+
+    expect(values).toEqual([
+      '',
+      'LOGIN',
+      'VIEW_EMR',
+      'UPDATE_RX',
+      'CANCEL_APPT',
+    ]);
+  });
+
   it('validates that the start time precedes the end time', () => {
     component.filterForm.setValue({
       fromLocal: '2026-09-22T12:00',
