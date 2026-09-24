@@ -129,6 +129,8 @@ export function mapWalkInSuccess(
     doctorName: response.receipt.doctorName,
     roomNumber: doctor?.roomNumber ?? 'Đang cập nhật',
     receiptCode: response.receipt.receiptCode,
+    amount: response.receipt.amount,
+    changeAmount: response.receipt.changeAmount,
   };
 }
 
@@ -166,9 +168,6 @@ export function mapQueueSnapshotToReceptionSummary(
     inConsultationCount: activeItems.filter(
       (item) => item.status === AppointmentStatus.IN_CONSULTATION,
     ).length,
-    lastIssuedQueueNumber: activeItems.length
-      ? Math.max(...activeItems.map((item) => item.queueNumber))
-      : null,
     updatedAtLabel: new Intl.DateTimeFormat('vi-VN', {
       timeZone: 'Asia/Ho_Chi_Minh',
       hour: '2-digit',

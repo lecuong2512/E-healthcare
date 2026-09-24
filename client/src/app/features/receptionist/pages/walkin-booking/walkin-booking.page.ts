@@ -69,11 +69,14 @@ export class WalkinBookingPage {
   @Input() submitting = false;
   @Input() errorMessage: string | null = null;
   @Input() slotConflict = false;
+  @Input() embedded = false;
 
   @Output() doctorSearchRequested =
     new EventEmitter<WalkInDoctorSearchIntent>();
   @Output() bookingRequested = new EventEmitter<WalkInBookingIntent>();
   @Output() resetRequested = new EventEmitter<void>();
+  @Output() closeRequested = new EventEmitter<void>();
+  @Output() printRequested = new EventEmitter<void>();
 
   readonly searchForm = this.formBuilder.group({
     specialtyName: '',
@@ -81,20 +84,20 @@ export class WalkinBookingPage {
   });
 
   readonly bookingForm = this.formBuilder.group({
-    fullName: ['', [Validators.required, Validators.maxLength(120)]],
+    fullName: ['', [Validators.required, Validators.maxLength(100)]],
     phone: [
       '',
-      [Validators.required, Validators.pattern(/^(0|\+84)\d{9}$/)],
+      [Validators.required],
     ],
-    citizenId: ['', [Validators.maxLength(20)]],
+    citizenId: ['', [Validators.pattern(/^(?:\d{9}|\d{12})?$/)]],
     birthYear: [
       new Date().getFullYear(),
-      [Validators.required, Validators.min(1900)],
+      [Validators.required, Validators.min(1900), Validators.max(new Date().getFullYear())],
     ],
     gender: Gender.OTHER,
     reasonForVisit: [
       '',
-      [Validators.required, Validators.maxLength(500)],
+      [Validators.required, Validators.maxLength(2000)],
     ],
     doctorId: ['', Validators.required],
     scheduleId: ['', Validators.required],
@@ -108,6 +111,10 @@ export class WalkinBookingPage {
   private readonly lastFingerprint = signal<string | null>(null);
   private readonly currentIdempotencyKey = signal<string | null>(null);
   private readonly lastIntent = signal<WalkInBookingIntent | null>(null);
+
+  constructor() {
+    this.bookingForm.valueChanges.subscribe(() => this.selectedPatientId.set(null));
+  }
 
   readonly selectedDoctor = computed(
     () =>
@@ -123,13 +130,10 @@ export class WalkinBookingPage {
       ) ?? null,
   );
 
-  readonly changeAmount = computed(() =>
-    Math.max(
-      0,
-      this.bookingForm.controls.amountTendered.value -
-        (this.selectedDoctor()?.consultationFee ?? 0),
-    ),
-  );
+  changeAmount(): number {
+    return Math.max(0, this.bookingForm.controls.amountTendered.value -
+      (this.selectedDoctor()?.consultationFee ?? 0));
+  }
 
   protected readonly Gender = Gender;
 
@@ -159,6 +163,13 @@ export class WalkinBookingPage {
   }
 
   submitBooking(): void {
+    const phone = this.bookingForm.controls.phone.value.replace(/\s/g, '').replace(/^\+84/, '0');
+    this.bookingForm.controls.phone.setValue(phone, { emitEvent: false });
+    const citizenId = this.bookingForm.controls.citizenId.value.trim();
+    this.bookingForm.controls.citizenId.setValue(citizenId, { emitEvent: false });
+    if (!/^0\d{9}$/.test(phone)) {
+      this.bookingForm.controls.phone.setErrors({ phone: true });
+    }
     this.bookingForm.markAllAsTouched();
     const value = this.bookingForm.getRawValue();
     const fee = this.selectedDoctor()?.consultationFee ?? 0;
@@ -175,8 +186,8 @@ export class WalkinBookingPage {
     const intentFingerprint = {
       scheduleId: value.scheduleId,
       fullName: value.fullName.trim(),
-      phone: value.phone.replace(/\s/g, ''),
-      citizenId: value.citizenId.trim(),
+      phone,
+      citizenId,
       birthYear: value.birthYear,
       gender: value.gender,
       reasonForVisit: value.reasonForVisit.trim(),
