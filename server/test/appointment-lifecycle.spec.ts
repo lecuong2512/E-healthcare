@@ -9,6 +9,7 @@ import { DoctorScheduleEntity } from "../src/database/entities/doctor-schedule.e
 import { VoucherEntity } from "../src/database/entities/voucher.entity";
 import { UserEntity } from "../src/database/entities/user.entity";
 import { AppointmentStatus, PaymentMethod, PaymentStatus, Role, SlotStatus } from "@shared/enums";
+import { QueueEventsService } from "../src/modules/realtime/queue-events.service";
 
 describe("AppointmentLifecycleService", () => {
   let service: AppointmentLifecycleService;
@@ -18,6 +19,7 @@ describe("AppointmentLifecycleService", () => {
   let doctorOwnsAppointment: boolean;
   let manager: any;
   let producer: jest.Mocked<Pick<NotificationProducerService, "enqueueAppointmentCancellationEmail" | "enqueueAppointmentCancellationSms">>;
+  let queueEvents: jest.Mocked<Pick<QueueEventsService, "statusChanged">>;
 
   const vietnamSchedule = (hoursFromNow: number) => {
     const instant = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
@@ -51,6 +53,7 @@ describe("AppointmentLifecycleService", () => {
       enqueueAppointmentCancellationEmail: jest.fn().mockResolvedValue({}),
       enqueueAppointmentCancellationSms: jest.fn().mockResolvedValue({}),
     };
+    queueEvents = { statusChanged: jest.fn().mockResolvedValue(undefined) };
 
     const appointmentRepo = {
       createQueryBuilder: () => ({
@@ -87,7 +90,11 @@ describe("AppointmentLifecycleService", () => {
       transaction: jest.fn().mockImplementation(async (work) => work(manager)),
       getRepository: jest.fn().mockImplementation((entity) => entity === VoucherEntity ? voucherRepo : {}),
     } as unknown as DataSource;
-    service = new AppointmentLifecycleService(dataSource, producer as unknown as NotificationProducerService);
+    service = new AppointmentLifecycleService(
+      dataSource,
+      producer as unknown as NotificationProducerService,
+      queueEvents as unknown as QueueEventsService,
+    );
   });
 
   it("cancels at least 24 hours before the visit with a 100% refund and frees the slot", async () => {
@@ -153,5 +160,20 @@ describe("AppointmentLifecycleService", () => {
 
   it("does not allow a receptionist to start consultation", async () => {
     await expect(service.transition(appointment.id, AppointmentStatus.IN_CONSULTATION, { userId: "reception-1", role: Role.RECEPTIONIST })).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("publishes the committed doctor call transition to the queue", async () => {
+    appointment.status = AppointmentStatus.CHECKED_IN;
+
+    await service.transition(appointment.id, AppointmentStatus.IN_CONSULTATION, {
+      userId: "doctor-user-1",
+      role: Role.DOCTOR,
+    });
+
+    expect(queueEvents.statusChanged).toHaveBeenCalledWith(
+      appointment.id,
+      AppointmentStatus.CHECKED_IN,
+      "APPOINTMENT_LIFECYCLE",
+    );
   });
 });

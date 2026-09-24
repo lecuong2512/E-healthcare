@@ -6,6 +6,7 @@ export interface QueueTicket {
   patientName: string;
   doctorId: string;
   doctorName: string;
+  specialtyName: string;
   roomNumber: string;
   status: AppointmentStatus;
   queueNumber: number;
@@ -28,7 +29,7 @@ export interface QueueStatusChanged {
   previousStatus: AppointmentStatus | null;
   status: AppointmentStatus;
   queueNumber: number;
-  source: 'RECEPTION_CHECKIN' | 'WALK_IN';
+  source: 'RECEPTION_CHECKIN' | 'WALK_IN' | 'APPOINTMENT_LIFECYCLE' | 'CLINICAL_COMPLETION';
   occurredAt: string;
   ticket: QueueTicket;
 }
@@ -36,6 +37,7 @@ export interface QueueStatusChanged {
 export interface PublicQueueTicket {
   doctorId: string;
   doctorName: string;
+  specialtyName: string;
   roomNumber: string;
   maskedPatientName: string;
   status: AppointmentStatus;

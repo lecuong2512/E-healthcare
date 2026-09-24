@@ -54,7 +54,8 @@ export class QueueQueryService {
       .createQueryBuilder('appointment')
       .innerJoinAndSelect('appointment.patient', 'patient')
       .innerJoinAndSelect('appointment.doctor', 'doctor')
-      .innerJoinAndSelect('doctor.user', 'doctorUser');
+      .innerJoinAndSelect('doctor.user', 'doctorUser')
+      .innerJoinAndSelect('doctor.specialty', 'specialty');
   }
 
   private toTicket(appointment: AppointmentEntity): QueueTicket {
@@ -64,6 +65,7 @@ export class QueueQueryService {
       patientName: appointment.patient.fullName,
       doctorId: appointment.doctorId,
       doctorName: appointment.doctor.user.fullName,
+      specialtyName: appointment.doctor.specialty.name,
       roomNumber: appointment.doctor.roomNumber,
       status: appointment.status,
       queueNumber: appointment.queueNumber!,

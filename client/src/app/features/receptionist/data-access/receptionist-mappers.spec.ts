@@ -111,6 +111,7 @@ describe('Reception mappers', () => {
         patientName: 'Nguyễn Văn An',
         doctorId: 'doctor-1',
         doctorName: 'Trần Minh Bình',
+        specialtyName: 'Tim mạch',
         roomNumber: 'P.201',
         status: AppointmentStatus.CHECKED_IN,
         queueNumber: 12,

@@ -12,7 +12,7 @@ import { QueueEventsService } from '../src/modules/realtime/queue-events.service
 import { QueueGateway } from '../src/modules/realtime/queue.gateway';
 import { QueueQueryService } from '../src/modules/realtime/queue-query.service';
 import { QueueBoardTokenService } from '../src/modules/realtime/queue-board-token.service';
-import { toPublicQueueTicket } from '../src/modules/realtime/public-queue.mapper';
+import { maskPatientName, toPublicQueueTicket } from '../src/modules/realtime/public-queue.mapper';
 import {
   APPOINTMENT_STATUS_CHANGED_EVENT,
   QUEUE_AUTH_EXPIRED_EVENT,
@@ -33,6 +33,7 @@ describe('Realtime queue', () => {
     patientName: 'Patient',
     doctorId,
     doctorName: 'Doctor',
+    specialtyName: 'Cardiology',
     roomNumber: 'P1',
     status: AppointmentStatus.CHECKED_IN,
     queueNumber: 2,
@@ -75,6 +76,11 @@ describe('Realtime queue', () => {
       queries as unknown as QueueQueryService,
       boardTokens as unknown as QueueBoardTokenService,
     );
+  });
+
+  it('abbreviates a Vietnamese patient name for the public TV board', () => {
+    expect(maskPatientName('Nguyễn Văn An')).toBe('Nguyễn V. A.');
+    expect(maskPatientName('An')).toBe('A.');
   });
 
   it('derives the doctor room from the authenticated account and sends a scoped snapshot', async () => {
@@ -200,8 +206,9 @@ describe('Realtime queue', () => {
       doctorId, queueNumber: ticket.queueNumber, previousStatus: null,
       status: ticket.status, occurredAt: expect.any(String),
       ticket: {
-        doctorId, doctorName: ticket.doctorName, roomNumber: ticket.roomNumber,
-        maskedPatientName: 'Pati***', status: ticket.status,
+        doctorId, doctorName: ticket.doctorName, specialtyName: ticket.specialtyName,
+        roomNumber: ticket.roomNumber,
+        maskedPatientName: 'P.', status: ticket.status,
         queueNumber: ticket.queueNumber, queueDate: ticket.queueDate,
       },
     });

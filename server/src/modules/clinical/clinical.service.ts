@@ -22,6 +22,7 @@ import { AppointmentEntity } from '../../database/entities/appointment.entity';
 import { DoctorEntity } from '../../database/entities/doctor.entity';
 import { PersonalHealthProfileEntity } from '../../database/entities/auth.entity';
 import { Icd10Service } from './icd10/icd10.service';
+import { QueueEventsService } from '../realtime/queue-events.service';
 import {
   CreateMedicalRecordDto,
   UpdateMedicalRecordDto,
@@ -58,6 +59,7 @@ export class ClinicalService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly icd10Service: Icd10Service,
+    private readonly queueEvents: QueueEventsService,
   ) {}
 
   private get medicalRecordRepo(): Repository<MedicalRecordEntity> {
@@ -624,7 +626,7 @@ export class ClinicalService {
     userId: string,
     recordId: string,
   ): Promise<MedicalRecordDetailResponse> {
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const doctor = await this.getDoctorByUserId(userId, manager);
       const medicalRecordRepo = manager.getRepository(MedicalRecordEntity);
       const appointmentRepo = manager.getRepository(AppointmentEntity);
@@ -677,6 +679,12 @@ export class ClinicalService {
 
       return this.mapToDetailResponse(savedRecord, prescription);
     });
+    await this.queueEvents.statusChanged(
+      result.appointmentId,
+      AppointmentStatus.IN_CONSULTATION,
+      'CLINICAL_COMPLETION',
+    );
+    return result;
   }
 
   /**

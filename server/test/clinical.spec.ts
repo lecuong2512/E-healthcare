@@ -11,6 +11,7 @@ import { Role, AppointmentStatus } from '@shared/enums';
 
 import { ClinicalService } from '../src/modules/clinical/clinical.service';
 import { Icd10Service } from '../src/modules/clinical/icd10/icd10.service';
+import { QueueEventsService } from '../src/modules/realtime/queue-events.service';
 import {
   CreateMedicalRecordDto,
   UpdateMedicalRecordDto,
@@ -32,6 +33,7 @@ describe('Card 3.3: Clinical Module (EMR, ICD-10, e-Prescription)', () => {
   let mockPhrRepo: any;
   let mockDataSource: any;
   let mockManager: any;
+  let queueEvents: jest.Mocked<Pick<QueueEventsService, 'statusChanged'>>;
 
   const DOCTOR_USER_ID = 'u-doctor-1111-1111-1111-111111111111';
   const OTHER_DOCTOR_USER_ID = 'u-doctor-2222-2222-2222-222222222222';
@@ -122,7 +124,14 @@ describe('Card 3.3: Clinical Module (EMR, ICD-10, e-Prescription)', () => {
       ),
     } as unknown as DataSource;
 
-    service = new ClinicalService(mockDataSource, icd10Service);
+    queueEvents = {
+      statusChanged: jest.fn().mockResolvedValue(undefined),
+    };
+    service = new ClinicalService(
+      mockDataSource,
+      icd10Service,
+      queueEvents as unknown as QueueEventsService,
+    );
   });
 
   describe('1. BMI Calculation & Vital Signs', () => {
@@ -562,6 +571,11 @@ describe('Card 3.3: Clinical Module (EMR, ICD-10, e-Prescription)', () => {
           status: AppointmentStatus.COMPLETED,
           completedAt: expect.any(Date),
         }),
+      );
+      expect(queueEvents.statusChanged).toHaveBeenCalledWith(
+        APPOINTMENT_ID,
+        AppointmentStatus.IN_CONSULTATION,
+        'CLINICAL_COMPLETION',
       );
     });
 
