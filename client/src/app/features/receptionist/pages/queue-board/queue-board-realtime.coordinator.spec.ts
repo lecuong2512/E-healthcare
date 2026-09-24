@@ -58,6 +58,12 @@ describe('QueueBoardRealtimeCoordinator', () => {
     expect(store.nowServing()).toEqual([]);
   });
 
+  it('adds a newly checked-in patient to Next Up without an announcement', () => {
+    expect(coordinator.handle(event(null, 'CHECKED_IN'))).toBe('QUEUED');
+    expect(store.nextUp()).toEqual([ticket]);
+    expect(store.lastCalledTicketId()).toBeNull();
+  });
+
   it('deduplicates a repeated realtime event', () => {
     const statusEvent = event('CHECKED_IN', 'IN_CONSULTATION');
 

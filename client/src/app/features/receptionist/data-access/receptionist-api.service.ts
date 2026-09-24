@@ -10,6 +10,7 @@ import {
   CounterPaymentReceipt,
   LookupAppointmentRequest,
   QueueSnapshot,
+  PublicQueueBoardToken,
   ReceptionAppointment,
   WalkInBookingRequest,
   WalkInBookingResponse,
@@ -107,5 +108,12 @@ export class ReceptionistApiService {
 
   getQueue(): Observable<QueueSnapshot> {
     return this.http.get<QueueSnapshot>(`${this.baseUrl}/queue`);
+  }
+
+  issueQueueBoardToken(): Observable<PublicQueueBoardToken> {
+    return this.http.post<PublicQueueBoardToken>(
+      `${this.baseUrl}/queue/board-token`,
+      {},
+    );
   }
 }

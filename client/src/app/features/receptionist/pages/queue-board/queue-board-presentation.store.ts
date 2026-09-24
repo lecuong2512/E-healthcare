@@ -47,6 +47,15 @@ export class QueueBoardPresentationStore {
     this._updatedAt.set(new Date());
   }
 
+  enqueue(ticket: QueueBoardTicketViewModel): void {
+    this._nextUp.update((tickets) => [
+      ...tickets.filter((item) => item.id !== ticket.id),
+      ticket,
+    ].sort((left, right) => left.queueNumber - right.queueNumber)
+      .slice(0, MAX_NEXT_UP_TICKETS));
+    this._updatedAt.set(new Date());
+  }
+
   complete(ticketId: string): void {
     this._nowServing.update((tickets) =>
       tickets.filter((ticket) => ticket.id !== ticketId),

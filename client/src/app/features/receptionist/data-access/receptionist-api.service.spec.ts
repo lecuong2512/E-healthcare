@@ -100,4 +100,13 @@ describe('ReceptionistApiService', () => {
     expect(request.request.method).toBe('GET');
     request.flush({ scope: 'RECEPTION', date: '2026-09-24', items: [] });
   });
+
+  it('issues a short-lived token for the public queue board', () => {
+    service.issueQueueBoardToken().subscribe();
+
+    const request = http.expectOne('/api/v1/reception/queue/board-token');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({});
+    request.flush({ token: 'board-token', expiresAt: '2026-09-25T00:00:00Z' });
+  });
 });

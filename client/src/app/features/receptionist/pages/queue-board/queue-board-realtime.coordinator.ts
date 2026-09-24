@@ -5,6 +5,7 @@ import { QueueBoardPresentationStore } from './queue-board-presentation.store';
 
 export type QueueBoardEventResult =
   | 'ANNOUNCED'
+  | 'QUEUED'
   | 'COMPLETED'
   | 'IGNORED_DUPLICATE'
   | 'IGNORED_TRANSITION';
@@ -24,6 +25,11 @@ export class QueueBoardRealtimeCoordinator {
     }
 
     this.remember(eventKey);
+
+    if (event.status === 'CHECKED_IN') {
+      this.store.enqueue(event.ticket);
+      return 'QUEUED';
+    }
 
     if (
       event.previousStatus === 'CHECKED_IN' &&
