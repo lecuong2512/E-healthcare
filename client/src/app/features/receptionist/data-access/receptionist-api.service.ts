@@ -6,6 +6,7 @@ import {
   AvailableWalkInDoctor,
   AvailableWalkInDoctorsRequest,
   CheckInResponse,
+  ClinicPrintInfo,
   CollectCounterPaymentRequest,
   CounterPaymentReceipt,
   LookupAppointmentRequest,
@@ -20,6 +21,10 @@ import { environment } from '../../../../environments/environment';
 export class ReceptionistApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiBaseUrl}/reception`;
+
+  getClinicProfile(): Observable<ClinicPrintInfo> {
+    return this.http.get<ClinicPrintInfo>(`${this.baseUrl}/clinic-profile`);
+  }
 
   lookupAppointments(
     request: LookupAppointmentRequest,

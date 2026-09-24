@@ -16,6 +16,7 @@ import {
   AvailableWalkInDoctor,
   CheckInResponse,
   CounterPaymentReceipt,
+  ClinicPrintInfo,
   ReceptionAppointment,
   WalkInBookingResponse,
 } from '@shared/interfaces';
@@ -31,6 +32,7 @@ import { WalkInService } from './walk-in.service';
 import { receptionAuditContext } from './reception-audit.service';
 import { CheckInQrService } from './check-in-qr.service';
 import { CheckInQrDto } from './dto/check-in-qr.dto';
+import { clinicPrintProfile } from './clinic-print-profile';
 
 @Controller('reception')
 @Roles(Role.RECEPTIONIST)
@@ -41,6 +43,11 @@ export class ReceptionController {
     private readonly walkIn: WalkInService,
     private readonly qr: CheckInQrService,
   ) {}
+
+  @Get('clinic-profile')
+  getClinicProfile(): ClinicPrintInfo {
+    return clinicPrintProfile();
+  }
 
   @Get('appointments/lookup')
   lookup(
