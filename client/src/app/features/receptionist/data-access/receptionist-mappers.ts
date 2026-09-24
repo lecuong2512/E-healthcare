@@ -47,6 +47,7 @@ export function mapReceptionAppointment(
     paymentMethod: dto.paymentMethod,
     totalAmount: dto.totalAmount,
     queueNumber: dto.queueNumber,
+    checkedInAt: dto.checkedInAt,
     requiresPayment: dto.requiresPayment,
     canCheckIn: dto.canCheckIn,
     blockedReason: dto.blockedReason,
@@ -61,6 +62,7 @@ export function mapCheckInResult(
     ...current,
     status: response.status,
     queueNumber: response.queueNumber,
+    checkedInAt: response.checkedInAt,
     canCheckIn: false,
     blockedReason: null,
   };
@@ -132,6 +134,7 @@ export function mapWalkInSuccess(
     receiptCode: response.receipt.receiptCode,
     amount: response.receipt.amount,
     changeAmount: response.receipt.changeAmount,
+    receipt: response.receipt,
   };
 }
 

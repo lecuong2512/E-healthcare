@@ -5,6 +5,7 @@ import {
   PaymentMethod,
   PaymentStatus,
 } from '@shared/enums';
+import { CounterPaymentReceipt } from '@shared/interfaces';
 
 export type ReceptionLookupKind = 'QR_TOKEN' | 'APPOINTMENT_CODE' | 'PHONE';
 
@@ -29,6 +30,7 @@ export interface ReceptionAppointmentViewModel {
   readonly paymentMethod: PaymentMethod;
   readonly totalAmount: number;
   readonly queueNumber: number | null;
+  readonly checkedInAt: string | null;
   readonly requiresPayment: boolean;
   readonly canCheckIn: boolean;
   readonly blockedReason: string | null;
@@ -117,4 +119,5 @@ export interface WalkInSuccessViewModel {
   readonly receiptCode: string;
   readonly amount: number;
   readonly changeAmount: number;
+  readonly receipt?: CounterPaymentReceipt;
 }
