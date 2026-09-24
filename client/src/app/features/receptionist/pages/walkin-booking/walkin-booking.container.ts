@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   OnInit,
+  OnDestroy,
   inject,
 } from '@angular/core';
 
@@ -29,10 +30,14 @@ import { WalkinBookingPage } from './walkin-booking.page';
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class WalkinBookingContainer implements OnInit {
+export class WalkinBookingContainer implements OnInit, OnDestroy {
   protected readonly facade = inject(ReceptionistFacade);
 
   ngOnInit(): void {
-    this.facade.searchWalkInDoctors({ specialtyName: '', doctorName: '' });
+    this.facade.beginWalkInSession();
+  }
+
+  ngOnDestroy(): void {
+    this.facade.endWalkInSession();
   }
 }
