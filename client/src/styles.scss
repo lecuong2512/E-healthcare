@@ -2,6 +2,7 @@
 // 2. SCSS Imports & Tokens
 // ==========================================================================
 @use 'styles/variables' as *;
+@use './styles/print-fonts';
 
 // ==========================================================================
 // 1. Google Fonts
@@ -300,23 +301,10 @@
     z-index: 1;
   }
  }
-@media print {
-  body:has(app-walk-in-booking-modal) * {
-    visibility: hidden !important;
-  }
-
-  body:has(app-walk-in-booking-modal) #walk-in-receipt,
-  body:has(app-walk-in-booking-modal) #walk-in-receipt * {
-    visibility: visible !important;
-  }
-
-  body:has(app-walk-in-booking-modal) #walk-in-receipt {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-  }
-
-  body:has(app-walk-in-booking-modal) #walk-in-receipt button {
-    display: none !important;
-  }
+app-print-receipt.receipt-print-source {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  z-index: -1;
+  pointer-events: none;
 }
