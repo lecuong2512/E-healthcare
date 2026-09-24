@@ -76,6 +76,7 @@ export class SessionController {
     @Res({ passthrough: true }) response: Response,
   ) {
     await this.sessions.logout(request.cookies?.[REFRESH_COOKIE]);
+    await this.sessions.blacklistAccessToken(/^Bearer ([^\s]+)$/i.exec(request.headers.authorization ?? "")?.[1]);
     response.clearCookie(
       REFRESH_COOKIE,
       refreshCookieOptions(REFRESH_TTL * 1000),

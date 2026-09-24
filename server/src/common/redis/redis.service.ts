@@ -110,6 +110,16 @@ export class RedisService implements OnApplicationShutdown {
     return result === 1;
   }
 
+  async setEx(key: string, value: string, ttlSeconds: number): Promise<void> {
+    await this.client.set(key, value, "EX", ttlSeconds);
+  }
+
+  async incrementWithTtl(key: string, ttlSeconds: number): Promise<number> {
+    const value = await this.client.incr(key);
+    if (value === 1) await this.client.expire(key, ttlSeconds);
+    return value;
+  }
+
   getClient(): Redis {
     return this.client;
   }

@@ -12,12 +12,14 @@ import { UserEntity } from "../../database/entities/user.entity";
 import { LoginDto } from "./dto/login.dto";
 import { SessionService, IssuedSession } from "./session.service";
 import { UserStatus } from "@shared/enums";
+import { RedisService } from "../../common/redis/redis.service";
 
 @Injectable()
 export class LoginService {
   constructor(
     private readonly database: DataSource,
     private readonly sessions: SessionService,
+    private readonly redis: RedisService,
   ) {}
 
   async login(dto: LoginDto): Promise<IssuedSession> {
@@ -32,6 +34,11 @@ export class LoginService {
       ? `0${identifier.slice(3)}`
       : identifier;
     
+    const attemptKey = `login_attempts:${identifier}`;
+    if ((await this.redis.get(attemptKey))) {
+      const ttl = await this.redis.ttl(attemptKey);
+      if (Number(await this.redis.get(attemptKey)) >= 5) throw this.locked(new Date(Date.now() + Math.max(1, ttl) * 1000), new Date());
+    }
     const result = await this.database.transaction(
       async (manager): Promise<IssuedSession | HttpException> => {
         // Khóa user để các lần đăng nhập sai đồng thời không làm mất bộ đếm.
@@ -55,7 +62,8 @@ export class LoginService {
           : user.failedLoginAttempts;
 
         if (!user.passwordHash ||!(await compare(dto.password, user.passwordHash))) {
-          const failed = attempts + 1;
+          const redisAttempts = await this.redis.incrementWithTtl(attemptKey, 1800);
+          const failed = Math.max(attempts + 1, redisAttempts);
           const until =
             failed >= 5 ? new Date(now.getTime() + 1800000) : null;
           await users.update(user.id, {
@@ -73,6 +81,7 @@ export class LoginService {
           }
           return this.invalidLogin();
         }
+        await this.redis.del(attemptKey);
         await users.update(user.id, {
           failedLoginAttempts: 0,
           loginLockedUntil: null,
@@ -105,7 +114,7 @@ export class LoginService {
           Math.ceil((until.getTime() - now.getTime()) / 1000),
         ),
       },
-      HttpStatus.TOO_MANY_REQUESTS,
+      HttpStatus.LOCKED,
     );
   }
 }

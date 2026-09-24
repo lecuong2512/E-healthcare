@@ -2,7 +2,7 @@ import {
   Body,
   Controller,
   Get,
-  Patch,
+  Put,
   Req,
 } from "@nestjs/common";
 import { UpdatePhrProfileDto } from './dto/update-phr-profile.dto';
@@ -28,7 +28,7 @@ export class PhrController {
     return this.phrService.getMyPhr(req.auth!.userId);
   }
 
-  @Patch("me")
+  @Put("me")
   async updateMyPhr(
     @Req() req: AuthenticatedRequest,
     @Body() request: UpdatePhrProfileDto,

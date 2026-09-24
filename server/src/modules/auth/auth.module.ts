@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../../database/database.module";
+import { RedisModule } from "../../common/redis/redis.module";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { OtpDeliveryService } from "./otp-delivery.service";
@@ -12,7 +13,7 @@ import { PasswordResetController } from "./password-reset.controller";
 import { PasswordResetService } from "./password-reset.service";
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, RedisModule],
   controllers: [AuthController, SessionController, GoogleAuthController, PasswordResetController],
   providers: [
     AuthService,
