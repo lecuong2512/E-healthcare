@@ -91,7 +91,7 @@
             class="min-h-11 rounded-lg border border-slate-300 bg-white px-3 font-normal focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-100"
           >
             <option value="">Tất cả thao tác</option>
-            @for (action of actionOptions(); track action) {
+            @for (action of actionOptions; track action) {
               <option [value]="action">{{ action }}</option>
             }
           </select>

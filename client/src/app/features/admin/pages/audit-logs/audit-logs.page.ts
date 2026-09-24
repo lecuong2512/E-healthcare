@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ReactiveFormsModule, NonNullableFormBuilder } from '@angular/forms';
+import { AuditAction } from '@shared/enums';
 
 import { AuditLogCsvDownloadService } from './audit-log-csv-download.service';
 import { AuditLogTimePipe } from './audit-log-time.pipe';
@@ -29,11 +30,7 @@ export class AuditLogsPage {
   readonly store = inject(AuditLogsPresentationStore);
   private readonly defaultRange = createDefaultVietnamRange();
 
-  /**
-   * Populated from the shared AuditAction contract by the integration adapter.
-   * Keeping this empty prevents a client-side duplicate enum.
-   */
-  readonly actionOptions = signal<readonly string[]>([]);
+  readonly actionOptions: readonly AuditAction[] = Object.values(AuditAction);
   readonly validationError = signal<string | null>(null);
 
   readonly filterForm = this.formBuilder.group({
