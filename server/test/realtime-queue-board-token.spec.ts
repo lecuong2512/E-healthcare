@@ -54,30 +54,32 @@ describe("Public queue board", () => {
 
   it("whitelists only display fields and masks patient names", () => {
     const ticket = {
-      appointmentId: "private-id",
-      appointmentCode: "APT-PRIVATE",
-      patientName: "Nguyễn Văn A",
-      patientPhone: "0912345678",
-      citizenId: "012345678901",
-      doctorId: "doctor-id",
-      doctorName: "Bác sĩ A",
-      roomNumber: "P1",
+      appointmentId: 'private-id',
+      appointmentCode: 'APT-PRIVATE',
+      patientName: 'Nguyễn Văn A',
+      patientPhone: '0912345678',
+      citizenId: '012345678901',
+      doctorId: 'doctor-id',
+      doctorName: 'Bác sĩ A',
+      specialtyName: 'Tim mạch',
+      roomNumber: 'P1',
       status: AppointmentStatus.CHECKED_IN,
       queueNumber: 12,
-      queueDate: "2026-09-22",
+      queueDate: '2026-09-22',
       queueSource: QueueSource.APPOINTMENT,
-      checkedInAt: "2026-09-22T02:00:00.000Z",
+      checkedInAt: '2026-09-22T02:00:00.000Z',
     } as QueueTicket & { patientPhone: string; citizenId: string };
 
     const publicTicket = toPublicQueueTicket(ticket);
     expect(publicTicket).toEqual({
-      doctorId: "doctor-id",
-      doctorName: "Bác sĩ A",
-      roomNumber: "P1",
-      maskedPatientName: "Nguy** V** A",
+      doctorId: 'doctor-id',
+      doctorName: 'Bác sĩ A',
+      specialtyName: 'Tim mạch',
+      roomNumber: 'P1',
+      maskedPatientName: 'Nguyễn V. A.',
       status: AppointmentStatus.CHECKED_IN,
       queueNumber: 12,
-      queueDate: "2026-09-22",
+      queueDate: '2026-09-22',
     });
     const serialized = JSON.stringify(publicTicket);
     for (const privateValue of [
