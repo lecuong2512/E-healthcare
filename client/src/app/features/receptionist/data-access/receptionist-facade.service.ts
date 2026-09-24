@@ -1,5 +1,5 @@
 import { Injectable, effect, inject, signal } from '@angular/core';
-import { finalize, map, switchMap } from 'rxjs';
+import { Subscription, finalize, map } from 'rxjs';
 import { Socket } from 'socket.io-client';
 
 import {
@@ -100,6 +100,8 @@ export class ReceptionistFacade {
   private queueSocket: Socket | null = null;
   private queueConsumers = 0;
   private walkInSession = 0;
+  private doctorSearch: Subscription | null = null;
+  private doctorSearchSerial = 0;
 
   private readonly handleQueueSnapshot = (snapshot: QueueSnapshot): void => {
     this.setQueueSnapshot(snapshot);
@@ -196,31 +198,37 @@ export class ReceptionistFacade {
 
   collectPayment(intent: CounterPaymentIntent): void {
     const appointment = this.findAppointment(intent.appointmentId);
-    if (!appointment || this._paymentPending()) {
+    if (!appointment || this._paymentPending() || this._lastReceipt()?.appointmentCode === appointment.appointmentCode || !appointment.requiresPayment) {
       return;
     }
 
     this._paymentPending.set(true);
     this._checkInError.set(null);
 
-    this.api
-      .collectPayment(intent.appointmentId, mapCounterPaymentIntent(intent))
-      .pipe(
-        switchMap((receipt) =>
-          this.api
-            .lookupAppointments({ code: appointment.appointmentCode })
-            .pipe(map((appointments) => ({ appointments, receipt }))),
-        ),
-        finalize(() => this._paymentPending.set(false)),
-      )
+    this.api.collectPayment(intent.appointmentId, mapCounterPaymentIntent(intent))
+      .pipe(finalize(() => this._paymentPending.set(false)))
       .subscribe({
-        next: ({ appointments, receipt }) => {
+        next: (receipt) => {
           this._lastReceipt.set(receipt);
-          this.applyAppointmentRefresh(appointments);
+          this.api.lookupAppointments({ code: appointment.appointmentCode }).subscribe({
+            next: (appointments) => this.applyAppointmentRefresh(appointments),
+            error: () => this._checkInError.set('Đã thu tiền, chưa đồng bộ được trạng thái. Không thu tiền lần nữa; hãy tải lại trạng thái.'),
+          });
         },
-        error: (error) =>
-          this._checkInError.set(mapReceptionError(error).message),
+        error: (error) => this._checkInError.set(mapReceptionError(error).message),
       });
+  }
+
+  loadReceipt(appointmentId: string): void {
+    if (this._paymentPending()) return;
+    this._checkInError.set(null);
+    this.api.getReceipt(appointmentId).subscribe({
+      next: (receipt) => {
+        this._lastReceipt.set(receipt);
+        setTimeout(() => window.print());
+      },
+      error: (error) => this._checkInError.set(mapReceptionError(error).message),
+    });
   }
 
   checkIn(appointmentId: string): void {
@@ -272,9 +280,8 @@ export class ReceptionistFacade {
   }
 
   searchWalkInDoctors(intent: WalkInDoctorSearchIntent): void {
-    if (this._walkInLoadingDoctors()) {
-      return;
-    }
+    this.doctorSearch?.unsubscribe();
+    const serial = ++this.doctorSearchSerial;
 
     this._walkInLoadingDoctors.set(true);
     this._walkInError.set(null);
@@ -283,11 +290,13 @@ export class ReceptionistFacade {
     // Backend accepts specialtyId, not a display name. Until the shared
     // specialty directory contract is available, query by doctorName and
     // apply the selected display-name filter to the canonical response.
-    this.api
+    this.doctorSearch = this.api
       .getWalkInDoctors({
         ...(intent.doctorName ? { doctorName: intent.doctorName } : {}),
       })
-      .pipe(finalize(() => this._walkInLoadingDoctors.set(false)))
+      .pipe(finalize(() => {
+        if (serial === this.doctorSearchSerial) this._walkInLoadingDoctors.set(false);
+      }))
       .subscribe({
         next: (doctors) => {
           const mapped = doctors.map(mapWalkInDoctor);
@@ -363,6 +372,7 @@ export class ReceptionistFacade {
 
   endWalkInSession(): void {
     this.walkInSession++;
+    this.doctorSearch?.unsubscribe();
     this._walkInCandidates.set([]);
     this._walkInSuccess.set(null);
     this._walkInError.set(null);

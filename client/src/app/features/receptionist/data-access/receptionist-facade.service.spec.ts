@@ -208,6 +208,33 @@ describe('ReceptionistFacade', () => {
     expect(facade.selectedAppointment()?.paymentStatus).toBe(PaymentStatus.PAID);
   });
 
+  it('keeps a committed receipt when the appointment refresh fails and prevents a second charge', () => {
+    const appointment = {
+      id: 'appointment-1', appointmentCode: 'APT-1', status: AppointmentStatus.CONFIRMED,
+      patientId: 'patient-1', patientName: 'An', patientPhone: '0912345678',
+      doctorId: 'doctor-1', doctorName: 'Binh', specialtyName: 'Tim mach', roomNumber: '201',
+      date: '2026-09-24', startTime: '09:00', endTime: '09:30',
+      paymentStatus: PaymentStatus.UNPAID, paymentMethod: PaymentMethod.PAY_AT_CLINIC,
+      totalAmount: 350_000, queueNumber: null, checkedInAt: null,
+      requiresPayment: true, canCheckIn: false, blockedReason: 'Chua thanh toan',
+    };
+    const receipt = {
+      receiptCode: 'RCT-1', transactionCode: 'TXN-1', appointmentCode: 'APT-1',
+      patientName: 'An', doctorName: 'Binh', amount: 350_000, amountTendered: 350_000,
+      changeAmount: 0, paymentMethod: CounterPaymentMethod.CASH,
+      collectedBy: 'receptionist-1', paidAt: '2026-09-24T02:00:00.000Z',
+    };
+    api.lookupAppointments.and.returnValues(of([appointment]), throwError(() => new HttpErrorResponse({ status: 503 })));
+    api.collectPayment.and.returnValue(of(receipt));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: 'APT-1' });
+    const intent = { appointmentId: 'appointment-1', method: CounterPaymentMethod.CASH, amountTendered: 350_000 };
+    facade.collectPayment(intent);
+    expect(facade.lastReceipt()).toEqual(receipt);
+    expect(facade.checkInError()).toContain('Đã thu tiền');
+    facade.collectPayment(intent);
+    expect(api.collectPayment).toHaveBeenCalledTimes(1);
+  });
+
   it('maps PATIENT_SELECTION_REQUIRED without treating it as slot conflict', () => {
     api.createWalkIn.and.returnValue(
       throwError(
