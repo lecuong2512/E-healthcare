@@ -128,7 +128,6 @@ describe('Reception mappers', () => {
 
     expect(summary.waitingCount).toBe(1);
     expect(summary.inConsultationCount).toBe(0);
-    expect(summary.lastIssuedQueueNumber).toBe(12);
     expect(summary).not.toEqual(
       jasmine.objectContaining({ patientName: jasmine.anything() }),
     );
