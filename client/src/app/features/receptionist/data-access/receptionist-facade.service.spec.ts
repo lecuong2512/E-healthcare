@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { Socket } from 'socket.io-client';
 
 import {
@@ -19,6 +19,7 @@ import {
   QUEUE_SYNC_EVENT,
 } from '@shared/constants/queue-socket.constants';
 import { SocketService } from '../../../core/services/socket.service';
+import { AvailableWalkInDoctor } from '@shared/interfaces';
 import { ReceptionistApiService } from './receptionist-api.service';
 import { ReceptionistFacade } from './receptionist-facade.service';
 
@@ -273,6 +274,17 @@ describe('ReceptionistFacade', () => {
 
     expect(facade.walkInCandidates()[0].maskedName).toBe('Nguyễn V. A.');
     expect(facade.walkInSlotConflict()).toBeFalse();
+  });
+
+  it('keeps the newest doctor search result when an older request is still pending', () => {
+    const oldSearch = new Subject<AvailableWalkInDoctor[]>();
+    const newSearch = new Subject<AvailableWalkInDoctor[]>();
+    api.getWalkInDoctors.and.returnValues(oldSearch, newSearch);
+    facade.searchWalkInDoctors({ specialtyName: '', doctorName: 'old' });
+    facade.searchWalkInDoctors({ specialtyName: '', doctorName: 'new' });
+    oldSearch.next([{ doctorId: 'old', doctorName: 'Old', specialtyName: 'Tim mach', roomNumber: '1', consultationFee: 100, availableSlots: [] }]);
+    newSearch.next([{ doctorId: 'new', doctorName: 'New', specialtyName: 'Tim mach', roomNumber: '2', consultationFee: 100, availableSlots: [] }]);
+    expect(facade.walkInDoctors().map((doctor) => doctor.doctorId)).toEqual(['new']);
   });
 
   it('reconciles queue events and cleans up its socket listener', () => {
