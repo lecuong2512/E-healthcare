@@ -1,42 +1,34 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 @Component({
   selector: 'app-navbar',
+  imports: [RouterLink],
   standalone: true,
   template: `
-  <header
-  class="sticky z-40 w-full border-b top-0"
-  style="background-color: #ffffff; border-color: #e2e8f0"
->
-  <div
-    class="w-full mx-auto px-4 lg:px-6 h-14 flex items-center justify-between gap-3 lg:gap-6"
-  >
+  <header class="sticky top-0 z-40 w-full border-b border-slate-200 bg-white">
+  <div class="w-full mx-auto px-4 lg:px-6 h-14 flex items-center justify-between gap-3 lg:gap-6">
     <!-- Logo -->
-    <div class="flex items-center gap-2 shrink-0 ml-1">
-      <div
-        class="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-      >
+    <a 
+      routerLink="/" 
+      class="inline-flex items-center gap-2 shrink-0 ml-1 cursor-pointer transition-opacity hover:opacity-90"
+    >
+      <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm">
         <img
           [src]="logo"
-          alt="Logo"
+          alt="E-Healthcare Logo"
           class="w-full h-full object-contain"
         />
       </div>
 
-      <span
-        class="font-semibold text-base"
-        style="color: #0f172a"
-      >
+      <span class="font-semibold text-base text-slate-900">
         E-Healthcare
       </span>
 
-      <span
-        class="text-xs font-medium px-2 py-0.5 rounded"
-        style="background-color: #e0f2fe; color: #0284c7"
-      >
+      <span class="text-xs font-medium px-2 py-0.5 rounded bg-sky-100 text-sky-600">
         Medical
       </span>
-    </div>
+    </a>
   </div>
 </header>`,
 //   styleUrl: './navbar.component.scss',
