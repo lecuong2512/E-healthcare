@@ -95,122 +95,12 @@
           </form>
         </section>
 
-        <section
-          class="figma-card p-4"
-          aria-labelledby="walkin-title"
-        >
-          <div class="flex flex-wrap items-center gap-2">
-            <h2
-              id="walkin-title"
-              class="text-sm font-semibold leading-5 text-slate-900"
-            >
-              Đặt lịch trực tiếp (Walk-in)
-            </h2>
-            <span
-              class="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium leading-4 text-sky-600"
-            >
-              Không cần hẹn trước
-            </span>
-          </div>
-
-          <form (ngSubmit)="submitWalkInDraft()" class="mt-4 space-y-3">
-            <label class="figma-field">
-              <span>Họ và tên bệnh nhân</span>
-              <input
-                type="text"
-                autocomplete="name"
-                maxlength="120"
-                [formControl]="walkInFullName"
-                placeholder="Nguyễn Thị C"
-                class="figma-control"
-              />
-            </label>
-
-            <label class="figma-field">
-              <span>Số điện thoại</span>
-              <input
-                type="tel"
-                autocomplete="tel"
-                [formControl]="walkInPhone"
-                placeholder="09xx xxx xxx"
-                class="figma-control"
-              />
-            </label>
-
-            <label class="figma-field">
-              <span>Chuyên khoa</span>
-              <select
-                class="figma-control"
-                [formControl]="walkInSpecialty"
-                (change)="changeWalkInSpecialty($event)"
-              >
-                <option value="">Chọn chuyên khoa</option>
-                @for (
-                  specialty of walkInSpecialtyOptions();
-                  track specialty
-                ) {
-                  <option [value]="specialty">{{ specialty }}</option>
-                }
-              </select>
-            </label>
-
-            <label class="figma-field">
-              <span>Bác sĩ</span>
-              <select
-                class="figma-control"
-                [formControl]="walkInDoctorId"
-                (change)="changeWalkInDoctor($event)"
-              >
-                <option value="">Chọn bác sĩ</option>
-                @for (doctor of walkInDoctorOptions(); track doctor.doctorId) {
-                  <option [value]="doctor.doctorId">
-                    {{ doctor.doctorName }}
-                  </option>
-                }
-              </select>
-            </label>
-
-            <label class="figma-field">
-              <span>Khung giờ gần nhất</span>
-              <select
-                class="figma-control"
-                [formControl]="walkInScheduleId"
-              >
-                <option value="">Chọn khung giờ</option>
-                @for (slot of walkInSlotOptions(); track slot.scheduleId) {
-                  <option [value]="slot.scheduleId">
-                    {{ slot.startTime }} – {{ slot.endTime }}
-                  </option>
-                }
-              </select>
-            </label>
-
-            @if (
-              walkInFullName.touched &&
-              (walkInFullName.invalid ||
-                walkInPhone.invalid ||
-                walkInSpecialty.invalid ||
-                walkInDoctorId.invalid ||
-                walkInScheduleId.invalid)
-            ) {
-              <p class="text-sm font-medium text-red-700" role="alert">
-                Vui lòng nhập đầy đủ và kiểm tra thông tin đặt lịch.
-              </p>
-            }
-
-            <button
-              type="submit"
-              class="figma-primary-button w-full"
-              [disabled]="walkInPending"
-              [attr.aria-busy]="walkInPending"
-            >
-              {{
-                walkInPending
-                  ? 'Đang chuẩn bị lịch…'
-                  : 'Tạo lịch trực tiếp & Cấp số'
-              }}
-            </button>
-          </form>
+        <section class="figma-card p-5" aria-labelledby="walkin-title">
+          <h2 id="walkin-title" class="text-lg font-bold">Tiếp đón vãng lai</h2>
+          <p class="mt-2 text-sm text-slate-600">Tạo lịch hôm nay, thu tiền mặt và cấp số ngay tại quầy.</p>
+          <button type="button" class="figma-primary-button mt-4 w-full" (click)="walkInOpenRequested.emit()">
+            + Tiếp đón vãng lai (Walk-in Booking)
+          </button>
         </section>
       </div>
 
@@ -335,6 +225,17 @@
                 </div>
               </dl>
 
+              @if (selectedAppointment.paymentStatus === PaymentStatus.PAID && !receipt) {
+                <button type="button" class="my-4 min-h-11 rounded-lg border border-emerald-300 px-4 font-semibold text-emerald-800"
+                  (click)="receiptLoadRequested.emit(selectedAppointment.id)">In/Tải lại phiếu thu</button>
+              }
+              @if (receipt && selectedAppointment.status === AppointmentStatus.CHECKED_IN) {
+                <section id="counter-payment-receipt" class="counter-payment-receipt my-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <strong>Biên nhận thu tiền: {{ receipt.receiptCode }}</strong>
+                  <p>{{ receipt.amount | currencyVnd }} · Tiền thừa {{ receipt.changeAmount | currencyVnd }}</p>
+                  <button type="button" class="receipt-print-button mt-3 min-h-11 rounded-lg border border-emerald-300 bg-white px-4 font-semibold" (click)="receiptPrintRequested.emit()">In phiếu thu</button>
+                </section>
+              }
               @if (
                 selectedAppointment.status === AppointmentStatus.CHECKED_IN
               ) {
@@ -351,7 +252,7 @@
                   </strong>
                 </div>
               } @else {
-                @if (selectedAppointment.requiresPayment) {
+                @if (selectedAppointment.requiresPayment && !receipt) {
                   <section
                     class="my-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"
                     aria-labelledby="payment-title"
@@ -510,12 +411,8 @@
                   {{ queueSummary.inConsultationCount }}
                 </strong>
               </span>
-              <span class="text-slate-500">
-                Số vừa cấp
-                <strong class="text-slate-900">
-                  {{ queueSummary.lastIssuedQueueNumber ?? '—' }}
-                </strong>
-              </span>
+              <span class="text-slate-500">Đồng bộ lúc <strong class="text-slate-900">{{ queueSummary.updatedAtLabel }}</strong></span>
+
             }
           </div>
           <button
