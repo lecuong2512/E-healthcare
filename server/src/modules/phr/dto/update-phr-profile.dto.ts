@@ -4,6 +4,8 @@ import {
   IsNotEmpty,
   IsString,
   MaxLength,
+  Matches,
+  ValidateIf,
 } from 'class-validator';
 
 import { Gender } from '@shared/enums';
@@ -30,11 +32,14 @@ export class UpdatePhrProfileDto {
   address!: string;
 
   @IsString()
-  @MaxLength(20)
+  @ValidateIf((o) => !!o.healthInsurance)
+  @Matches(/^[A-Z]{2}\s?[1-5]\s?\d{2}\s?\d{9,10}$/, {
+    message: 'Mã thẻ BHYT phải đúng định dạng 15 ký tự chuẩn Việt Nam (VD: DN4010123456789).',
+  })
   healthInsurance!: string;
 
   @IsString()
-  @MaxLength(3)
+  @Matches(/^(A|B|AB|O)[+-]$/)
   bloodType!: string;
 
   @IsString()
