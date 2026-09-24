@@ -17,6 +17,8 @@ Updated: 24 September 2026. Branch: `feature/SRS-REC-01-02-reception-integration
 
 The full-page `/receptionist/walkin` route remains a fallback using the same presentation component and facade.
 
+Technical debt: the walk-in specialty filter currently uses `specialtyName` on the client. The backend contract filters by `specialtyId`; switch to that field when a shared specialty directory contract is available.
+
 ## Verification
 
 - Shared type-check: passed.

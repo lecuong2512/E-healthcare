@@ -16,6 +16,7 @@ import {
 import {
   AppointmentStatus,
   CounterPaymentMethod,
+  PaymentMethod,
   PaymentStatus,
 } from '@shared/enums';
 import { CounterPaymentReceipt } from '@shared/interfaces';
@@ -116,6 +117,7 @@ export class CheckinDeskPage {
 
   protected readonly AppointmentStatus = AppointmentStatus;
   protected readonly PaymentStatus = PaymentStatus;
+  protected readonly PaymentMethod = PaymentMethod;
 
   setLookupMode(mode: LookupMode): void {
     this.lookupMode.set(mode);

@@ -144,6 +144,21 @@ describe('ReceptionistFacade', () => {
     expect(facade.loading()).toBeFalse();
   });
 
+  it('does not request a counter receipt for a paid online appointment', () => {
+    api.lookupAppointments.and.returnValue(of([{
+      id: 'appointment-online', appointmentCode: 'APT-ONLINE', status: AppointmentStatus.CONFIRMED,
+      patientId: 'patient-1', patientName: 'An', patientPhone: '0912345678',
+      doctorId: 'doctor-1', doctorName: 'Binh', specialtyName: 'Tim mach', roomNumber: '201',
+      date: '2026-09-24', startTime: '09:00', endTime: '09:30',
+      paymentStatus: PaymentStatus.PAID, paymentMethod: PaymentMethod.VNPAY,
+      totalAmount: 350_000, queueNumber: null, checkedInAt: null,
+      requiresPayment: false, canCheckIn: true, blockedReason: null,
+    }]));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: 'APT-ONLINE' });
+    facade.loadReceipt('appointment-online');
+    expect(api.getReceipt).not.toHaveBeenCalled();
+  });
+
   it('retains the authoritative payment receipt after refreshing the appointment', () => {
     const paidAppointment = {
       id: 'appointment-1',

@@ -44,6 +44,7 @@ export function mapReceptionAppointment(
     startTime: dto.startTime,
     endTime: dto.endTime,
     paymentStatus: dto.paymentStatus,
+    paymentMethod: dto.paymentMethod,
     totalAmount: dto.totalAmount,
     queueNumber: dto.queueNumber,
     requiresPayment: dto.requiresPayment,

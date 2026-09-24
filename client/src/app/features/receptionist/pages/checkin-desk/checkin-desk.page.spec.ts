@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import {
   AppointmentStatus,
   CounterPaymentMethod,
+  PaymentMethod,
   PaymentStatus,
 } from '@shared/enums';
 import {
@@ -24,6 +25,7 @@ const appointment: ReceptionAppointmentViewModel = {
   startTime: '08:00',
   endTime: '08:30',
   paymentStatus: PaymentStatus.UNPAID,
+  paymentMethod: PaymentMethod.PAY_AT_CLINIC,
   totalAmount: 350_000,
   queueNumber: null,
   requiresPayment: true,
@@ -151,6 +153,26 @@ describe('CheckinDeskPage', () => {
     ) as HTMLButtonElement;
     printButton.click();
     expect(printSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers counter receipt reload only for pay-at-clinic appointments', () => {
+    fixture.componentRef.setInput('selectedAppointment', {
+      ...appointment,
+      paymentStatus: PaymentStatus.PAID,
+      paymentMethod: PaymentMethod.VNPAY,
+      requiresPayment: false,
+    });
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('In/Tải lại phiếu thu');
+
+    fixture.componentRef.setInput('selectedAppointment', {
+      ...appointment,
+      paymentStatus: PaymentStatus.PAID,
+      paymentMethod: PaymentMethod.PAY_AT_CLINIC,
+      requiresPayment: false,
+    });
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('In/Tải lại phiếu thu');
   });
 
   it('does not emit check-in while the authoritative view says it is blocked', () => {
