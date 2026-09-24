@@ -99,6 +99,7 @@ export class ReceptionistFacade {
   private activeQrAppointmentId: string | null = null;
   private queueSocket: Socket | null = null;
   private queueConsumers = 0;
+  private walkInSession = 0;
 
   private readonly handleQueueSnapshot = (snapshot: QueueSnapshot): void => {
     this.setQueueSnapshot(snapshot);
@@ -316,16 +317,21 @@ export class ReceptionistFacade {
     this._walkInSlotConflict.set(false);
     this._walkInCandidates.set([]);
 
+    const session = this.walkInSession;
     this.api
       .createWalkIn(mapWalkInBookingIntent(intent), intent.idempotencyKey)
-      .pipe(finalize(() => this._walkInSubmitting.set(false)))
+      .pipe(finalize(() => {
+        if (session === this.walkInSession) this._walkInSubmitting.set(false);
+      }))
       .subscribe({
         next: (response) => {
+          if (session !== this.walkInSession) return;
           this._walkInSuccess.set(mapWalkInSuccess(response, doctor));
           this._walkInCandidates.set([]);
           this.refreshQueue();
         },
         error: (error) => {
+          if (session !== this.walkInSession) return;
           const mappedError = mapReceptionError(error);
           this._walkInError.set(mappedError.message);
           this._walkInSlotConflict.set(
@@ -341,12 +347,27 @@ export class ReceptionistFacade {
   }
 
   resetWalkIn(): void {
+    this.beginWalkInSession();
+  }
+
+  beginWalkInSession(): void {
+    this.walkInSession++;
+    this._walkInSubmitting.set(false);
     this._walkInCandidates.set([]);
     this._walkInSuccess.set(null);
     this._walkInError.set(null);
     this._walkInSlotConflict.set(false);
     this._walkInDraft.set(null);
     this.searchWalkInDoctors({ specialtyName: '', doctorName: '' });
+  }
+
+  endWalkInSession(): void {
+    this.walkInSession++;
+    this._walkInCandidates.set([]);
+    this._walkInSuccess.set(null);
+    this._walkInError.set(null);
+    this._walkInSlotConflict.set(false);
+    this._walkInDraft.set(null);
   }
 
   setWalkInDraft(draft: WalkInDraftIntent): void {
