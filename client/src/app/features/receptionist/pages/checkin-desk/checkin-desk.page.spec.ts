@@ -8,7 +8,6 @@ import {
 } from '@shared/enums';
 import {
   ReceptionAppointmentViewModel,
-  WalkInDoctorViewModel,
 } from '../../models/reception-presentation.models';
 import { CheckinDeskPage } from './checkin-desk.page';
 
@@ -30,21 +29,6 @@ const appointment: ReceptionAppointmentViewModel = {
   requiresPayment: true,
   canCheckIn: false,
   blockedReason: 'Cần hoàn tất thanh toán.',
-};
-
-const walkInDoctor: WalkInDoctorViewModel = {
-  doctorId: 'doctor-1',
-  doctorName: 'BS. Trần Minh Bình',
-  specialtyName: 'Tim mạch',
-  roomNumber: 'P.201',
-  consultationFee: 350_000,
-  slots: [
-    {
-      scheduleId: 'schedule-1',
-      startTime: '10:30',
-      endTime: '11:00',
-    },
-  ],
 };
 
 describe('CheckinDeskPage', () => {
@@ -71,7 +55,7 @@ describe('CheckinDeskPage', () => {
       'Quầy lễ tân — Check-in & Đặt lịch trực tiếp',
     );
     expect(content).toContain('Quét mã QR Check-in');
-    expect(content).toContain('Đặt lịch trực tiếp (Walk-in)');
+    expect(content).toContain('Tiếp đón vãng lai (Walk-in Booking)');
     expect(content).toContain('SRS-REC-01 · SRS-REC-02');
   });
 
@@ -109,25 +93,13 @@ describe('CheckinDeskPage', () => {
     });
   });
 
-  it('emits a validated walk-in draft for the selected doctor and slot', () => {
-    const walkInSpy = jasmine.createSpy('walkInDraft');
-    component.walkInDraftRequested.subscribe(walkInSpy);
-    component.walkInDoctors = [walkInDoctor];
-    component.walkInFullName.setValue('Nguyễn Thị C');
-    component.walkInPhone.setValue('0912345678');
-    component.walkInSpecialty.setValue('Tim mạch');
-    component.walkInDoctorId.setValue('doctor-1');
-    component.walkInScheduleId.setValue('schedule-1');
-
-    component.submitWalkInDraft();
-
-    expect(walkInSpy).toHaveBeenCalledOnceWith({
-      fullName: 'Nguyễn Thị C',
-      phone: '0912345678',
-      specialtyName: 'Tim mạch',
-      doctorId: 'doctor-1',
-      scheduleId: 'schedule-1',
-    });
+  it('opens walk-in booking from the check-in desk', () => {
+    const walkInSpy = jasmine.createSpy('walkInOpen');
+    component.walkInOpenRequested.subscribe(walkInSpy);
+    const button = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button'))
+      .find((item) => item.textContent?.includes('Walk-in Booking'))!;
+    button.click();
+    expect(walkInSpy).toHaveBeenCalledTimes(1);
   });
 
   it('calculates change and emits a counter payment intent once sufficient', () => {
@@ -215,7 +187,6 @@ describe('CheckinDeskPage', () => {
     fixture.componentRef.setInput('queueSummary', {
       waitingCount: 8,
       inConsultationCount: 3,
-      lastIssuedQueueNumber: 24,
       updatedAtLabel: '08:30:10',
     });
     fixture.detectChanges();
@@ -223,7 +194,6 @@ describe('CheckinDeskPage', () => {
     const content = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(content).toContain('Realtime đang hoạt động');
     expect(content).toContain('Đang chờ');
-    expect(content).toContain('24');
 
     const syncButton = [...fixture.nativeElement.querySelectorAll('button')].find(
       (button: HTMLButtonElement) =>
