@@ -14,7 +14,8 @@ import { WalkinBookingPage } from '../../pages/walkin-booking/walkin-booking.pag
         <header class="flex items-center justify-between border-b border-slate-200 px-5 py-3">
           <h2 id="walk-in-modal-title" class="text-lg font-bold">Tiếp đón vãng lai (Walk-in Booking)</h2>
           <button type="button" class="rounded-lg border border-slate-300 px-4 py-2 font-semibold"
-            (click)="closeRequested.emit()">Đóng</button>
+            [disabled]="facade.walkInSubmitting()" [attr.aria-busy]="facade.walkInSubmitting()"
+            (click)="requestClose()">Đóng</button>
         </header>
         <div class="overflow-y-auto">
           <app-walkin-booking-page
@@ -29,7 +30,7 @@ import { WalkinBookingPage } from '../../pages/walkin-booking/walkin-booking.pag
             (doctorSearchRequested)="facade.searchWalkInDoctors($event)"
             (bookingRequested)="facade.createWalkIn($event)"
             (resetRequested)="facade.beginWalkInSession()"
-            (closeRequested)="closeRequested.emit()"
+            (closeRequested)="requestClose()"
             (printRequested)="printReceipt()"
           />
         </div>
@@ -44,6 +45,11 @@ export class WalkInBookingModalComponent {
 
   @HostListener('document:keydown.escape')
   closeOnEscape(): void {
+    this.requestClose();
+  }
+
+  requestClose(): void {
+    if (this.facade.walkInSubmitting()) return;
     this.closeRequested.emit();
   }
 
