@@ -56,12 +56,13 @@ export class CheckinDeskContainer implements OnInit, OnDestroy {
     this.releaseQueue = null;
   }
 
-  protected openWalkIn(): void {
+  openWalkIn(): void {
     this.facade.beginWalkInSession();
     this.walkInOpen.set(true);
   }
 
-  protected closeWalkIn(): void {
+  closeWalkIn(): void {
+    if (this.facade.walkInSubmitting()) return;
     this.walkInOpen.set(false);
     this.facade.endWalkInSession();
   }
