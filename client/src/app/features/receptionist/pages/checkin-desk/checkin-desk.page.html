@@ -57,7 +57,7 @@
             />
           </div>
 
-          <form (ngSubmit)="submitManualLookup()" class="mt-4">
+          <form (submit)="$event.preventDefault(); submitManualLookup()" class="mt-4">
             <label
               for="manual-query"
               class="block text-xs font-medium leading-4 text-slate-500"
@@ -233,7 +233,7 @@
                 <section id="counter-payment-receipt" class="counter-payment-receipt my-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                   <strong>Biên nhận thu tiền: {{ receipt.receiptCode }}</strong>
                   <p>{{ receipt.amount | currencyVnd }} · Tiền thừa {{ receipt.changeAmount | currencyVnd }}</p>
-                  <button type="button" class="receipt-print-button mt-3 min-h-11 rounded-lg border border-emerald-300 bg-white px-4 font-semibold" (click)="receiptPrintRequested.emit()">In phiếu thu</button>
+                  <button type="button" class="receipt-print-button mt-3 min-h-11 rounded-lg border border-emerald-300 bg-white px-4 font-semibold" (click)="receiptPrintRequested.emit(selectedAppointment.id)">In lại phiếu thu A5</button>
                 </section>
               }
               @if (
@@ -250,6 +250,9 @@
                   <strong class="text-6xl">
                     {{ selectedAppointment.queueNumber }}
                   </strong>
+                  @if (selectedAppointment.queueNumber && selectedAppointment.checkedInAt) {
+                    <button type="button" class="mt-4 min-h-11 rounded-lg border border-emerald-300 bg-white px-4 font-semibold" (click)="checkinPrintRequested.emit(selectedAppointment.id)">In lại phiếu khám K80</button>
+                  }
                 </div>
               } @else {
                 @if (selectedAppointment.requiresPayment && !receipt) {
@@ -334,9 +337,9 @@
                       <button
                         type="button"
                         class="receipt-print-button min-h-11 rounded-lg border border-emerald-300 bg-white px-4 font-semibold text-emerald-800 hover:bg-emerald-100"
-                        (click)="receiptPrintRequested.emit()"
+                        (click)="receiptPrintRequested.emit(selectedAppointment.id)"
                       >
-                        In phiếu thu
+                        In lại phiếu thu A5
                       </button>
                     </div>
                     <dl class="mt-4 grid gap-2 text-sm sm:grid-cols-2">

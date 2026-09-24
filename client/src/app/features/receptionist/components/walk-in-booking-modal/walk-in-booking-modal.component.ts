@@ -54,6 +54,6 @@ export class WalkInBookingModalComponent {
   }
 
   protected printReceipt(): void {
-    window.print();
+    this.facade.prepareWalkInPaymentPrint();
   }
 }

@@ -12,6 +12,7 @@ import {
 } from '@shared/constants/queue-socket.constants';
 import {
   CounterPaymentReceipt,
+  ClinicPrintInfo,
   QueueSnapshot,
   QueueStatusChanged,
   ReceptionAppointment,
@@ -34,6 +35,8 @@ import {
   WalkInSuccessViewModel,
 } from '../models/reception-presentation.models';
 import { ReceptionistApiService } from './receptionist-api.service';
+import { PrintReceiptData } from '../models/reception-print.model';
+import { mapCheckinTicketPrintData, mapPaymentReceiptPrintData } from '../utils/reception-print.mapper';
 import { mapReceptionError } from './receptionist-errors';
 import {
   mapCheckInResult,
@@ -60,6 +63,9 @@ export class ReceptionistFacade {
   private readonly _loading = signal(false);
   private readonly _paymentPending = signal(false);
   private readonly _lastReceipt = signal<CounterPaymentReceipt | null>(null);
+  private readonly _clinicPrintInfo = signal<ClinicPrintInfo | null>(null);
+  private readonly _printData = signal<PrintReceiptData | null>(null);
+  private readonly _printError = signal<string | null>(null);
   private readonly _checkInPending = signal(false);
   private readonly _checkInError = signal<string | null>(null);
   private readonly _queueSnapshot = signal<QueueSnapshot | null>(null);
@@ -83,6 +89,9 @@ export class ReceptionistFacade {
   readonly loading = this._loading.asReadonly();
   readonly paymentPending = this._paymentPending.asReadonly();
   readonly lastReceipt = this._lastReceipt.asReadonly();
+  readonly clinicPrintInfo = this._clinicPrintInfo.asReadonly();
+  readonly printData = this._printData.asReadonly();
+  readonly printError = this._printError.asReadonly();
   readonly checkInPending = this._checkInPending.asReadonly();
   readonly checkInError = this._checkInError.asReadonly();
   readonly queueSummary = this._queueSummary.asReadonly();
@@ -103,6 +112,7 @@ export class ReceptionistFacade {
   private walkInSession = 0;
   private doctorSearch: Subscription | null = null;
   private doctorSearchSerial = 0;
+  private printSession = 0;
 
   private readonly handleQueueSnapshot = (snapshot: QueueSnapshot): void => {
     this.setQueueSnapshot(snapshot);
@@ -136,6 +146,67 @@ export class ReceptionistFacade {
     );
   }
 
+  loadClinicPrintInfo(): void {
+    if (this._clinicPrintInfo()) return;
+    this.api.getClinicProfile().subscribe({
+      next: (profile) => {
+        this._clinicPrintInfo.set(profile);
+        this._printError.set(null);
+      },
+      error: () => this._printError.set('Chưa tải được thông tin phòng khám. Nghiệp vụ đã hoàn tất; vui lòng thử tải lại để in.'),
+    });
+  }
+
+  prepareCheckinPrint(appointmentId: string): void {
+    const appointment = this.findAppointment(appointmentId);
+    if (!appointment) return;
+    this.preparePrint((clinic) => mapCheckinTicketPrintData(
+      appointment, clinic,
+      this._lastReceipt()?.appointmentCode === appointment.appointmentCode
+        ? this._lastReceipt()! : undefined,
+    ));
+  }
+
+  preparePaymentPrint(receipt: CounterPaymentReceipt, appointment?: ReceptionAppointmentViewModel): void {
+    const match = appointment ?? this._appointments().find((item) => item.appointmentCode === receipt.appointmentCode);
+    if (!match || match.paymentMethod !== PaymentMethod.PAY_AT_CLINIC) return;
+    this.preparePrint((clinic) => mapPaymentReceiptPrintData(receipt, clinic, match));
+  }
+
+  prepareWalkInPaymentPrint(): void {
+    const receipt = this._walkInSuccess()?.receipt;
+    if (receipt) this.preparePrint((clinic) => mapPaymentReceiptPrintData(receipt, clinic));
+  }
+
+  reportPrintError(error: unknown): void {
+    this._printError.set(error instanceof Error ? error.message : 'Không thể mở bản in. Vui lòng thử lại.');
+  }
+
+  clearPrintState(): void {
+    this.printSession++;
+    this._printData.set(null);
+    this._printError.set(null);
+  }
+
+  private preparePrint(mapper: (clinic: ClinicPrintInfo) => PrintReceiptData): void {
+    const session = ++this.printSession;
+    this._printData.set(null);
+    this._printError.set(null);
+    const publish = (clinic: ClinicPrintInfo): void => {
+      if (session !== this.printSession) return;
+      try { this._printData.set(mapper(clinic)); }
+      catch (error) { this.reportPrintError(error); }
+    };
+    const clinic = this._clinicPrintInfo();
+    if (clinic) { publish(clinic); return; }
+    this.api.getClinicProfile().subscribe({
+      next: (profile) => { this._clinicPrintInfo.set(profile); publish(profile); },
+      error: () => {
+        if (session === this.printSession) this._printError.set('Chưa tải được thông tin phòng khám. Nghiệp vụ đã hoàn tất; vui lòng thử tải lại để in.');
+      },
+    });
+  }
+
   lookup(intent: ReceptionLookupIntent): void {
     if (this._loading()) {
       return;
@@ -146,6 +217,7 @@ export class ReceptionistFacade {
     this._appointments.set([]);
     this._selectedAppointment.set(null);
     this._lastReceipt.set(null);
+    this.clearPrintState();
     this.activeQrToken = intent.kind === 'QR_TOKEN' ? intent.value : null;
     this.activeQrAppointmentId = null;
 
@@ -190,6 +262,7 @@ export class ReceptionistFacade {
     this._selectedAppointment.set(appointment);
     this._checkInError.set(null);
     this._lastReceipt.set(null);
+    this.clearPrintState();
 
     if (appointment.id !== this.activeQrAppointmentId) {
       this.activeQrToken = null;
@@ -211,6 +284,7 @@ export class ReceptionistFacade {
       .subscribe({
         next: (receipt) => {
           this._lastReceipt.set(receipt);
+          this.preparePaymentPrint(receipt, appointment);
           this.api.lookupAppointments({ code: appointment.appointmentCode }).subscribe({
             next: (appointments) => this.applyAppointmentRefresh(appointments),
             error: () => this._checkInError.set('Đã thu tiền, chưa đồng bộ được trạng thái. Không thu tiền lần nữa; hãy tải lại trạng thái.'),
@@ -227,7 +301,7 @@ export class ReceptionistFacade {
     this.api.getReceipt(appointmentId).subscribe({
       next: (receipt) => {
         this._lastReceipt.set(receipt);
-        setTimeout(() => window.print());
+        this.preparePaymentPrint(receipt, appointment);
       },
       error: (error) => this._checkInError.set(mapReceptionError(error).message),
     });
@@ -254,6 +328,7 @@ export class ReceptionistFacade {
           const updated = mapCheckInResult(appointment, response);
           this.replaceAppointment(updated);
           this._selectedAppointment.set(updated);
+          this.prepareCheckinPrint(updated.id);
           this.activeQrToken = null;
           this.activeQrAppointmentId = null;
           this.refreshQueue();

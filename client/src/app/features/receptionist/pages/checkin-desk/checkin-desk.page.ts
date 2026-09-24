@@ -86,6 +86,7 @@ export class CheckinDeskPage {
   receipt: CounterPaymentReceipt | null = null;
   @Input({ transform: booleanAttribute }) checkInPending = false;
   @Input() errorMessage: string | null = null;
+  @Input() printError: string | null = null;
   @Input({ transform: queueSummaryOrNull })
   queueSummary: ReceptionQueueSummaryViewModel | null = null;
   @Input({ transform: queueConnectionOrDisconnected })
@@ -94,7 +95,8 @@ export class CheckinDeskPage {
   @Output() appointmentSelected =
     new EventEmitter<ReceptionAppointmentViewModel>();
   @Output() paymentRequested = new EventEmitter<CounterPaymentIntent>();
-  @Output() receiptPrintRequested = new EventEmitter<void>();
+  @Output() receiptPrintRequested = new EventEmitter<string>();
+  @Output() checkinPrintRequested = new EventEmitter<string>();
   @Output() checkInRequested = new EventEmitter<string>();
   @Output() refreshRequested = new EventEmitter<string>();
   @Output() queueRefreshRequested = new EventEmitter<void>();
