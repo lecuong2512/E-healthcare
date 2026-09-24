@@ -12,6 +12,11 @@ export type ReceptionErrorCode =
   | 'SERVICE_UNAVAILABLE'
   | 'NETWORK'
   | 'VALIDATION'
+  | 'AUTH'
+  | 'PAYMENT_ALREADY_COLLECTED'
+  | 'CITIZEN_IDENTITY_CONFLICT'
+  | 'CITIZEN_ID_OWNED_BY_OTHER_PROFILE'
+  | 'CHECK_IN_RULE'
   | 'UNKNOWN';
 
 export interface ReceptionFeatureError {
@@ -41,6 +46,7 @@ export function mapReceptionError(error: unknown): ReceptionFeatureError {
   }
 
   const serverMessage = readMessage(error.error);
+  const serverCode = readRecord(error.error)?.['code'];
 
   if (error.status === 0) {
     return {
@@ -55,6 +61,18 @@ export function mapReceptionError(error: unknown): ReceptionFeatureError {
       message: 'Mã QR đã hết hạn. Vui lòng yêu cầu bệnh nhân mở mã QR mới.',
       status: error.status,
     };
+  }
+  if (error.status === 401 || error.status === 403) {
+    return { code: 'AUTH', message: 'Phiên đăng nhập không còn quyền thao tác. Vui lòng đăng nhập lại.', status: error.status };
+  }
+  if (error.status === 409 && (serverCode === 'CITIZEN_ID_ALREADY_ASSIGNED' || /CCCD\/CMND vừa được ghi vào hồ sơ khác/i.test(serverMessage))) {
+    return { code: 'CITIZEN_ID_OWNED_BY_OTHER_PROFILE', message: serverMessage || 'CCCD/CMND đã thuộc hồ sơ khác. Vui lòng xác minh lại.', status: error.status };
+  }
+  if (error.status === 409 && (serverCode === 'PATIENT_CITIZEN_ID_MISMATCH' || serverCode === 'PATIENT_ID_CITIZEN_ID_MISMATCH' || /CCCD\/CMND|hồ sơ bệnh nhân được chọn/i.test(serverMessage))) {
+    return { code: 'CITIZEN_IDENTITY_CONFLICT', message: serverMessage || 'CCCD/CMND và hồ sơ bệnh nhân không khớp. Vui lòng xác minh lại.', status: error.status };
+  }
+  if (error.status === 409 && /đã thanh toán|không thể thu tiền/i.test(serverMessage)) {
+    return { code: 'PAYMENT_ALREADY_COLLECTED', message: serverMessage, status: error.status };
   }
   if (error.status === 503) {
     return {
@@ -100,6 +118,9 @@ export function mapReceptionError(error: unknown): ReceptionFeatureError {
       message: serverMessage || 'Dữ liệu chưa hợp lệ. Vui lòng kiểm tra lại.',
       status: error.status,
     };
+  }
+  if (error.status === 409) {
+    return { code: 'CHECK_IN_RULE', message: serverMessage || 'Không thể hoàn tất thao tác ở trạng thái hiện tại.', status: error.status };
   }
 
   return {
