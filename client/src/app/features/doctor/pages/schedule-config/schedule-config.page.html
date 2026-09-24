@@ -1,64 +1,20 @@
 <div class="space-y-5">
-    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-            <h1 class="font-bold text-xl text-text-base">Lịch làm việc & Chia Slot trực</h1>
-            <p class="text-xs text-text-sub">Phân chia slot 15-30 phút, cấu hình khóa slot khám bệnh</p>
-        </div>
-        <div class="flex items-center gap-3">
-            <!-- Legend -->
-            <div class="hidden md:flex items-center gap-3 text-xs text-text-sub">
-                @for (entry of cellLegend; track entry.key) {
-                <span class="flex items-center gap-1.5">
-                    <span class="w-3 h-3 rounded-sm"
-                        [ngStyle]="{ backgroundColor: entry.config.bg, border: '1px solid ' + entry.config.text }"></span>
-                    <span>{{ entry.config.label }}</span>
-                </span>
-                }
-            </div>
-            <button type="button"
-                class="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold transition shadow-sm">
-                + Đăng ký ca trực mới
-            </button>
-        </div>
-    </div>
+  <div class="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center"><div><h1 class="font-bold text-xl text-text-base">Lịch làm việc & Chia Slot trực</h1><p class="text-xs text-text-sub">Quản lý ca sáng 08:00–12:00 và ca chiều 13:30–17:30</p></div><div class="flex flex-wrap items-center gap-3"><div class="hidden items-center gap-3 text-xs text-text-sub md:flex">@for(entry of cellLegend;track entry.key){<span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-sm" [ngStyle]="{backgroundColor:entry.config.bg,border:'1px solid '+entry.config.text}"></span>{{entry.config.label}}</span>}</div><button type="button" (click)="showRegistrationForm=true;formMessage=''" class="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-primary-hover">+ Đăng ký ca trực mới</button></div></div>
+  @if(isMockMode){<div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900"><b>Chế độ dữ liệu mẫu:</b> Lịch trực demo để xem thử giao diện và thao tác. Thay đổi chỉ lưu trong phiên hiện tại.</div>}
+  @if(errorMessage){<div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800">{{errorMessage}}</div>}
+  @if(formMessage){<div class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-xs text-sky-800">{{formMessage}}</div>}
+  <div class="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3"><div><h2 class="text-sm font-bold">Lịch trực tuần {{weekLabel}}</h2><p class="mt-1 text-xs text-text-sub">Buồng khám {{roomNumber || 'được cấu hình trong hồ sơ bác sĩ'}}</p></div><div class="flex items-center gap-2"><button (click)="changeWeek(-1)" class="rounded border px-3 py-1.5 text-xs">Tuần trước</button><button (click)="changeWeek(1)" class="rounded border px-3 py-1.5 text-xs">Tuần sau</button><button (click)="loadSchedule()" [disabled]="isLoading" class="rounded border px-3 py-1.5 text-xs">Làm mới</button></div></div>
+    @if(isLoading){<p class="p-8 text-center text-sm text-slate-500">Đang tải lịch trực...</p>} @else {
+      <div class="overflow-x-auto"><table class="w-full border-collapse text-center text-xs"><thead><tr class="border-b border-border bg-slate-50 text-slate-700"><th class="w-20 border-r border-border p-3 text-left font-bold">Giờ</th>@for(day of days;track day;let dIdx=$index){<th class="min-w-[145px] border-r border-border p-2 font-bold last:border-r-0"><div>{{day}}</div><div class="mt-1 text-[10px] font-normal text-slate-500">Sáng {{getShiftCapacity(dIdx,'MORNING')}} · Chiều {{getShiftCapacity(dIdx,'AFTERNOON')}} slot</div></th>}</tr></thead><tbody>@for(hour of hours;track hour){<tr class="border-b border-slate-100 last:border-b-0"><td class="border-r border-border bg-slate-50/70 p-1.5 text-left font-mono font-bold text-slate-500">{{hour}}</td>@for(day of days;track day;let dIdx=$index){<td class="border-r border-slate-100 p-1 last:border-r-0">@if(getSlot(dIdx,hour);as slot){<div class="rounded-md px-1 py-1.5 text-[10px]" [ngStyle]="{backgroundColor:getCell(dIdx,hour).bg,color:getCell(dIdx,hour).text}"><div class="font-mono font-bold">{{slot.startTime | slice:0:5}}–{{slot.endTime | slice:0:5}}</div><div class="mt-0.5">{{slot.status==='AVAILABLE'?'Còn trống':slot.status==='BOOKED'?'Đã có bệnh nhân đặt':slot.status==='HOLDING'?'Đang giữ chỗ':'Đã khóa'}}</div><div class="mt-1 flex justify-center gap-1"><button type="button" (click)="openEdit(slot)" [disabled]="slot.status!=='AVAILABLE'||isShiftBooked(dIdx,slot.startTime<'12:00'?'MORNING':'AFTERNOON')" class="rounded bg-white/80 px-1.5 py-0.5 text-[9px] disabled:cursor-not-allowed disabled:opacity-40">Sửa</button><button type="button" (click)="cancelSlot(slot)" [disabled]="slot.status!=='AVAILABLE'||isShiftBooked(dIdx,slot.startTime<'12:00'?'MORNING':'AFTERNOON')" class="rounded bg-white/80 px-1.5 py-0.5 text-[9px] disabled:cursor-not-allowed disabled:opacity-40">Hủy</button></div></div>}@else{<span class="text-slate-200">—</span>}</td>}</tr>}</tbody></table></div>
+    }
+    <p class="border-t border-border px-4 py-3 text-[11px] text-slate-500">Số slot của ca là giới hạn lượt khám tối đa. Nếu có bệnh nhân đã đặt hoặc đang giữ chỗ, các thao tác sửa/hủy slot trong ca bị khóa; xử lý hủy cần Admin.</p>
+  </div>
 
-    <!-- Weekly Matrix Calendar Grid -->
-    <div class="bg-white rounded-2xl border border-border overflow-hidden shadow-sm">
-        <div class="overflow-x-auto">
-            <table class="w-full text-xs text-center border-collapse">
-                <thead>
-                    <tr class="bg-slate-50 border-b border-border text-slate-700">
-                        <th class="p-3 text-left font-bold border-r border-border w-24">Giờ / Thứ</th>
-                        @for (day of days; track day) {
-                        <th class="p-3 font-bold border-r last:border-r-0 border-border min-w-[100px]">
-                            {{ day }}
-                        </th>
-                        }
-                    </tr>
-                </thead>
-                <tbody>
-                    @for (h of hours; track h) {
-                    <tr class="border-b last:border-b-0 border-slate-100">
-                        <td
-                            class="p-2.5 text-left font-mono font-bold text-slate-500 bg-slate-50/70 border-r border-border">
-                            {{ h }}
-                        </td>
-                        @for (day of days; track day; let dIdx = $index) {
-                        <td class="p-1 border-r last:border-r-0 border-slate-100">
-                            <button type="button" (click)="toggleCell(dIdx, h)"
-                                class="w-full py-1.5 px-2 rounded-md font-medium text-[11px] transition-all text-center select-none"
-                                [ngStyle]="{
-                          backgroundColor: getCell(dIdx, h).bg,
-                          color: getCell(dIdx, h).text
-                        }">
-                                {{ getCell(dIdx, h).label }}
-                            </button>
-                        </td>
-                        }
-                    </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    </div>
+  @if(showRegistrationForm){<div class="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" (click)="showRegistrationForm=false"><section class="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl bg-white p-5 shadow-xl" (click)="$event.stopPropagation()"><div class="mb-4 flex items-start justify-between"><div><h2 class="text-base font-bold">Đăng ký ca làm việc</h2><p class="mt-1 text-xs text-slate-500">Ca mới đăng ký cho tuần sau · Xem trước danh sách slot trước khi gửi</p></div><button type="button" (click)="showRegistrationForm=false" class="text-xl text-slate-500">×</button></div>
+    <div class="grid gap-3 sm:grid-cols-2"><label class="text-xs font-semibold">Ngày trực<select [(ngModel)]="selectedDay" class="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal">@for(day of days;track day;let i=$index){<option [ngValue]="i">{{day}}</option>}</select></label><label class="text-xs font-semibold">Ca trực<select [(ngModel)]="selectedShift" class="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"><option value="MORNING">Ca sáng · 08:00–12:00</option><option value="AFTERNOON">Ca chiều · 13:30–17:30</option></select></label><label class="text-xs font-semibold">Thời lượng mỗi slot<select [(ngModel)]="slotDuration" class="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"><option [ngValue]="15">15 phút</option><option [ngValue]="30">30 phút</option></select></label><div class="text-xs font-semibold">Buồng khám<div class="mt-1 rounded-lg border border-slate-200 bg-slate-50 p-2 font-normal">{{roomNumber || 'Lấy từ hồ sơ bác sĩ'}}</div><p class="mt-1 font-normal text-slate-500">Buồng khám được quản lý trong hồ sơ bác sĩ.</p></div></div>
+    <div class="mt-4 rounded-lg border bg-slate-50 p-3"><div class="flex flex-wrap justify-between gap-1 text-xs"><b>Xem trước · {{previewSlots.length}} slot / tối đa {{previewSlots.length}} bệnh nhân</b><span class="text-slate-500">{{registrationDate}} · {{selectedShift==='MORNING'?'Ca sáng':'Ca chiều'}}</span></div><div class="mt-2 grid grid-cols-2 gap-1 sm:grid-cols-4">@for(slot of previewSlots;track slot.startTime){<span class="rounded bg-emerald-100 px-2 py-1.5 font-mono text-center text-[10px] text-emerald-800">{{slot.startTime}}–{{slot.endTime}}</span>}</div></div>
+    <p class="mt-3 text-[11px]" [class.text-red-600]="isPastDeadline" [class.text-slate-500]="!isPastDeadline">Hạn đăng ký tuần sau: trước 17:00 Thứ Sáu tuần hiện tại (giờ Việt Nam). @if(isPastDeadline){Đã quá hạn đăng ký tuần sau.}</p>@if(formMessage){<p class="mt-2 text-xs text-red-600">{{formMessage}}</p>}<div class="mt-5 flex justify-end gap-2"><button type="button" (click)="showRegistrationForm=false" class="rounded-lg border px-4 py-2 text-xs font-semibold">Đóng</button><button type="button" (click)="registerShift()" [disabled]="isPastDeadline||(!doctorId&&!isMockMode)" class="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{{isMockMode?'Thêm ca mẫu':'Đăng ký ca'}}</button></div></section></div>}
+
+  @if(editingSlot){<div class="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" (click)="editingSlot=null"><section class="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" (click)="$event.stopPropagation()"><h2 class="text-base font-bold">Sửa slot còn trống</h2><p class="mt-1 text-xs text-slate-500">Chỉ có thể sửa slot chưa được đặt.</p><div class="mt-4 space-y-3"><label class="block text-xs font-semibold">Ngày<input type="date" [(ngModel)]="editDate" class="mt-1 w-full rounded border p-2 font-normal" /></label><div class="grid grid-cols-2 gap-3"><label class="text-xs font-semibold">Bắt đầu<input type="time" [(ngModel)]="editStartTime" class="mt-1 w-full rounded border p-2 font-normal" /></label><label class="text-xs font-semibold">Kết thúc<input type="time" [(ngModel)]="editEndTime" class="mt-1 w-full rounded border p-2 font-normal" /></label></div></div>@if(formMessage){<p class="mt-2 text-xs text-red-600">{{formMessage}}</p>}<div class="mt-5 flex justify-end gap-2"><button (click)="editingSlot=null" class="rounded-lg border px-4 py-2 text-xs">Hủy</button><button (click)="saveEdit()" class="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white">Lưu thay đổi</button></div></section></div>}
 </div>
