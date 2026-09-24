@@ -115,6 +115,8 @@ describe('WalkinBookingPage', () => {
       doctorName: 'Trần Minh Bình',
       roomNumber: 'P.201',
       receiptCode: 'RCT-0100',
+      amount: 350_000,
+      changeAmount: 50_000,
     });
     fixture.detectChanges();
 

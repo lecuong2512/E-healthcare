@@ -300,3 +300,23 @@
     z-index: 1;
   }
  }
+@media print {
+  body:has(app-walk-in-booking-modal) * {
+    visibility: hidden !important;
+  }
+
+  body:has(app-walk-in-booking-modal) #walk-in-receipt,
+  body:has(app-walk-in-booking-modal) #walk-in-receipt * {
+    visibility: visible !important;
+  }
+
+  body:has(app-walk-in-booking-modal) #walk-in-receipt {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+  }
+
+  body:has(app-walk-in-booking-modal) #walk-in-receipt button {
+    display: none !important;
+  }
+}

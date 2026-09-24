@@ -50,7 +50,6 @@ export type ReceptionQueueConnectionState =
 export interface ReceptionQueueSummaryViewModel {
   readonly waitingCount: number;
   readonly inConsultationCount: number;
-  readonly lastIssuedQueueNumber: number | null;
   readonly updatedAtLabel: string;
 }
 
@@ -114,4 +113,6 @@ export interface WalkInSuccessViewModel {
   readonly doctorName: string;
   readonly roomNumber: string;
   readonly receiptCode: string;
+  readonly amount: number;
+  readonly changeAmount: number;
 }
