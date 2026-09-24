@@ -7,6 +7,7 @@ import { requiredEnvironment } from "../../config/environment";
 import { AuthSessionEntity, UserRoleEntity } from "../../database/entities/auth.entity";
 import { UserEntity } from "../../database/entities/user.entity";
 import { UserStatus } from "@shared/enums";
+import { RedisService } from "../../common/redis/redis.service";
 
 export const ACCESS_TTL = 900;
 export const REFRESH_TTL = 604800;
@@ -35,7 +36,7 @@ export class SessionService {
   private readonly accessSecret: string;
   private readonly refreshSecret: string;
 
-  constructor(private readonly database: DataSource) {
+  constructor(private readonly database: DataSource, private readonly redis: RedisService) {
     this.accessSecret = requiredEnvironment("JWT_ACCESS_SECRET");
     this.refreshSecret = requiredEnvironment("JWT_REFRESH_SECRET");
     if (
@@ -137,6 +138,7 @@ export class SessionService {
 
   async authenticate(token: string | undefined): Promise<AccessClaims> {
     const claims = this.verifyToken(token, "access");
+    if (await this.redis.get(`token_blacklist:${this.digest(token!)}`)) throw this.unauthorized();
     const now = new Date();
     const session = await this.database.manager
       .getRepository(AuthSessionEntity)
@@ -172,6 +174,11 @@ export class SessionService {
       { id: claims.sid, userId: claims.userId },
       { revokedAt: new Date() },
     );
+  }
+
+  async blacklistAccessToken(token: string | undefined): Promise<void> {
+    if (!token) return;
+    try { const claims = this.verifyToken(token, "access"); const ttl = claims.exp! - Math.floor(Date.now() / 1000); if (ttl > 0) await this.redis.setEx(`token_blacklist:${this.digest(token)}`, "1", ttl); } catch { /* idempotent logout */ }
   }
 
   private tokens(
