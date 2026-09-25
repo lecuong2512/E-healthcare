@@ -153,6 +153,27 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
       };
     };
 
+    const relativeSchedule = (hoursFromNow: number) => {
+      const start = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+      const format = (value: Date) => {
+        const yyyy = value.getFullYear();
+        const mm = String(value.getMonth() + 1).padStart(2, '0');
+        const dd = String(value.getDate()).padStart(2, '0');
+        const hh = String(value.getHours()).padStart(2, '0');
+        const min = String(value.getMinutes()).padStart(2, '0');
+
+        return {
+          date: `${yyyy}-${mm}-${dd}`,
+          startTime: `${hh}:${min}:00`,
+          endTime: `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}:00`,
+        };
+      };
+
+      return format(start);
+    };
+
     const doctor = (
       name: string,
       title: string,
@@ -197,15 +218,23 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
         status: 'CONFIRMED',
         totalAmount: 350000,
         doctor: doctor('Trần Văn Tiến', 'PGS.TS.BS', 'Tim mạch', 'A203'),
-        schedule: date(3, '09:00:00'),
+        schedule: relativeSchedule(72),
       },
       {
         id: 'mock-upcoming-02',
         appointmentCode: 'APT-DEMO-2602',
-        status: 'CHECKED_IN',
+        status: 'CONFIRMED',
         totalAmount: 280000,
         doctor: doctor('Trần Quốc Bảo', 'ThS.BS', 'Nội tổng quát', 'B105'),
-        schedule: date(0, '15:00:00'),
+        schedule: relativeSchedule(8),
+      },
+      {
+        id: 'mock-upcoming-03',
+        appointmentCode: 'APT-DEMO-2603',
+        status: 'CONFIRMED',
+        totalAmount: 260000,
+        doctor: doctor('Phạm Hoàng Long', 'BSCKII', 'Da liễu', 'D108'),
+        schedule: relativeSchedule(1.5),
       },
       {
         id: 'mock-completed-01',
@@ -334,7 +363,16 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
 
   refundBand(): 'green' | 'yellow' | 'red' {
     const hours = this.remainingMs() / 3600000;
-    return hours >= 24 ? 'green' : hours >= 2 ? 'yellow' : 'red';
+
+    if (hours > 24) {
+      return 'green';
+    }
+
+    if (hours > 2) {
+      return 'yellow';
+    }
+
+    return 'red';
   }
 
   refundMessage(): string {
