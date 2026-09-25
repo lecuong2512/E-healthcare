@@ -17,6 +17,7 @@ export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
+    if (context.getType() === 'ws') return true;
     if (
       this.reflector.getAllAndOverride<boolean>(PUBLIC_ROUTE, [
         context.getHandler(),

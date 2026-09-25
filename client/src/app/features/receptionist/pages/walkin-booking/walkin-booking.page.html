@@ -1,0 +1,451 @@
+<div class="reception-shell" [class.min-h-dvh]="!embedded">
+  @if (!embedded) {
+  <header class="sticky top-0 z-40 h-14 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div class="mx-auto flex h-full max-w-[1360px] items-center justify-between gap-4 px-4 sm:px-6">
+      <div class="flex items-center gap-2" aria-label="E-Healthcare Medical">
+        <span class="grid h-8 w-8 place-content-center rounded-lg bg-sky-600 text-xs font-extrabold text-white shadow-lg shadow-sky-100" aria-hidden="true">E+</span>
+        <span class="text-[15px] font-bold text-slate-900">E-Healthcare</span>
+        <span class="rounded-md bg-sky-100 px-2 py-0.5 text-[10px] font-bold text-sky-600 max-sm:hidden">Medical</span>
+      </div>
+      <div class="flex items-center gap-2.5 text-xs text-slate-500 max-sm:hidden">
+        <span>Phân hệ lễ tân</span>
+        <span class="h-4 w-px bg-slate-200" aria-hidden="true"></span>
+        <strong>Tiếp đón vãng lai</strong>
+      </div>
+    </div>
+  </header>
+  }
+
+<main class="walkin-page bg-slate-50 px-4 py-5 text-slate-900 sm:px-6 lg:px-8 lg:py-7" [class.min-h-dvh]="!embedded">
+  <div class="mx-auto max-w-[1360px]">
+    @if (!embedded) {
+    <header class="page-heading mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+      <div>
+        <p class="mb-1 text-xs font-bold uppercase tracking-[.16em] text-sky-600">
+          Đặt lịch tại quầy · SRS-REC-02
+        </p>
+        <h1 class="text-2xl font-bold tracking-tight sm:text-[1.75rem]">
+          Tiếp đón bệnh nhân vãng lai
+        </h1>
+        <p class="mt-1.5 text-sm text-slate-600">
+          Tạo lịch trong ngày, thu phí và cấp số thứ tự tại quầy.
+        </p>
+      </div>
+      <a
+        routerLink="/receptionist/checkin"
+        class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:border-sky-300 hover:text-sky-700"
+      >
+        ← Quay lại quầy check-in
+      </a>
+    </header>
+    }
+
+    @if (!success) {
+      <ol class="mb-5 grid list-none grid-cols-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm max-md:grid-cols-1" aria-label="Tiến trình tiếp đón vãng lai">
+        <li class="flex min-h-[4.25rem] items-center gap-3 bg-sky-50 px-5 py-3">
+          <span class="grid h-8 w-8 shrink-0 place-content-center rounded-full bg-sky-600 text-xs font-extrabold text-white ring-4 ring-sky-100">1</span>
+          <div class="grid"><strong class="text-[13px] text-sky-700">Thông tin</strong><small class="text-[11px] text-slate-400">Bệnh nhân</small></div>
+        </li>
+        <li class="flex min-h-[4.25rem] items-center gap-3 border-l border-slate-200 px-5 py-3 max-md:border-l-0 max-md:border-t">
+          <span class="grid h-8 w-8 shrink-0 place-content-center rounded-full bg-slate-100 text-xs font-extrabold text-slate-500">2</span>
+          <div class="grid"><strong class="text-[13px] text-slate-700">Lịch khám</strong><small class="text-[11px] text-slate-400">Bác sĩ & khung giờ</small></div>
+        </li>
+        <li class="flex min-h-[4.25rem] items-center gap-3 border-l border-slate-200 px-5 py-3 max-md:border-l-0 max-md:border-t">
+          <span class="grid h-8 w-8 shrink-0 place-content-center rounded-full bg-slate-100 text-xs font-extrabold text-slate-500">3</span>
+          <div class="grid"><strong class="text-[13px] text-slate-700">Xác nhận</strong><small class="text-[11px] text-slate-400">Thanh toán tại quầy</small></div>
+        </li>
+      </ol>
+    }
+
+    @if (success) {
+      <section id="walk-in-receipt" class="mx-auto max-w-3xl rounded-3xl border border-emerald-200 bg-white p-6 text-center shadow-sm sm:p-10" role="status">
+        <span class="mx-auto grid h-20 w-20 place-content-center rounded-full bg-emerald-100 text-4xl text-emerald-700">✓</span>
+        <h2 class="mt-5 text-2xl font-bold text-emerald-900">
+          Tiếp đón thành công
+        </h2>
+        <p class="mt-2 text-slate-600">
+          Lịch khám đã được tạo, thanh toán và check-in.
+        </p>
+        <div class="my-6 grid gap-4 rounded-2xl bg-emerald-50 p-5 sm:grid-cols-3">
+          <div>
+            <span class="text-sm text-emerald-800">Mã lịch hẹn</span>
+            <strong class="block font-mono">{{ success.appointmentCode }}</strong>
+          </div>
+          <div>
+            <span class="text-sm text-emerald-800">Số thứ tự</span>
+            <strong class="block text-5xl text-emerald-800">
+              {{ success.queueNumber }}
+            </strong>
+          </div>
+          <div>
+            <span class="text-sm text-emerald-800">Phòng khám</span>
+            <strong class="block">{{ success.roomNumber }}</strong>
+          </div>
+        </div>
+        <p class="font-semibold">{{ success.patientName }}</p>
+        <p class="text-slate-600">BS. {{ success.doctorName }}</p>
+        <p class="mt-2 text-sm text-slate-500">
+          Biên lai: {{ success.receiptCode }}
+        </p>
+        <p class="mt-2 text-sm text-slate-600">Đã thu: {{ success.amount | currencyVnd }} · Tiền thừa: {{ success.changeAmount | currencyVnd }}</p>
+        <button type="button" class="mt-5 min-h-11 rounded-xl border border-emerald-300 px-5 font-semibold text-emerald-800" (click)="printRequested.emit()">In phiếu thu</button>
+        @if (embedded) {
+          <button type="button" class="ml-3 mt-5 min-h-11 rounded-xl border border-slate-300 px-5 font-semibold" (click)="closeRequested.emit()">Đóng</button>
+        }
+        <button
+          type="button"
+          class="mt-6 min-h-12 rounded-xl bg-emerald-700 px-6 font-semibold text-white hover:bg-emerald-800"
+          (click)="startAnotherBooking()"
+        >
+          Tiếp đón bệnh nhân khác
+        </button>
+      </section>
+    } @else {
+      <form [formGroup]="bookingForm" (ngSubmit)="submitBooking()" class="booking-workspace grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(23rem,0.7fr)]">
+        <div class="space-y-6">
+          <section class="form-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="patient-info-title">
+            <div class="mb-5">
+              <span class="mr-2 inline-grid h-8 w-8 place-content-center rounded-full bg-sky-600 font-extrabold text-white ring-4 ring-sky-50">1</span>
+              <h2 id="patient-info-title" class="inline text-lg font-bold">
+                Thông tin bệnh nhân
+              </h2>
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <label class="field sm:col-span-2">
+                Họ và tên <span aria-hidden="true">*</span>
+                <input
+                  type="text"
+                  formControlName="fullName"
+                  autocomplete="name"
+                  maxlength="100"
+                  placeholder="Nhập họ và tên đầy đủ"
+                />
+              </label>
+              <label class="field">
+                Số điện thoại <span aria-hidden="true">*</span>
+                <input
+                  type="tel"
+                  formControlName="phone"
+                  autocomplete="tel"
+                  placeholder="0912345678"
+                />
+              </label>
+              <label class="field">
+                CCCD/CMND
+                <input
+                  type="text"
+                  formControlName="citizenId"
+                  autocomplete="off"
+                  maxlength="12"
+                  placeholder="Không bắt buộc"
+                />
+              </label>
+              <label class="field">
+                Năm sinh <span aria-hidden="true">*</span>
+                <input
+                  type="number"
+                  formControlName="birthYear"
+                  min="1900"
+                  [max]="currentYear"
+                />
+              </label>
+              <label class="field">
+                Giới tính <span aria-hidden="true">*</span>
+                <select formControlName="gender">
+                  <option [value]="Gender.MALE">Nam</option>
+                  <option [value]="Gender.FEMALE">Nữ</option>
+                  <option [value]="Gender.OTHER">Khác</option>
+                </select>
+              </label>
+              <label class="field sm:col-span-2">
+                Lý do khám <span aria-hidden="true">*</span>
+                <textarea
+                  formControlName="reasonForVisit"
+                  rows="3"
+                  maxlength="2000"
+                  placeholder="Mô tả ngắn gọn triệu chứng hoặc nhu cầu khám"
+                ></textarea>
+              </label>
+            </div>
+            @if (
+              bookingForm.controls.fullName.touched &&
+              bookingForm.controls.fullName.invalid
+            ) {
+              <p class="form-error" role="alert">Vui lòng nhập họ tên bệnh nhân.</p>
+            }
+            @if (
+              bookingForm.controls.phone.touched &&
+              bookingForm.controls.phone.invalid
+            ) {
+              <p class="form-error" role="alert">
+                Số điện thoại không đúng định dạng Việt Nam.
+              </p>
+            }
+            @if (bookingForm.controls.citizenId.touched && bookingForm.controls.citizenId.invalid) {
+              <p class="form-error" role="alert">CCCD/CMND phải gồm 9 hoặc 12 chữ số.</p>
+            }
+            @if (
+              bookingForm.controls.birthYear.touched &&
+              bookingForm.controls.birthYear.value > currentYear
+            ) {
+              <p class="form-error" role="alert">
+                Năm sinh không được lớn hơn năm hiện tại.
+              </p>
+            }
+          </section>
+
+          <section class="form-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="doctor-slot-title">
+            <div class="mb-5">
+              <span class="mr-2 inline-grid h-8 w-8 place-content-center rounded-full bg-sky-600 font-extrabold text-white ring-4 ring-sky-50">2</span>
+              <h2 id="doctor-slot-title" class="inline text-lg font-bold">
+                Chọn bác sĩ và khung giờ hôm nay
+              </h2>
+            </div>
+
+            <div [formGroup]="searchForm" class="mb-5 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+              <label class="field">
+                Chuyên khoa
+                <select formControlName="specialtyName">
+                  <option value="">Tất cả chuyên khoa</option>
+                  @for (specialty of specialtyOptions; track specialty) {
+                    <option [value]="specialty">{{ specialty }}</option>
+                  }
+                </select>
+              </label>
+              <label class="field">
+                Tên bác sĩ
+                <input
+                  type="search"
+                  formControlName="doctorName"
+                  autocomplete="off"
+                  placeholder="Nhập tên bác sĩ"
+                />
+              </label>
+              <button
+                type="button"
+                class="min-h-11 self-end rounded-xl bg-sky-600 px-5 font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-50"
+                [disabled]="loadingDoctors"
+                (click)="searchDoctors()"
+              >
+                {{ loadingDoctors ? 'Đang tìm…' : 'Tìm bác sĩ' }}
+              </button>
+            </div>
+
+            @if (loadingDoctors) {
+              <div class="p-8 text-center text-slate-600" role="status">
+                Đang tải danh sách bác sĩ và slot trống…
+              </div>
+            } @else if (doctors.length) {
+              <div class="grid gap-3">
+                @for (doctor of doctors; track doctor.doctorId) {
+                  <article
+                    class="doctor-card"
+                    [class.doctor-card--selected]="
+                      selectedDoctorId() === doctor.doctorId
+                    "
+                  >
+                    <button
+                      type="button"
+                      class="w-full text-left"
+                      (click)="chooseDoctor(doctor.doctorId)"
+                    >
+                      <div class="flex flex-wrap justify-between gap-2">
+                        <div>
+                          <h3 class="font-bold text-slate-900">
+                            BS. {{ doctor.doctorName }}
+                          </h3>
+                          <p class="text-sm text-slate-600">
+                            {{ doctor.specialtyName }} · Phòng
+                            {{ doctor.roomNumber }}
+                          </p>
+                        </div>
+                        <strong class="text-sky-700">
+                          {{ doctor.consultationFee | currencyVnd }}
+                        </strong>
+                      </div>
+                    </button>
+                    @if (selectedDoctorId() === doctor.doctorId) {
+                      <div class="mt-4 border-t border-slate-200 pt-4">
+                        <p class="mb-2 text-sm font-semibold">Khung giờ còn trống</p>
+                        <div class="flex flex-wrap gap-2">
+                          @for (slot of doctor.slots; track slot.scheduleId) {
+                            <button
+                              type="button"
+                              class="slot-button"
+                              [class.slot-button--selected]="
+                                selectedScheduleId() === slot.scheduleId
+                              "
+                              (click)="chooseSlot(slot.scheduleId)"
+                            >
+                              {{ slot.startTime }}–{{ slot.endTime }}
+                            </button>
+                          } @empty {
+                            <p class="text-sm text-amber-700">
+                              Bác sĩ không còn slot trống hôm nay.
+                            </p>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </article>
+                }
+              </div>
+            } @else {
+              <div class="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                Dùng bộ lọc để tìm bác sĩ còn lịch trống hôm nay.
+              </div>
+            }
+          </section>
+        </div>
+
+        <aside class="space-y-6">
+          <section class="summary-card sticky top-20 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="payment-summary-title">
+            <div class="mb-5">
+              <span class="mr-2 inline-grid h-8 w-8 place-content-center rounded-full bg-sky-600 font-extrabold text-white ring-4 ring-sky-50">3</span>
+              <h2 id="payment-summary-title" class="inline text-lg font-bold">
+                Xác nhận và thanh toán
+              </h2>
+            </div>
+
+            @if (selectedDoctor() && selectedSlot()) {
+              <dl class="summary-list">
+                <div>
+                  <dt>Bác sĩ</dt>
+                  <dd>{{ selectedDoctor()!.doctorName }}</dd>
+                </div>
+                <div>
+                  <dt>Chuyên khoa</dt>
+                  <dd>{{ selectedDoctor()!.specialtyName }}</dd>
+                </div>
+                <div>
+                  <dt>Phòng</dt>
+                  <dd>{{ selectedDoctor()!.roomNumber }}</dd>
+                </div>
+                <div>
+                  <dt>Khung giờ</dt>
+                  <dd>
+                    {{ selectedSlot()!.startTime }}–{{ selectedSlot()!.endTime }}
+                  </dd>
+                </div>
+              </dl>
+
+              <div class="my-5 rounded-xl bg-amber-50 p-4">
+                <div class="flex justify-between gap-3">
+                  <span>Phí khám</span>
+                  <strong>
+                    {{ selectedDoctor()!.consultationFee | currencyVnd }}
+                  </strong>
+                </div>
+                <label class="field mt-4">
+                  Tiền khách đưa
+                  <input
+                    type="number"
+                    inputmode="numeric"
+                    min="0"
+                    step="1000"
+                    formControlName="amountTendered"
+                    (input)="updateAmountTendered($event)"
+                  />
+                </label>
+                <div class="mt-3 flex justify-between gap-3 border-t border-amber-200 pt-3">
+                  <span>Tiền thừa</span>
+                  <strong>{{ changeAmount() | currencyVnd }}</strong>
+                </div>
+              </div>
+
+              <p class="mb-4 text-xs text-slate-500">
+                Hệ thống chỉ tạo lịch sau khi lễ tân xác nhận đúng bệnh nhân,
+                bác sĩ, slot và số tiền đã nhận.
+              </p>
+              <button
+                type="submit"
+                class="min-h-12 w-full rounded-xl bg-sky-600 px-5 font-semibold text-white shadow-sm hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                [disabled]="submitting"
+                [attr.aria-busy]="submitting"
+              >
+                {{
+                  submitting
+                    ? 'Đang tạo lịch và check-in…'
+                    : 'Cấp số ngay'
+                }}
+              </button>
+              @if (
+                bookingForm.controls.amountTendered.touched &&
+                bookingForm.controls.amountTendered.value <
+                  selectedDoctor()!.consultationFee
+              ) {
+                <p class="form-error" role="alert">
+                  Tiền khách đưa phải đủ phí khám.
+                </p>
+              }
+            } @else {
+              <div class="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">
+                Chọn bác sĩ và khung giờ để xem thông tin thanh toán.
+              </div>
+            }
+
+            @if (errorMessage) {
+              <div class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800" role="alert">
+                <strong>Không thể tạo lịch.</strong>
+                <p class="mt-1">{{ errorMessage }}</p>
+                @if (slotConflict) {
+                  <p class="mt-2 font-medium">
+                    Slot vừa được người khác đặt. Hệ thống sẽ không tự chuyển
+                    sang giờ khám khác.
+                  </p>
+                  <button
+                    type="button"
+                    class="mt-3 min-h-11 rounded-lg border border-red-300 px-4 font-semibold"
+                    (click)="refreshSlotsAfterConflict()"
+                  >
+                    Tải lại slot và chọn lại
+                  </button>
+                } @else {
+                  <button
+                    type="button"
+                    class="mt-3 min-h-11 rounded-lg border border-red-300 px-4 font-semibold"
+                    (click)="retryLastIntent()"
+                  >
+                    Thử lại cùng yêu cầu
+                  </button>
+                }
+              </div>
+            }
+          </section>
+        </aside>
+      </form>
+    }
+
+    @if (candidates.length && !success) {
+      <div class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="candidate-title">
+        <section class="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-2xl sm:p-7">
+          <h2 id="candidate-title" class="text-xl font-bold">
+            Chọn hồ sơ bệnh nhân phù hợp
+          </h2>
+          <p class="mt-2 text-sm text-slate-600">
+            Tìm thấy nhiều hồ sơ trùng thông tin. Chỉ chọn sau khi đã đối chiếu
+            trực tiếp với bệnh nhân.
+          </p>
+          <div class="mt-5 grid gap-3">
+            @for (candidate of candidates; track candidate.patientId) {
+              <button
+                type="button"
+                class="grid min-h-16 gap-2 rounded-xl border border-slate-200 p-4 text-left hover:border-sky-500 hover:bg-sky-50 sm:grid-cols-[1fr_auto]"
+                (click)="selectCandidate(candidate.patientId)"
+              >
+                <span>
+                  <strong class="block">{{ candidate.maskedName }}</strong>
+                  <small class="text-slate-600">
+                    {{ candidate.birthDateLabel }} · {{ candidate.gender }}
+                  </small>
+                </span>
+                <span class="font-semibold text-sky-700">Chọn hồ sơ</span>
+              </button>
+            }
+          </div>
+        </section>
+      </div>
+    }
+  </div>
+</main>
+</div>

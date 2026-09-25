@@ -1,10 +1,11 @@
+import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
   IsNotEmpty,
   IsString,
-  MaxLength,
   Matches,
+  MaxLength,
   ValidateIf,
 } from 'class-validator';
 
@@ -16,9 +17,11 @@ export class UpdatePhrProfileDto {
   @MaxLength(100)
   fullName!: string;
 
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value)
   @IsString()
-  @IsNotEmpty()
   @MaxLength(20)
+  @Matches(/^(?:$|\d{9}|\d{12})$/, { message: 'CCCD/CMND phải gồm 9 hoặc 12 chữ số.' })
   citizenId!: string;
 
   @IsEnum(Gender)

@@ -1,0 +1,104 @@
+:host {
+  display: block;
+  min-height: 100dvh;
+}
+
+.reception-shell {
+  background: #f8fafc;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+}
+
+.status-badge {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  color: #075985;
+  background: #e0f2fe;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.status-badge--success {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.detail-grid div {
+  border: 1px solid #edf2f7;
+  border-radius: 0.75rem;
+  background: #f8fafc;
+  padding: 0.9rem 1rem;
+}
+
+.detail-grid dt {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.detail-grid dd {
+  margin: 0.25rem 0 0;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.detail-grid small {
+  color: #64748b;
+}
+
+.queue-connection {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  padding: 0.25rem 0.65rem;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.queue-connection > span {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+
+.queue-connection[data-state='connected'] > span {
+  background: #16a34a;
+  box-shadow: 0 0 0 0.2rem rgb(22 163 74 / 12%);
+}
+
+.queue-connection[data-state='error'] > span,
+.queue-connection[data-state='expired'] > span {
+  background: #dc2626;
+}
+
+.counter-payment-receipt dt {
+  color: #047857;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.counter-payment-receipt dd {
+  margin: 0.15rem 0 0;
+  color: #064e3b;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -12,6 +12,7 @@ export class AccessTokenGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    if (context.getType() === 'ws') return true;
     if (
       this.reflector.getAllAndOverride<boolean>(PUBLIC_ROUTE, [
         context.getHandler(),

@@ -4,12 +4,17 @@ export const RECEPTIONIST_ROUTES: Routes = [
   { path: '', redirectTo: 'checkin', pathMatch: 'full' },
   {
     path: 'checkin',
-    loadComponent: () => import('./pages/checkin-desk/checkin-desk.page').then((m) => m.CheckinDeskPage),
+    loadComponent: () =>
+      import('./pages/checkin-desk/checkin-desk.container').then(
+        (m) => m.CheckinDeskContainer,
+      ),
   },
   {
     path: 'walkin',
     loadComponent: () =>
-      import('./pages/walkin-booking/walkin-booking.page').then((m) => m.WalkinBookingPage),
+      import('./pages/walkin-booking/walkin-booking.container').then(
+        (m) => m.WalkinBookingContainer,
+      ),
   },
   {
     path: 'queue-board',

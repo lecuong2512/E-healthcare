@@ -8,3 +8,8 @@ export * from "./user-status.enum";
 export * from "./shift-type.enum";
 export * from "./queue-name.enum";
 export * from "./job-name.enum";
+export * from "./queue-source.enum";
+export * from "./counter-payment-method.enum";
+export * from "./counter-payment-status.enum";
+export * from "./date-of-birth-precision.enum";
+export * from "./reception-audit-action.enum";
