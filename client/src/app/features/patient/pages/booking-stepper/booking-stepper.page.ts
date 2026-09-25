@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -33,7 +34,7 @@ export interface SlotItem {
 @Component({
   selector: 'app-booking-stepper-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule],
   templateUrl: './booking-stepper.page.html',
 })
 export class BookingStepperPage implements OnDestroy {
@@ -147,6 +148,8 @@ export class BookingStepperPage implements OnDestroy {
   readonly loading = signal(false);
   readonly errorMessage = signal<string | null>(null);
   readonly selectedFileName = signal<string | null>(null);
+  consentAccepted = false;
+  consentError = false;
   private timerInterval: ReturnType<typeof setInterval> | null = null;
 
   readonly formattedCountdown = computed(() => {
@@ -288,9 +291,10 @@ export class BookingStepperPage implements OnDestroy {
 
   submitBooking() {
     if (this.selectedSlotId() === null || this.patientForm.invalid) return;
+    if (!this.consentAccepted) { this.consentError = true; return; }
 
     const method = this.paymentMethod();
-    this.router.navigate(['/patient/payment-qr', method]);
+    this.router.navigate(['/patient/payment-qr', method], { state: { consent_nd13_accepted_at: new Date().toISOString() } });
   }
 
   // ─── Navigation ───────────────────────────────────────────

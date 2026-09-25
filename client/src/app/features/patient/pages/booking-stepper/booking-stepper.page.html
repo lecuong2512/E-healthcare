@@ -644,6 +644,12 @@
           }
         </div>
 
+        <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+          <input type="checkbox" [(ngModel)]="consentAccepted" [ngModelOptions]="{standalone: true}" (change)="consentError = false" class="mt-1 h-4 w-4 shrink-0 accent-sky-700" />
+          <span>Tôi xác nhận đã đọc và đồng ý cho phép E-Healthcare Portal thu thập, xử lý thông tin sức khỏe cá nhân theo quy định của Nghị định 13/2023/NĐ-CP phục vụ mục đích khám chữa bệnh.</span>
+        </label>
+        @if (consentError) { <p class="-mt-3 text-xs text-rose-600">Vui lòng xác nhận đồng ý xử lý thông tin sức khỏe trước khi gửi yêu cầu.</p> }
+
         <!-- Terms note -->
         <p class="text-[11px] text-slate-400 text-center leading-relaxed">
           Bằng cách xác nhận, bạn đồng ý với
