@@ -2,11 +2,13 @@
   <div class="mx-auto max-w-6xl pb-20">
     <header class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4">
       <div><h1 class="text-base font-bold text-slate-900">{{patientName}} <span class="font-normal text-slate-500">· {{patientGender}} · {{patientYear}}</span></h1><p class="mt-1 font-mono text-sky-700">Mã hồ sơ: {{recordCode}}</p></div>
-      <span class="rounded-full bg-purple-100 px-3 py-1.5 font-bold text-purple-800">Đang khám</span>
+      @if(isLocked){<span class="rounded-full bg-red-100 border border-red-300 px-3 py-1.5 font-bold text-red-800">HỒ SƠ ĐÃ KHÓA 24H (CHỈ ĐỌC)</span>}@else{<span class="rounded-full bg-purple-100 px-3 py-1.5 font-bold text-purple-800">Đang khám</span>}
     </header>
+    @if(isLocked){<div class="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-red-900 flex items-center justify-between"><div><p class="font-bold">⚠️ Bệnh án này đã bị khóa sau 24 giờ. Không thể sửa trực tiếp.</p><p class="text-xs text-red-700">Mọi bổ sung lâm sàng bắt buộc phải tạo bản ghi Phụ lục bệnh án (EMR Addendum).</p></div><button (click)="openAddendumModal()" class="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-700 shadow-sm shrink-0">Tạo Phụ lục Bệnh án (Addendum)</button></div>}
     <section class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950"><h2 class="font-bold">Thông tin tiền sử từ PHR</h2><p class="mt-1">Nhóm máu: <b>{{bloodType}}</b> · Dị ứng: <b class="text-red-700">{{allergies}}</b> · Bệnh mạn tính: <b>{{chronicDiseases}}</b></p><p class="mt-1">Tiền sử phẫu thuật: {{surgeryHistory}}</p></section>
-    <nav class="mt-4 flex gap-2 border-b"><button (click)="activeTab='record'" class="border-b-2 px-4 py-2 font-semibold" [class.border-sky-600]="activeTab==='record'" [class.text-sky-700]="activeTab==='record'">Hồ sơ khám</button><button (click)="activeTab='attachments'" class="border-b-2 px-4 py-2 font-semibold" [class.border-sky-600]="activeTab==='attachments'" [class.text-sky-700]="activeTab==='attachments'">Tệp đính kèm ({{attachments.length}})</button></nav>
+    <nav class="mt-4 flex gap-2 border-b"><button (click)="activeTab='record'" class="border-b-2 px-4 py-2 font-semibold" [class.border-sky-600]="activeTab==='record'" [class.text-sky-700]="activeTab==='record'">Hồ sơ khám</button><button (click)="activeTab='attachments'" class="border-b-2 px-4 py-2 font-semibold" [class.border-sky-600]="activeTab==='attachments'" [class.text-sky-700]="activeTab==='attachments'">Tệp đính kèm ({{attachments.length}})</button><button (click)="activeTab='history'" class="border-b-2 px-4 py-2 font-semibold" [class.border-sky-600]="activeTab==='history'" [class.text-sky-700]="activeTab==='history'">Lịch sử phụ lục ({{emrHistory?.addendums?.length || 0}})</button></nav>
     @if(activeTab==='record') {
+      <fieldset [disabled]="isLocked" class="contents">
       <div class="mt-3 grid items-start gap-3 lg:grid-cols-2">
         <section class="space-y-3">
           <div class="rounded-xl border bg-white p-4"><h2 class="mb-3 font-bold text-slate-900">Triệu chứng & lý do khám</h2><label class="block">Triệu chứng lâm sàng<textarea [(ngModel)]="symptoms" rows="3" placeholder="Mô tả triệu chứng và lý do bệnh nhân đến khám..." class="mt-1 w-full rounded border p-3"></textarea></label><label class="mt-3 block">Thời gian khởi phát<input [(ngModel)]="onsetDuration" placeholder="Ví dụ: khởi phát 2 ngày trước, đau tăng khi gắng sức" class="mt-1 w-full rounded border p-2" /></label></div>
@@ -16,10 +18,57 @@
         </section>
         <section class="rounded-xl border bg-white p-4"><div class="mb-3 flex justify-between"><h2 class="font-bold text-slate-900">Kê đơn thuốc</h2><span>{{rxList.length}} thuốc</span></div><div class="flex gap-2"><input [(ngModel)]="drugSearch" placeholder="Tìm tên thuốc / hoạt chất..." class="min-w-0 flex-1 rounded border p-2" /><button (click)="tryAddDrug()" [disabled]="!selectedCatalogDrug" class="rounded bg-sky-600 px-4 font-bold text-white disabled:opacity-50">Thêm</button></div>@if(drugSearch && !selectedCatalogDrug){<div class="mt-1 max-h-40 overflow-auto rounded border">@for(d of filteredDrugs;track d.name){<button (click)="selectDrug(d)" class="block w-full p-2 text-left hover:bg-sky-50">{{d.name}} <span class="text-slate-500">({{d.ingredient}})</span></button>}</div>}<div class="mt-3 space-y-3">@for(rx of rxList;track rx.id;let i=$index){<article class="rounded-lg border p-3"><div class="flex justify-between"><b>{{rx.drugName}}</b><button (click)="removeRx(i)" class="text-red-600">Xóa</button></div><p class="text-slate-500">{{rx.ingredient}}</p><div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">@for(label of ['Sáng','Trưa','Chiều','Tối'];track label;let j=$index){<label>{{label}}<input type="number" min="0" step="0.5" [(ngModel)]="rx.doses[j]" class="mt-1 w-full rounded border p-1.5" /></label>}</div><div class="mt-2 flex flex-wrap gap-3"><label>Số lượng <input type="number" min="1" [(ngModel)]="rx.quantity" class="w-20 rounded border p-1.5" /></label><label>Thời điểm dùng <select [(ngModel)]="rx.timing" class="rounded border p-1.5"><option>Trước ăn</option><option>Trong bữa ăn</option><option>Sau ăn</option><option>Khi cần</option></select></label></div></article>}@empty{<p class="rounded border border-dashed p-6 text-center text-slate-400">Chưa có thuốc được kê.</p>}</div></section>
       </div>
+      </fieldset>
     }
     @if(activeTab==='attachments') {<section class="mt-3 rounded-xl border bg-white p-4"><div class="flex flex-wrap items-center justify-between gap-2"><div><h2 class="font-bold text-slate-900">Tệp đính kèm hồ sơ bệnh nhân</h2><p class="mt-1 text-slate-500">Ảnh đơn cũ, xét nghiệm máu, phim X-quang · JPG, PNG, PDF · Tối đa 10 MB/tệp</p></div><label class="cursor-pointer rounded-lg bg-sky-600 px-4 py-2 font-bold text-white">Tải tệp lên<input type="file" multiple accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" (change)="onFiles($event)" class="hidden" /></label></div>@if(saveMessage){<p class="mt-3 text-amber-700">{{saveMessage}}</p>}<div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">@for(file of attachments;track file.url){<button (click)="openPreview(file)" class="overflow-hidden rounded-lg border text-left hover:border-sky-500"><div class="flex h-36 items-center justify-center bg-slate-100">@if(file.type==='application/pdf'){<span class="text-3xl font-bold text-red-600">PDF</span>}@else{<img [src]="file.url" [alt]="file.name" class="h-full w-full object-cover" />}</div><span class="block truncate p-2">{{file.name}}</span></button>}@empty{<p class="col-span-full py-12 text-center text-slate-400">Chưa có tệp đính kèm. Tải ảnh hoặc PDF để xem trước tại đây.</p>}</div></section>}
+    @if(activeTab==='history') {
+      <section class="mt-3 space-y-3">
+        <article class="rounded-xl border bg-white p-4">
+          <div class="flex justify-between border-b pb-2"><b class="text-sky-800">Bệnh án gốc (Original EMR)</b><span class="text-slate-400">Bất biến</span></div>
+          <p class="mt-2 text-slate-700"><b>Ghi chú:</b> {{emrHistory?.originalSnapshot?.clinicalNotes || 'Chưa có'}}</p>
+          <p class="mt-1 text-slate-700"><b>Lời dặn:</b> {{emrHistory?.originalSnapshot?.doctorAdvice || 'Chưa có'}}</p>
+          <p class="mt-1 text-slate-500">Mã ICD chính: {{emrHistory?.originalSnapshot?.icd10PrimaryCode || 'N/A'}} · Phụ: {{emrHistory?.originalSnapshot?.icd10SecondaryCodes || 'Không có'}} · Tái khám: {{emrHistory?.originalSnapshot?.followUpDate || 'Không có'}}</p>
+        </article>
+        @for(addendum of emrHistory?.addendums; track addendum.id; let idx = $index) {
+          <article class="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
+            <div class="flex justify-between border-b border-emerald-100 pb-2">
+              <div><span class="rounded bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">Phụ lục {{idx + 1}}</span> <b class="ml-2">{{addendum.doctorName || 'Bác sĩ phụ trách'}}</b> @if(addendum.doctorLicenseNumber){<span class="text-slate-500">(CCHN: {{addendum.doctorLicenseNumber}})</span>}</div>
+              <span class="text-slate-400 font-mono">{{addendum.createdAt | date:'dd/MM/yyyy HH:mm'}}</span>
+            </div>
+            <p class="mt-2 rounded bg-amber-50 p-2 text-amber-950"><b>Lý do y khoa:</b> {{addendum.reason}}</p>
+            <div class="mt-2 grid gap-2 lg:grid-cols-2">
+              <div class="rounded border p-2 bg-slate-50"><b class="text-slate-600">Nội dung trước (previous_content):</b><p class="mt-1 text-slate-700">{{addendum.previousContent.clinicalNotes}}</p><p class="text-slate-500 text-[11px]">Lời dặn: {{addendum.previousContent.doctorAdvice || 'Không có'}} · Tái khám: {{addendum.previousContent.followUpDate || 'Không có'}}</p></div>
+              <div class="rounded border border-emerald-200 p-2 bg-emerald-50/40"><b class="text-emerald-800">Nội dung sau (updated_content):</b><p class="mt-1 text-emerald-950">{{addendum.updatedContent.clinicalNotes}}</p><p class="text-emerald-700 text-[11px]">Lời dặn: {{addendum.updatedContent.doctorAdvice || 'Không có'}} · Tái khám: {{addendum.updatedContent.followUpDate || 'Không có'}}</p></div>
+            </div>
+          </article>
+        } @empty {
+          <p class="rounded border border-dashed p-6 text-center text-slate-400">Chưa có phụ lục bệnh án nào được ghi nhận.</p>
+        }
+      </section>
+    }
   </div>
-  <footer class="fixed inset-x-0 bottom-0 z-20 flex items-center justify-end gap-2 border-t bg-white/95 px-4 py-3"><span class="mr-auto text-emerald-700">{{saveMessage}}</span><button (click)="saveDraft()" class="rounded border px-4 py-2 font-semibold">Lưu nháp (Draft)</button><button (click)="completeConsultation()" class="rounded bg-sky-600 px-4 py-2 font-bold text-white">Hoàn thành ca khám</button></footer>
+  <footer class="fixed inset-x-0 bottom-0 z-20 flex items-center justify-end gap-2 border-t bg-white/95 px-4 py-3"><span class="mr-auto text-emerald-700">{{saveMessage}}</span>@if(!isLocked){<button (click)="saveDraft()" class="rounded border px-4 py-2 font-semibold">Lưu nháp (Draft)</button><button (click)="completeConsultation()" class="rounded bg-sky-600 px-4 py-2 font-bold text-white">Hoàn thành ca khám</button>}@else{<button (click)="openAddendumModal()" class="rounded bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700 shadow">Tạo Phụ lục Bệnh án (Addendum)</button>}</footer>
+  @if(showAddendumModal){
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="closeAddendumModal()">
+      <div class="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl bg-white p-5 shadow-2xl overflow-y-auto" (click)="$event.stopPropagation()">
+        <div class="mb-3 flex items-center justify-between border-b pb-2"><h2 class="text-base font-bold text-slate-900">Tạo Phụ lục Bệnh án (EMR Addendum)</h2><button (click)="closeAddendumModal()" class="text-xl font-bold text-slate-400">×</button></div>
+        @if(addendumError){<p class="mb-3 rounded bg-red-50 p-2 text-red-700">{{addendumError}}</p>}
+        <div class="space-y-3">
+          <label class="block font-bold">Lý do y khoa tạo phụ lục (bắt buộc, tối đa 1000 ký tự)<textarea [(ngModel)]="addendumReason" rows="3" maxlength="1000" placeholder="Nêu rõ lý do bổ sung/điều chỉnh thông tin bệnh án..." class="mt-1 w-full rounded border p-2"></textarea></label>
+          <label class="block font-bold">Ghi chú khám lâm sàng bổ sung<textarea [(ngModel)]="addendumClinicalNotes" rows="3" class="mt-1 w-full rounded border p-2"></textarea></label>
+          <label class="block font-bold">Lời dặn bác sĩ bổ sung<textarea [(ngModel)]="addendumDoctorAdvice" rows="2" class="mt-1 w-full rounded border p-2"></textarea></label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="block font-bold">Mã ICD-10 phụ<input [(ngModel)]="addendumIcd10Secondary" placeholder="Ví dụ: I10, E11.9" class="mt-1 w-full rounded border p-2" /></label>
+            <label class="block font-bold">Ngày hẹn tái khám<input type="date" [(ngModel)]="addendumFollowUpDate" class="mt-1 w-full rounded border p-2" /></label>
+          </div>
+        </div>
+        <div class="mt-4 flex justify-end gap-2 border-t pt-3">
+          <button (click)="closeAddendumModal()" class="rounded border px-4 py-2 font-semibold">Hủy</button>
+          <button (click)="submitAddendum()" [disabled]="isSubmittingAddendum || !addendumReason.trim()" class="rounded bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700 disabled:opacity-50">{{isSubmittingAddendum ? 'Đang lưu...' : 'Xác nhận & Lưu Phụ lục'}}</button>
+        </div>
+      </div>
+    </div>
+  }
   @if(preview){<div class="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4" (click)="closePreview()"><div class="flex max-h-full w-full max-w-5xl flex-col rounded-xl bg-white p-3" (click)="$event.stopPropagation()"><div class="mb-2 flex justify-between"><b class="truncate">{{preview.name}}</b><button (click)="closePreview()" class="px-2 text-xl">×</button></div>@if(preview.type==='application/pdf'){<iframe [src]="safePreviewUrl" title="Xem trước PDF" class="h-[80vh] w-full"></iframe>}@else{<img [src]="preview.url" [alt]="preview.name" class="max-h-[80vh] object-contain" />}</div></div>}
   @if(showAllergyModal && pendingDrug){<app-allergy-alert-modal [drugName]="pendingDrug.name" [allergyGroup]="pendingDrug.allergyGroup || ''" (cancel)="onModalCancel()" (override)="onModalOverride($event)"></app-allergy-alert-modal>}
 </main>

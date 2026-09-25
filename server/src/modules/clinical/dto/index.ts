@@ -4,4 +4,5 @@ export * from './create-medical-record.dto';
 export * from './update-medical-record.dto';
 export * from './search-icd10.dto';
 export * from './safety-check.dto';
+export * from './create-emr-addendum.dto';
 

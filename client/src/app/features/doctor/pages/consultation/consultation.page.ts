@@ -4,7 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { PhrService } from '../../../../core/services/phr.service';
+import { ClinicalService } from '../../../../core/services/clinical.service';
 import { AllergyAlertModalComponent } from '../../../../shared/components/allergy-alert-modal/allergy-alert-modal.component';
+import { EmrHistoryResponse } from '@shared/interfaces';
 
 interface Drug { name: string; ingredient: string; unit: string; allergyGroup?: string; }
 interface Rx { id: string; drugName: string; ingredient: string; doses: number[]; timing: string; quantity: number; unit: string; }
@@ -17,17 +19,30 @@ const ICD: Icd[] = [{code:'I10',name:'Tăng huyết áp vô căn'},{code:'I20.9'
 @Component({ selector: 'app-consultation-page', standalone: true, imports: [CommonModule, FormsModule, RouterModule, AllergyAlertModalComponent], templateUrl: './consultation.page.html' })
 export class ConsultationPage {
   private router = inject(Router); private route = inject(ActivatedRoute); private phr = inject(PhrService); private sanitizer = inject(DomSanitizer);
+  private clinical = inject(ClinicalService);
+  recordId = ''; isLocked = false; lockedAt: string | null = null; completedAt: string | null = null; doctorAdvice = ''; followUpDate = '';
+  showAddendumModal = false; addendumReason = ''; addendumClinicalNotes = ''; addendumDoctorAdvice = ''; addendumIcd10Secondary = ''; addendumFollowUpDate = ''; addendumError = ''; isSubmittingAddendum = false; emrHistory: EmrHistoryResponse | null = null;
   patientName='Trần Văn A'; patientGender='Nam'; patientYear=1995; recordCode='EMR-260908'; bloodType='O+'; allergies='Penicillin, Aspirin'; chronicDiseases='Hen phế quản'; surgeryHistory='Chưa ghi nhận';
   symptoms=''; onsetDuration='';
   bp='120/80'; pulse=76; temp=36.8; respiratoryRate=18; height=170; weight=65; bmi='22.5'; spo2=98;
   generalExam=''; specialtyExam=''; differentialDiagnosis=''; clinicalNotes='';
   icdSearch=''; icdTags:Icd[]=[{code:'I20.9',name:'Đau thắt ngực, không đặc hiệu'}]; readonly icdCatalog=ICD;
   readonly drugCatalog=DRUGS; drugSearch=''; selectedCatalogDrug:Drug|null=null; rxList:Rx[]=[];
-  showAllergyModal=false; pendingDrug:Drug|null=null; attachments:{name:string;type:string;url:string}[]=[]; preview:{name:string;type:string;url:string}|null=null; activeTab:'record'|'attachments'='record'; saveMessage='';
-  constructor(){ this.route.paramMap.subscribe(p=>{const id=p.get('appointmentId');if(id)this.recordCode=id;}); this.route.queryParams.subscribe(p=>{if(p['name'])this.patientName=p['name'];if(p['gender'])this.patientGender=p['gender'];if(p['year'])this.patientYear=Number(p['year']);}); this.loadPhr(); }
+  showAllergyModal=false; pendingDrug:Drug|null=null; attachments:{name:string;type:string;url:string}[]=[]; preview:{name:string;type:string;url:string}|null=null; activeTab:'record'|'attachments'|'history'='record'; saveMessage='';
+  constructor(){ this.route.paramMap.subscribe(p=>{const id=p.get('appointmentId');if(id){this.recordCode=id;this.loadRecord(id);}}); this.route.queryParams.subscribe(p=>{if(p['name'])this.patientName=p['name'];if(p['gender'])this.patientGender=p['gender'];if(p['year'])this.patientYear=Number(p['year']);}); this.loadPhr(); }
   get filteredDrugs(){const q=this.drugSearch.toLocaleLowerCase();return this.drugCatalog.filter(d=>!q||`${d.name} ${d.ingredient}`.toLocaleLowerCase().includes(q));}
   get filteredIcd(){const q=this.icdSearch.toLocaleLowerCase();return q?this.icdCatalog.filter(d=>`${d.code} ${d.name}`.toLocaleLowerCase().includes(q)&&!this.icdTags.some(t=>t.code===d.code)):[];}
   loadPhr(){ this.phr.getMyPhr().subscribe({next:p=>{this.bloodType=p.bloodType||'Chưa có';this.allergies=p.allergies||'Chưa ghi nhận';this.chronicDiseases=p.chronicDiseases||'Chưa ghi nhận';this.surgeryHistory=p.surgeryHistory||'Chưa ghi nhận';if(p.fullName)this.patientName=p.fullName;if(p.dateOfBirth)this.patientYear=new Date(p.dateOfBirth).getFullYear();},error:()=>{}}); }
+  loadRecord(id: string) {
+    this.clinical.getMedicalRecordByAppointment(id).subscribe({
+      next: (r) => { this.recordId = r.id; this.isLocked = r.isLocked; this.lockedAt = r.lockedAt; this.completedAt = r.completedAt; if (r.clinicalNotes) this.clinicalNotes = r.clinicalNotes; if (r.doctorAdvice) this.doctorAdvice = r.doctorAdvice; if (r.followUpDate) this.followUpDate = r.followUpDate; this.loadHistory(r.id); },
+      error: () => {}
+    });
+  }
+  loadHistory(id: string) {
+    if (!id) return;
+    this.clinical.getEmrHistory(id).subscribe({ next: (h) => { this.emrHistory = h; this.isLocked = h.isLocked; this.lockedAt = h.lockedAt; this.completedAt = h.completedAt; }, error: () => {} });
+  }
   calcBmi(){if(this.height>0&&this.weight>0)this.bmi=(this.weight/((this.height/100)**2)).toFixed(1);}
   addIcd(tag:Icd){if(!this.icdTags.length)this.icdTags.push(tag);else this.icdTags.push(tag);this.icdSearch='';}
   removeIcd(i:number){this.icdTags.splice(i,1);}
@@ -40,7 +55,18 @@ export class ConsultationPage {
   onFiles(event:Event){const input=event.target as HTMLInputElement;for(const file of Array.from(input.files||[])){if(file.size>10*1024*1024){this.saveMessage=`Tệp ${file.name} vượt quá giới hạn 10 MB.`;continue;}if(!['image/jpeg','image/png','application/pdf'].includes(file.type)){this.saveMessage=`Định dạng ${file.name} không được hỗ trợ.`;continue;}this.attachments.push({name:file.name,type:file.type,url:URL.createObjectURL(file)});}input.value='';}
   openPreview(file:{name:string;type:string;url:string}){this.preview=file;} closePreview(){this.preview=null;}
   get safePreviewUrl():SafeResourceUrl|null{return this.preview?this.sanitizer.bypassSecurityTrustResourceUrl(this.preview.url):null;}
-  saveDraft(){this.saveMessage='Thông tin đang nhập được giữ ở trạng thái nháp trong phiên khám này.';}
-  completeConsultation(){this.router.navigate(['/doctor/queue']);}
+  saveDraft(){if(this.isLocked)return;this.saveMessage='Thông tin đang nhập được giữ ở trạng thái nháp trong phiên khám này.';}
+  completeConsultation(){if(this.isLocked)return;this.router.navigate(['/doctor/queue']);}
   getBmiColor(bmiInput: number | null | undefined | string): string {  const bmi = typeof bmiInput === 'string' ? parseFloat(bmiInput) : bmiInput;  if (bmi == null) return 'inherit'; if (bmi < 18.5) return '#F59E0B';  if (bmi < 25) return '#22C55E';  if (bmi < 30) return '#F97316';  return '#EF4444';}
+  openAddendumModal() { this.addendumReason = ''; this.addendumClinicalNotes = this.clinicalNotes; this.addendumDoctorAdvice = this.doctorAdvice; this.addendumIcd10Secondary = ''; this.addendumFollowUpDate = this.followUpDate; this.addendumError = ''; this.showAddendumModal = true; }
+  closeAddendumModal() { this.showAddendumModal = false; this.addendumError = ''; }
+  submitAddendum() {
+    if (!this.addendumReason.trim()) { this.addendumError = 'Vui lòng nhập lý do y khoa tạo phụ lục.'; return; }
+    if (this.addendumReason.trim().length > 1000) { this.addendumError = 'Lý do không được vượt quá 1000 ký tự.'; return; }
+    this.isSubmittingAddendum = true; this.addendumError = '';
+    this.clinical.createEmrAddendum(this.recordId, { reason: this.addendumReason.trim(), clinicalNotes: this.addendumClinicalNotes, doctorAdvice: this.addendumDoctorAdvice || null, icd10SecondaryCodes: this.addendumIcd10Secondary || null, followUpDate: this.addendumFollowUpDate || null }).subscribe({
+      next: (res) => { this.isSubmittingAddendum = false; this.showAddendumModal = false; this.saveMessage = 'Đã lưu phụ lục bệnh án thành công.'; if (res.updatedContent) { this.clinicalNotes = res.updatedContent.clinicalNotes; this.doctorAdvice = res.updatedContent.doctorAdvice || ''; this.followUpDate = res.updatedContent.followUpDate || ''; } this.loadHistory(this.recordId); this.activeTab = 'history'; },
+      error: (err) => { this.isSubmittingAddendum = false; this.addendumError = err.error?.message || 'Có lỗi xảy ra khi tạo phụ lục.'; }
+    });
+  }
 }
