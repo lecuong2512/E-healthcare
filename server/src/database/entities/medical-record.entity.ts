@@ -4,12 +4,14 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { AppointmentEntity } from './appointment.entity';
 import { DoctorEntity } from './doctor.entity';
 import { UserEntity } from './user.entity';
+import { EmrAddendumEntity } from './emr-addendum.entity';
 
 @Entity('medical_records')
 @Index('idx_medical_records_patient_id', ['patientId'])
@@ -73,4 +75,7 @@ export class MedicalRecordEntity {
 
   @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
   completedAt!: Date | null;
+
+  @OneToMany(() => EmrAddendumEntity, (addendum) => addendum.medicalRecord)
+  addendums?: EmrAddendumEntity[];
 }

@@ -13,6 +13,9 @@ import {
   DrugSafetyCheckResult,
   MedicalRecordDetailResponse,
   VitalSigns,
+  EmrClinicalSnapshot,
+  EmrAddendumData,
+  EmrHistoryResponse,
 } from '@shared/interfaces';
 
 import { MedicalRecordEntity } from '../../database/entities/medical-record.entity';
@@ -21,6 +24,7 @@ import { PrescriptionItemEntity } from '../../database/entities/prescription-ite
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
 import { DoctorEntity } from '../../database/entities/doctor.entity';
 import { PersonalHealthProfileEntity } from '../../database/entities/auth.entity';
+import { EmrAddendumEntity } from '../../database/entities/emr-addendum.entity';
 import { Icd10Service } from './icd10/icd10.service';
 import {
   CreateMedicalRecordDto,
@@ -28,6 +32,7 @@ import {
   CreatePrescriptionItemDto,
   VitalSignsDto,
   PrescriptionSafetyCheckDto,
+  CreateEmrAddendumDto,
 } from './dto';
 
 const CHRONIC_DISEASE_KEYWORDS = [
@@ -80,6 +85,10 @@ export class ClinicalService {
     return this.dataSource.getRepository(PersonalHealthProfileEntity);
   }
 
+  private get emrAddendumRepo(): Repository<EmrAddendumEntity> {
+    return this.dataSource.getRepository(EmrAddendumEntity);
+  }
+
   /**
    * Automatically calculate BMI = weight(kg) / (height(m))^2.
    * Height is input in centimeters (cm).
@@ -114,7 +123,10 @@ export class ClinicalService {
     const repo = manager
       ? manager.getRepository(DoctorEntity)
       : this.doctorRepo;
-    const doctor = await repo.findOne({ where: { userId } });
+    const doctor = await repo.findOne({
+      where: { userId },
+      relations: ['user'],
+    });
     if (!doctor) {
       throw new ForbiddenException({
         code: 'DOCTOR_PROFILE_NOT_FOUND',
@@ -805,6 +817,226 @@ export class ClinicalService {
           }
         : null,
       warnings: warnings && warnings.length > 0 ? warnings : undefined,
+    };
+  }
+
+  /**
+   * Helper to extract a full clinical snapshot from a MedicalRecordEntity.
+   */
+  public extractClinicalSnapshot(
+    record: MedicalRecordEntity,
+  ): EmrClinicalSnapshot {
+    const vitals = record.vitalSigns as unknown as VitalSigns;
+    return {
+      clinicalNotes: record.clinicalNotes,
+      doctorAdvice: record.doctorAdvice,
+      icd10PrimaryCode: record.icd10PrimaryCode,
+      icd10SecondaryCodes: record.icd10SecondaryCodes,
+      followUpDate: record.followUpDate ? String(record.followUpDate) : null,
+      vitalSigns: vitals
+        ? {
+            bloodPressure: vitals.bloodPressure || '',
+            pulse: Number(vitals.pulse || 0),
+            temperature: Number(vitals.temperature || 0),
+            respiratoryRate: Number(vitals.respiratoryRate || 0),
+            weight: Number(vitals.weight || 0),
+            height: Number(vitals.height || 0),
+            bmi: Number(vitals.bmi || 0),
+          }
+        : null,
+    };
+  }
+
+  /**
+   * Create EMR Addendum after 24-hour lock.
+   * Original medical_records row is NEVER mutated.
+   * Full snapshot semantics:
+   * previous_content = full clinical snapshot immediately before Addendum
+   * updated_content = full clinical snapshot after applying Addendum
+   */
+  async createEmrAddendum(
+    userId: string,
+    recordId: string,
+    dto: CreateEmrAddendumDto,
+  ): Promise<EmrAddendumData> {
+    const doctor = await this.getDoctorByUserId(userId);
+
+    const record = await this.medicalRecordRepo.findOne({
+      where: { id: recordId },
+    });
+
+    if (!record) {
+      throw new NotFoundException({
+        code: 'MEDICAL_RECORD_NOT_FOUND',
+        message: 'Không tìm thấy hồ sơ bệnh án.',
+      });
+    }
+
+    if (record.doctorId !== doctor.id) {
+      throw new ForbiddenException({
+        code: 'UNAUTHORIZED_DOCTOR',
+        message: 'Bác sĩ không có quyền tạo phụ lục cho hồ sơ bệnh án này.',
+      });
+    }
+
+    // Lazy lock evaluation: lock if 24 hours have elapsed since completedAt
+    await this.applyLazyLockIfNeeded(record);
+
+    if (!record.isLocked) {
+      throw new BadRequestException({
+        code: 'EMR_NOT_LOCKED',
+        message:
+          'Hồ sơ bệnh án chưa bị khóa (chưa đủ 24 giờ sau khi hoàn tất ca khám). Vui lòng chỉnh sửa trực tiếp trên bệnh án.',
+      });
+    }
+
+    // Full snapshot chaining:
+    const existingAddendums = await this.emrAddendumRepo.find({
+      where: { medicalRecordId: record.id },
+      order: { createdAt: 'ASC', id: 'ASC' },
+    });
+
+    const previousContent: EmrClinicalSnapshot =
+      existingAddendums.length > 0
+        ? existingAddendums[existingAddendums.length - 1].updatedContent
+        : this.extractClinicalSnapshot(record);
+
+    const updatedContent: EmrClinicalSnapshot = {
+      ...previousContent,
+      vitalSigns: previousContent.vitalSigns
+        ? { ...previousContent.vitalSigns }
+        : null,
+    };
+
+    if (dto.clinicalNotes !== undefined) {
+      updatedContent.clinicalNotes = dto.clinicalNotes;
+    }
+    if (dto.doctorAdvice !== undefined) {
+      updatedContent.doctorAdvice = dto.doctorAdvice
+        ? dto.doctorAdvice.trim()
+        : null;
+    }
+    if (dto.icd10SecondaryCodes !== undefined) {
+      updatedContent.icd10SecondaryCodes = dto.icd10SecondaryCodes
+        ? dto.icd10SecondaryCodes.trim()
+        : null;
+    }
+    if (dto.followUpDate !== undefined) {
+      updatedContent.followUpDate = dto.followUpDate
+        ? String(dto.followUpDate)
+        : null;
+    }
+
+    const addendum = this.emrAddendumRepo.create({
+      medicalRecordId: record.id,
+      doctorId: doctor.id,
+      reason: dto.reason.trim(),
+      previousContent,
+      updatedContent,
+    });
+
+    const savedAddendum = await this.emrAddendumRepo.save(addendum);
+
+    return {
+      id: savedAddendum.id,
+      medicalRecordId: savedAddendum.medicalRecordId,
+      doctorId: savedAddendum.doctorId,
+      doctorName: doctor.user?.fullName,
+      doctorLicenseNumber: doctor.licenseNumber || null,
+      reason: savedAddendum.reason,
+      previousContent: savedAddendum.previousContent,
+      updatedContent: savedAddendum.updatedContent,
+      createdAt: savedAddendum.createdAt
+        ? savedAddendum.createdAt.toISOString()
+        : new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Get complete EMR History with all Addendums in chronological order.
+   * Authorization:
+   * - DOCTOR: only responsible doctor (record.doctorId === doctor.id)
+   * - PATIENT: only owning patient (record.patientId === userId)
+   * - ADMIN: 403 Forbidden
+   */
+  async getEmrHistory(
+    userId: string,
+    role: Role,
+    recordId: string,
+  ): Promise<EmrHistoryResponse> {
+    if (role === Role.ADMIN) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN_ACCESS',
+        message: 'Quản trị viên không có quyền truy cập lịch sử hồ sơ bệnh án.',
+      });
+    }
+
+    const record = await this.medicalRecordRepo.findOne({
+      where: { id: recordId },
+    });
+
+    if (!record) {
+      throw new NotFoundException({
+        code: 'MEDICAL_RECORD_NOT_FOUND',
+        message: 'Không tìm thấy hồ sơ bệnh án.',
+      });
+    }
+
+    if (role === Role.PATIENT && record.patientId !== userId) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN_ACCESS',
+        message: 'Bạn chỉ có thể xem lịch sử hồ sơ bệnh án của chính mình.',
+      });
+    }
+
+    if (role === Role.DOCTOR) {
+      const doctor = await this.getDoctorByUserId(userId);
+      if (record.doctorId !== doctor.id) {
+        throw new ForbiddenException({
+          code: 'FORBIDDEN_ACCESS',
+          message:
+            'Bác sĩ không có quyền xem lịch sử hồ sơ bệnh án của ca khám do bác sĩ khác phụ trách.',
+        });
+      }
+    }
+
+    await this.applyLazyLockIfNeeded(record);
+
+    const addendums = await this.emrAddendumRepo.find({
+      where: { medicalRecordId: record.id },
+      relations: ['doctor', 'doctor.user'],
+      order: { createdAt: 'ASC', id: 'ASC' },
+    });
+
+    const originalSnapshot = this.extractClinicalSnapshot(record);
+    const currentSnapshot =
+      addendums.length > 0
+        ? addendums[addendums.length - 1].updatedContent
+        : originalSnapshot;
+
+    return {
+      recordId: record.id,
+      appointmentId: record.appointmentId,
+      patientId: record.patientId,
+      doctorId: record.doctorId,
+      isLocked: record.isLocked,
+      lockedAt: record.lockedAt ? record.lockedAt.toISOString() : null,
+      completedAt: record.completedAt ? record.completedAt.toISOString() : null,
+      originalSnapshot,
+      currentSnapshot,
+      addendums: addendums.map((a) => ({
+        id: a.id,
+        medicalRecordId: a.medicalRecordId,
+        doctorId: a.doctorId,
+        doctorName: a.doctor?.user?.fullName || undefined,
+        doctorLicenseNumber: a.doctor?.licenseNumber || null,
+        reason: a.reason,
+        previousContent: a.previousContent,
+        updatedContent: a.updatedContent,
+        createdAt: a.createdAt
+          ? a.createdAt.toISOString()
+          : new Date().toISOString(),
+      })),
     };
   }
 }
