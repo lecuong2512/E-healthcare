@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
+
 // ─── Constants (SRS-PAT-02 §5.1) ────────────────────────────
 const TOTAL_SECONDS = 10 * 60; // 600s TTL
 
@@ -34,7 +36,7 @@ export interface SlotItem {
 @Component({
   selector: 'app-booking-stepper-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, FormsModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, PatientConsentCheckboxComponent],
   templateUrl: './booking-stepper.page.html',
 })
 export class BookingStepperPage implements OnDestroy {
@@ -291,10 +293,17 @@ export class BookingStepperPage implements OnDestroy {
 
   submitBooking() {
     if (this.selectedSlotId() === null || this.patientForm.invalid) return;
-    if (!this.consentAccepted) { this.consentError = true; return; }
+    if (!this.consentAccepted) {
+      this.consentError = true;
+      return;
+    }
 
     const method = this.paymentMethod();
-    this.router.navigate(['/patient/payment-qr', method], { state: { consent_nd13_accepted_at: new Date().toISOString() } });
+    const consent_nd13_accepted_at = new Date().toISOString();
+
+    this.router.navigate(['/patient/payment-qr', method], {
+      state: { consent_nd13_accepted_at },
+    });
   }
 
   // ─── Navigation ───────────────────────────────────────────

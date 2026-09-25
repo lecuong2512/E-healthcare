@@ -316,6 +316,15 @@
 
           </div>
 
+          <div class="mt-7">
+            <app-patient-consent-checkbox
+              [(ngModel)]="consentAccepted"
+              [ngModelOptions]="{ standalone: true }"
+              [showError]="consentError"
+              (ngModelChange)="consentError = false"
+            ></app-patient-consent-checkbox>
+          </div>
+
         </section>
 
       </div>

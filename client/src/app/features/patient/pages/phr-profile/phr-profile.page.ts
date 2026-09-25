@@ -8,12 +8,13 @@ import {
 import { Gender } from '@shared/enums';
 
 import { ButtonComponent } from '../../../../shared/components/button/button.component';
+import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
 import { PhrService } from '../../../../core/services/phr.service';
 
 @Component({
   selector: 'app-phr-profile-page',
   standalone: true,
-  imports: [FormsModule, ButtonComponent],
+  imports: [FormsModule, ButtonComponent, PatientConsentCheckboxComponent],
   templateUrl: './phr-profile.page.html',
 })
 export class PhrProfilePage implements OnInit {
@@ -28,17 +29,28 @@ export class PhrProfilePage implements OnInit {
   protected isSaving = false;
   protected isSaved = false;
   protected errorMessage = '';
+  protected consentAccepted = false;
+  protected consentError = false;
 
   ngOnInit(): void {
     this.loadPhr();
   }
 
   protected saveChanges(): void {
+    if (!this.consentAccepted) {
+      this.consentError = true;
+      this.errorMessage = 'Vui lòng xác nhận đồng ý xử lý thông tin sức khỏe cá nhân trước khi lưu hồ sơ.';
+      return;
+    }
+
     this.isSaving = true;
     this.isSaved = false;
     this.errorMessage = '';
+    this.consentError = false;
 
-    const request: UpdatePhrProfileRequest = {
+    const consent_nd13_accepted_at = new Date().toISOString();
+
+    const request: UpdatePhrProfileRequest & { consent_nd13_accepted_at?: string } = {
       fullName: this.form.fullName.trim(),
       citizenId: this.form.citizenId?.trim() ?? '',
       gender: this.form.gender,
@@ -49,6 +61,7 @@ export class PhrProfilePage implements OnInit {
       allergies: this.form.allergies?.trim() ?? '',
       chronicDiseases: this.form.chronicDiseases?.trim() ?? '',
       surgeryHistory: this.form.surgeryHistory?.trim() ?? '',
+      consent_nd13_accepted_at,
     };
 
     this.phrService.updateMyPhr(request).subscribe({
@@ -73,6 +86,8 @@ export class PhrProfilePage implements OnInit {
     this.form = { ...this.savedForm };
     this.isSaved = false;
     this.errorMessage = '';
+    this.consentAccepted = false;
+    this.consentError = false;
   }
 
   private loadPhr(): void {

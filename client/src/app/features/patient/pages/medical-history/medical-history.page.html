@@ -164,9 +164,22 @@
         <p class="mt-1 text-sm text-rose-600">{{ reasonError() }}</p>
       }
 
+      <div class="mt-4">
+        <app-patient-consent-checkbox
+          [(ngModel)]="consentAccepted"
+          [ngModelOptions]="{ standalone: true }"
+          [showError]="consentError"
+          (ngModelChange)="consentError = false"
+        ></app-patient-consent-checkbox>
+      </div>
+
       <div class="mt-5 flex justify-end gap-2">
         <button (click)="closeCancel()" [disabled]="submitting()" class="rounded-xl border px-4 py-2.5 font-semibold text-slate-600 disabled:opacity-50">Đóng</button>
-        <button (click)="submitCancel()" [disabled]="submitting()" class="rounded-xl bg-rose-700 px-4 py-2.5 font-semibold text-white disabled:opacity-50">
+        <button
+          (click)="submitCancel()"
+          [disabled]="submitting() || !cancelReason.trim() || !consentAccepted"
+          class="rounded-xl bg-rose-700 px-4 py-2.5 font-semibold text-white disabled:opacity-50"
+        >
           {{ submitting() ? 'Đang gửi…' : 'Xác nhận hủy' }}
         </button>
       </div>

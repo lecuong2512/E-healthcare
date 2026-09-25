@@ -4,6 +4,7 @@ import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TokenStoreService } from '../../../../core/services/token-store.service';
+import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
 
 type Tab = 'upcoming' | 'completed' | 'cancelled';
 
@@ -62,7 +63,7 @@ interface PrescriptionItem {
 @Component({
   selector: 'app-medical-history-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, PatientConsentCheckboxComponent],
   templateUrl: './medical-history.page.html',
   styleUrls: ['./medical-history.page.scss'],
 })
@@ -85,6 +86,8 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   readonly cancelTarget = signal<Appointment | null>(null);
   cancelReason = '';
   readonly reasonError = signal('');
+  consentAccepted = false;
+  consentError = false;
   readonly submitting = signal(false);
 
   readonly detail = signal<Appointment | null>(null);
@@ -335,6 +338,8 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
     this.cancelTarget.set(a);
     this.cancelReason = '';
     this.reasonError.set('');
+    this.consentAccepted = false;
+    this.consentError = false;
   }
 
   closeCancel(): void {
@@ -401,8 +406,18 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
       return;
     }
 
+    if (!this.consentAccepted) {
+      this.consentError = true;
+      return;
+    }
+
     this.submitting.set(true);
     const reason = this.cancelReason.trim();
+    const consent_nd13_accepted_at = new Date().toISOString();
+    const payload = {
+      cancelReason: reason,
+      consent_nd13_accepted_at,
+    };
 
     const success = (updated: object = {}) => {
       this.appointments.update((rows) =>
@@ -423,12 +438,12 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
     };
 
     if (this.isMock()) {
-      setTimeout(() => success(), 500);
+      setTimeout(() => success(payload), 500);
       return;
     }
 
     this.http
-      .post(`/api/v1/appointments/${a.id}/cancel`, { reason }, { headers: this.headers() })
+      .post(`/api/v1/appointments/${a.id}/cancel`, payload, { headers: this.headers() })
       .subscribe({
         next: (updated) => success(updated as object),
         error: (e) => {
