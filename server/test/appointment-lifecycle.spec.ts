@@ -92,7 +92,7 @@ describe("AppointmentLifecycleService", () => {
 
   it("cancels at least 24 hours before the visit with a 100% refund and frees the slot", async () => {
     schedule = vietnamSchedule(24.1);
-    const result = await service.cancelByPatient(appointment.id, { userId: "patient-1", role: Role.PATIENT });
+    const result = await service.cancelByPatient(appointment.id, { userId: "patient-1", role: Role.PATIENT }, undefined, true);
     expect(result.status).toBe(AppointmentStatus.CANCELLED_BY_PATIENT);
     expect(result.refundPercent).toBe(100);
     expect(result.refundAmount).toBe(100000);
@@ -101,30 +101,37 @@ describe("AppointmentLifecycleService", () => {
 
   it("refunds 70% when the patient cancels from 2 to under 24 hours", async () => {
     schedule = vietnamSchedule(6);
-    const result = await service.cancelByPatient(appointment.id, { userId: "patient-1", role: Role.PATIENT });
+    const result = await service.cancelByPatient(appointment.id, { userId: "patient-1", role: Role.PATIENT }, undefined, true);
     expect(result.refundPercent).toBe(70);
     expect(result.refundAmount).toBe(70000);
   });
 
   it("does not refund when the patient cancels under 2 hours", async () => {
     schedule = vietnamSchedule(1);
-    const result = await service.cancelByPatient(appointment.id, { userId: "patient-1", role: Role.PATIENT });
+    const result = await service.cancelByPatient(appointment.id, { userId: "patient-1", role: Role.PATIENT }, undefined, true);
     expect(result.refundPercent).toBe(0);
     expect(result.refundAmount).toBe(0);
   });
 
   it("rejects a patient cancelling another patients appointment", async () => {
-    await expect(service.cancelByPatient(appointment.id, { userId: "patient-2", role: Role.PATIENT })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.cancelByPatient(appointment.id, { userId: "patient-2", role: Role.PATIENT }, undefined, true)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("rejects cancellation of a completed appointment", async () => {
     appointment.status = AppointmentStatus.COMPLETED;
+    await expect(service.cancelByPatient(appointment.id, { userId: "patient-1", role: Role.PATIENT }, undefined, true)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("requires consent and records its server-side acceptance time", async () => {
     await expect(service.cancelByPatient(appointment.id, { userId: "patient-1", role: Role.PATIENT })).rejects.toBeInstanceOf(BadRequestException);
+    const result = await service.cancelByPatient(appointment.id, { userId: "patient-1", role: Role.PATIENT }, undefined, true);
+    expect(result.consentNd13AcceptedAt).toBeInstanceOf(Date);
   });
 
   it("cancels by clinic, issues a 20% voucher, creates refund work and queues both notifications", async () => {
     const result = await service.cancelByClinic(appointment.id, { userId: "admin-1", role: Role.ADMIN }, "Bac si co ca cap cuu");
     expect(result.appointment.status).toBe(AppointmentStatus.CANCELLED_BY_CLINIC);
+    expect(result.appointment.consentNd13AcceptedAt).toBeUndefined();
     expect(result.appointment.refundPercent).toBe(100);
     expect(result.voucher.discountPercent).toBe(20);
     expect(result.voucher.expiresAt.getTime()).toBeGreaterThan(Date.now());

@@ -413,10 +413,9 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
 
     this.submitting.set(true);
     const reason = this.cancelReason.trim();
-    const consent_nd13_accepted_at = new Date().toISOString();
     const payload = {
-      cancelReason: reason,
-      consent_nd13_accepted_at,
+      reason,
+      consentAccepted: true,
     };
 
     const success = (updated: object = {}) => {

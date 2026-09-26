@@ -25,6 +25,12 @@ interface GoogleUser {
   status: string;
   login_locked_until: Date | null;
 }
+interface GoogleIdentity {
+  sub: string;
+  email: string;
+  name: string;
+  authoritativeEmail: boolean;
+}
 const hash = (value: string): string =>
   createHash("sha256").update(value).digest("hex");
 const secret = (): string => randomBytes(32).toString("base64url");
@@ -66,6 +72,16 @@ export class GoogleAuthService {
         "Callback Google phải đúng đường dẫn API và dùng HTTPS khi triển khai.",
       );
     return new OAuth2Client(id, key, redirect);
+  }
+
+  /** ID token từ client chỉ cần client ID để kiểm tra audience. */
+  private identityClient(): OAuth2Client {
+    const id = environment["GOOGLE_CLIENT_ID"];
+    if (!id)
+      throw new ServiceUnavailableException(
+        "Đăng nhập Google chưa được cấu hình.",
+      );
+    return new OAuth2Client(id);
   }
   //tạo Google login URL 
   async start(): Promise<{ url: string; browserToken: string }> {
@@ -211,6 +227,97 @@ export class GoogleAuthService {
         [hash(completionToken), identity.sub, identity.email, identity.name],
       );
       return { completionToken };
+    });
+  }
+
+  /** Xác thực ID token do Google Identity Services trả về cho ứng dụng khách. */
+  async authenticateIdToken(
+    idToken: string,
+  ): Promise<{
+    session?: GoogleIssuedSession;
+    completionToken?: string;
+    profile?: Pick<GoogleIdentity, "email" | "name">;
+  }> {
+    if (!idToken || idToken.length > 4096)
+      throw new UnauthorizedException("ID token Google không hợp lệ.");
+
+    let identity: GoogleIdentity;
+    try {
+      const ticket = await this.identityClient().verifyIdToken({
+        idToken,
+        audience: environment["GOOGLE_CLIENT_ID"]!,
+      });
+      const payload = ticket.getPayload() as ReturnType<
+        typeof ticket.getPayload
+      >;
+      if (
+        !payload ||
+        !payload.sub ||
+        payload.sub.length > 255 ||
+        !payload.email ||
+        payload.email.length > 100 ||
+        payload.email_verified !== true ||
+        !["accounts.google.com", "https://accounts.google.com"].includes(
+          payload.iss,
+        ) ||
+        payload.aud !== environment["GOOGLE_CLIENT_ID"] ||
+        payload.exp <= Date.now() / 1000
+      )
+        throw new Error("Danh tính Google không hợp lệ");
+      const email = payload.email.trim().toLowerCase();
+      if (!email) throw new Error("Email Google không hợp lệ");
+      identity = {
+        sub: payload.sub,
+        email,
+        name: (payload.name ?? "").slice(0, 100),
+        authoritativeEmail:
+          email.endsWith("@gmail.com") ||
+          (typeof payload.hd === "string" && payload.hd.length > 0),
+      };
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) throw error;
+      throw new UnauthorizedException("Không thể xác thực danh tính Google.");
+    }
+
+    return this.database.transaction(async (manager) => {
+      await this.lockIdentity(manager, identity.email, identity.sub);
+      const [user]: GoogleUser[] = await manager.query(
+        "SELECT id,google_subject,status,login_locked_until FROM users WHERE google_subject=$1 OR lower(email)=$2 ORDER BY (google_subject=$1) DESC NULLS LAST FOR UPDATE",
+        [identity.sub, identity.email],
+      );
+      if (user) {
+        await this.assertActive(manager, user);
+        if (user.google_subject && user.google_subject !== identity.sub)
+          throw new ConflictException(
+            "Email đã liên kết với tài khoản Google khác.",
+          );
+        if (!user.google_subject && !identity.authoritativeEmail)
+          throw new ConflictException(
+            "Email đã được đăng ký. Vui lòng đăng nhập bằng mật khẩu; không thể tự động liên kết email bên ngoài Google.",
+          );
+        const role = await this.sessions.roleFor(manager, user.id);
+        await manager.query(
+          "UPDATE users SET google_subject=$2,failed_login_attempts=0,login_locked_until=NULL WHERE id=$1",
+          [user.id, identity.sub],
+        );
+        return {
+          session: await this.sessions.issueSession(manager, user.id, role),
+        };
+      }
+      const completionToken = secret();
+      await manager.query(
+        "DELETE FROM google_registration_sessions WHERE google_subject=$1 OR email=$2 OR expires_at<=clock_timestamp()",
+        [identity.sub, identity.email],
+      );
+      await manager.query(
+        `INSERT INTO google_registration_sessions (token_hash,google_subject,email,full_name,expires_at)
+        VALUES ($1,$2,$3,$4,clock_timestamp() + interval '10 minutes')`,
+        [hash(completionToken), identity.sub, identity.email, identity.name],
+      );
+      return {
+        completionToken,
+        profile: { email: identity.email, name: identity.name },
+      };
     });
   }
 
