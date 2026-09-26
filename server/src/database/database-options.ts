@@ -9,6 +9,11 @@ import { CreateAuthSessionsAndGoogle1789478400000 } from "./migrations/178947840
 import { AllowRegistrationWithBothContacts1789479000000 } from "./migrations/1789479000000-allow-registration-with-both-contacts";
 import { AddDoctorScheduleAndSearchIndexes1789565400000 } from "./migrations/1789565400000-add-doctor-schedule-and-search-indexes";
 import { EnableUnaccentDoctorSearch1789707600000 } from './migrations/1789707600000-enable-unaccent-doctor-search';
+import { AddReceptionQueueAndCounterPayment1789923600000 } from "./migrations/1789923600000-add-reception-queue-and-counter-payment";
+import { AddWalkInPatientAndIdempotency1789927200000 } from "./migrations/1789927200000-add-walk-in-patient-and-idempotency";
+import { AddReceptionAuditLogs1789930800000 } from "./migrations/1789930800000-add-reception-audit-logs";
+import { AllowSharedPatientPhone1789934400000 } from "./migrations/1789934400000-allow-shared-patient-phone";
+import { UniquePatientCitizenId1789938000000 } from "./migrations/1789938000000-unique-patient-citizen-id";
 import {
   AuthSessionEntity,
   GoogleOAuthFlowEntity,
@@ -29,6 +34,9 @@ import { AppointmentNotificationEntity } from './entities/appointment-notificati
 import { AddAppointmentLifecycleAndVouchers1789800000000 } from './migrations/1789800000000-add-appointment-lifecycle-and-vouchers';
 import { AddClinicCancellationOutbox1789801200000 } from './migrations/1789801200000-add-clinic-cancellation-outbox';
 import { AddAppointmentCreatedAt1789801800000 } from './migrations/1789801800000-add-appointment-created-at';
+import { DoctorQueueCounterEntity } from "./entities/doctor-queue-counter.entity";
+import { CounterPaymentTransactionEntity } from "./entities/counter-payment-transaction.entity";
+import { ReceptionAuditLogEntity } from "./entities/reception-audit-log.entity";
 
 import { MedicalRecordEntity } from "./entities/medical-record.entity";
 import { PrescriptionEntity } from "./entities/prescription.entity";
@@ -60,6 +68,9 @@ export function createDataSource(url: string): DataSource {
       MedicalRecordEntity,
       PrescriptionEntity,
       PrescriptionItemEntity,
+      DoctorQueueCounterEntity,
+      CounterPaymentTransactionEntity,
+      ReceptionAuditLogEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -76,6 +87,11 @@ export function createDataSource(url: string): DataSource {
       AddAppointmentLifecycleAndVouchers1789800000000,
       AddClinicCancellationOutbox1789801200000,
       AddAppointmentCreatedAt1789801800000,
+      AddReceptionQueueAndCounterPayment1789923600000,
+      AddWalkInPatientAndIdempotency1789927200000,
+      AddReceptionAuditLogs1789930800000,
+      AllowSharedPatientPhone1789934400000,
+      UniquePatientCitizenId1789938000000,
       AddEmrPrescriptionTables1790065218000,
       AddAppointmentConsent1790151600000,
     ],

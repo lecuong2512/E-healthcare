@@ -11,6 +11,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const notify = inject(NotificationService);
 
   const isPublic = isPublicEndpoint(req.url);
+  const isReception = isReceptionEndpoint(req.url);
 
   return next(req).pipe(
     catchError((error: unknown) => {
@@ -21,6 +22,13 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       // Public endpoint không được xử lý 401
       // như lỗi "session expired".
       if (error.status === 401 && isPublic) {
+        return throwError(() => error);
+      }
+
+      // Reception facade maps its typed business errors (candidate selection,
+      // slot conflict, expired QR, payment/check-in rules) into page state.
+      // Keep 401 centralized, but avoid duplicate or misleading global toasts.
+      if (isReception && error.status !== 401) {
         return throwError(() => error);
       }
 
@@ -57,4 +65,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
 function isPublicEndpoint(url: string): boolean {
   return PUBLIC_ENDPOINTS.some((endpoint) => url.includes(endpoint));
+}
+
+function isReceptionEndpoint(url: string): boolean {
+  return url.includes('/reception/');
 }
