@@ -644,6 +644,13 @@
           }
         </div>
 
+        <app-patient-consent-checkbox
+          [(ngModel)]="consentAccepted"
+          [ngModelOptions]="{ standalone: true }"
+          [showError]="consentError"
+          (ngModelChange)="consentError = false"
+        ></app-patient-consent-checkbox>
+
         <!-- Terms note -->
         <p class="text-[11px] text-slate-400 text-center leading-relaxed">
           Bằng cách xác nhận, bạn đồng ý với

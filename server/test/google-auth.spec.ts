@@ -238,6 +238,32 @@ describe("Đăng nhập Google", () => {
     );
   });
 
+  test("ID token hợp lệ của tài khoản sẵn có phát hành session, không đổi mã Google", async () => {
+    client.verifyIdToken.mockResolvedValue({
+      getPayload: () => ({
+        sub: "google-sub", email: "user@gmail.com", email_verified: true,
+        aud: "client-id", iss: "https://accounts.google.com",
+        exp: Math.floor(Date.now() / 1000) + 300,
+      }),
+    });
+    const manager = {
+      query: jest.fn().mockImplementation((sql: string) => {
+        if (sql.startsWith("SELECT id,google_subject")) return [{ id: "user-id", google_subject: "google-sub", status: "ACTIVE", login_locked_until: null }];
+        if (sql.startsWith("SELECT clock_timestamp")) return [{ now: new Date() }];
+        return [];
+      }),
+    };
+    const sessions = {
+      roleFor: jest.fn().mockResolvedValue("ROLE_PATIENT"),
+      issueSession: jest.fn().mockResolvedValue({ accessToken: "access", refreshToken: "refresh", role: "ROLE_PATIENT" }),
+    };
+    service = new GoogleAuthService({ query, transaction: (action: (manager: unknown) => unknown) => action(manager) } as unknown as DataSource, sessions as unknown as SessionService);
+
+    await expect(service.authenticateIdToken("signed-token")).resolves.toMatchObject({ session: { accessToken: "access", role: "ROLE_PATIENT" } });
+    expect(client.getToken).not.toHaveBeenCalled();
+    expect(sessions.issueSession).toHaveBeenCalledWith(manager, "user-id", "ROLE_PATIENT");
+  });
+
   test.each([
     {
       email: "user@external.example",

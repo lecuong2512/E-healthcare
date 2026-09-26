@@ -1,226 +1,519 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, signal } from '@angular/core';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { TokenStoreService } from '../../../../core/services/token-store.service';
+import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
 
-export type VisitStatus = 'upcoming' | 'completed' | 'cancelled' | 'pending';
+type Tab = 'upcoming' | 'completed' | 'cancelled';
 
-interface AppointmentRecord {
+interface Appointment {
   id: string;
-  doctorName: string;
-  specialty: string;
-  hospital: string;
-  date: string;
-  time: string;
-  status: VisitStatus;
-  price: number;
-  note: string;
-  type: 'Khám thường' | 'Tái khám' | 'Tư vấn' | 'Siêu âm';
+  appointmentCode?: string;
+  status: string;
+  reasonForVisit?: string;
+  cancellationReason?: string | null;
+  totalAmount?: number;
+  refundAmount?: number;
+  refundPercent?: number;
+  doctor?: {
+    academicTitle?: string;
+    consultationFee?: number;
+    roomNumber?: string;
+    specialty?: { name?: string };
+    user?: { fullName?: string };
+  };
+  schedule?: { date: string; startTime: string; endTime: string };
+  medicalRecord?: MedicalRecord;
+}
+
+interface MedicalRecord {
+  id?: string;
+  clinicalNotes?: string;
+  icd10PrimaryCode?: string;
+  icd10SecondaryCodes?: string | null;
+  doctorAdvice?: string | null;
+  followUpDate?: string | null;
+  primaryDiagnosis?: string;
+  secondaryDiagnoses?: string[];
+  dietAdvice?: string;
+  prescription?: {
+    prescriptionCode?: string;
+    items?: PrescriptionItem[];
+    pdfUrl?: string;
+    digitallySigned?: boolean;
+  };
+  resultPdfUrl?: string;
+  digitallySigned?: boolean;
+}
+
+interface PrescriptionItem {
+  medicineName: string;
+  activeIngredient?: string | null;
+  totalQuantity: number;
+  unit: string;
+  usageInstructions?: string | null;
+  dosageMorning?: string | null;
+  dosageNoon?: string | null;
+  dosageAfternoon?: string | null;
+  dosageNight?: string | null;
 }
 
 @Component({
   selector: 'app-medical-history-page',
   standalone: true,
-  imports: [CommonModule],
-  template: `
-    <div class="min-h-screen bg-slate-100 px-3 py-4 sm:px-5 lg:px-8">
-      <div class="mx-auto max-w-3xl space-y-5 sm:space-y-6">
-        <header class="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-600 sm:text-xs">Bệnh nhân</p>
-            <h1 class="mt-2 text-xl font-bold text-slate-900 sm:text-2xl">Lịch sử khám</h1>
-          </div>
-          <button type="button" class="w-full rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 sm:w-auto">
-            Đặt lịch mới
-          </button>
-        </header>
-
-        <section class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-          <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p class="text-[11px] text-slate-500 sm:text-xs">Tổng lịch hẹn</p>
-            <p class="mt-3 text-xl font-bold text-slate-900 sm:text-2xl">{{ appointments.length }}</p>
-          </div>
-          <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p class="text-[11px] text-slate-500 sm:text-xs">Sắp tới</p>
-            <p class="mt-3 text-xl font-bold text-sky-600 sm:text-2xl">{{ upcomingCount() }}</p>
-          </div>
-          <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p class="text-[11px] text-slate-500 sm:text-xs">Đã hoàn thành</p>
-            <p class="mt-3 text-xl font-bold text-emerald-600 sm:text-2xl">{{ completedCount() }}</p>
-          </div>
-          <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p class="text-[11px] text-slate-500 sm:text-xs">Đã hủy</p>
-            <p class="mt-3 text-xl font-bold text-rose-600 sm:text-2xl">{{ cancelledCount() }}</p>
-          </div>
-        </section>
-
-        <section class="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-          <div class="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            @for (tab of tabs; track tab) {
-              <button
-                type="button"
-                (click)="activeTab.set(tab)"
-                class="whitespace-nowrap rounded-full px-3 py-2 text-xs font-medium transition sm:px-4 sm:text-sm"
-                [class.bg-sky-600]="activeTab() === tab"
-                [class.text-white]="activeTab() === tab"
-                [class.bg-slate-100]="activeTab() !== tab"
-                [class.text-slate-600]="activeTab() !== tab"
-              >
-                {{ tab }}
-              </button>
-            }
-          </div>
-        </section>
-
-        <section class="space-y-4">
-          @for (item of filteredAppointments(); track item.id) {
-            <article class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-              <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                <div class="flex min-w-0 items-start gap-3 sm:gap-4">
-                  <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-base text-sky-700 sm:h-12 sm:w-12 sm:text-lg">
-                    🩺
-                  </div>
-
-                  <div class="min-w-0 flex-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <h2 class="text-base font-bold text-slate-900 sm:text-lg">{{ item.doctorName }}</h2>
-                      <span class="rounded-full bg-sky-50 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-sky-700 sm:text-[10px]">
-                        {{ item.specialty }}
-                      </span>
-                    </div>
-                    <p class="mt-1 text-xs text-slate-500 sm:text-sm">{{ item.hospital }}</p>
-                    <div class="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-600 sm:gap-3 sm:text-sm">
-                      <span>{{ item.date }}</span>
-                      <span class="hidden sm:inline">•</span>
-                      <span>{{ item.time }}</span>
-                      <span class="hidden sm:inline">•</span>
-                      <span>{{ item.type }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="flex items-center justify-between gap-3 lg:flex-col lg:items-end lg:justify-center">
-                  <span
-                    class="inline-flex rounded-full px-2.5 py-1.5 text-[10px] font-semibold sm:text-xs"
-                    [class.bg-emerald-100]="item.status === 'completed'"
-                    [class.text-emerald-700]="item.status === 'completed'"
-                    [class.bg-sky-100]="item.status === 'upcoming'"
-                    [class.text-sky-700]="item.status === 'upcoming'"
-                    [class.bg-amber-100]="item.status === 'pending'"
-                    [class.text-amber-700]="item.status === 'pending'"
-                    [class.bg-rose-100]="item.status === 'cancelled'"
-                    [class.text-rose-700]="item.status === 'cancelled'"
-                  >
-                    {{ statusLabel(item.status) }}
-                  </span>
-                  <div class="text-right">
-                    <p class="text-[10px] uppercase tracking-wide text-slate-400 sm:text-[11px]">Chi phí</p>
-                    <p class="text-sm font-bold text-slate-900 sm:text-base">{{ item.price | number:'1.0-0' }}đ</p>
-                  </div>
-                </div>
-              </div>
-
-              <div class="mt-4 rounded-2xl bg-slate-50 p-3 sm:p-3.5">
-                <p class="text-[10px] uppercase tracking-[0.14em] text-slate-400 sm:text-xs">Ghi chú</p>
-                <p class="mt-2 text-xs leading-6 text-slate-700 sm:text-sm">{{ item.note }}</p>
-              </div>
-            </article>
-          }
-
-          @if (filteredAppointments().length === 0) {
-            <div class="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm sm:p-10">
-              <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-2xl sm:h-16 sm:w-16">📋</div>
-              <h3 class="mt-4 text-base font-bold text-slate-800 sm:text-lg">Chưa có lịch sử khám</h3>
-              <p class="mt-2 text-xs text-slate-500 sm:text-sm">Bạn chưa có lịch hẹn nào trong nhóm này.</p>
-            </div>
-          }
-        </section>
-      </div>
-    </div>
-  `,
+  imports: [CommonModule, FormsModule, RouterLink, PatientConsentCheckboxComponent],
+  templateUrl: './medical-history.page.html',
+  styleUrls: ['./medical-history.page.scss'],
 })
-export class MedicalHistoryPage {
-  readonly tabs = ['Tất cả', 'Sắp tới', 'Đã hoàn thành', 'Đã hủy'] as const;
-  readonly activeTab = signal<(typeof this.tabs)[number]>('Tất cả');
+export class MedicalHistoryPage implements OnInit, OnDestroy {
+  private readonly http = inject(HttpClient);
+  private readonly tokens = inject(TokenStoreService);
 
-  readonly appointments: AppointmentRecord[] = [
-    {
-      id: 'APT-20260908',
-      doctorName: 'PGS.TS.BS Trần Văn Tiến',
-      specialty: 'Tim mạch',
-      hospital: 'BV Chợ Rẫy TP.HCM',
-      date: '08/09/2026',
-      time: '08:00 - 08:30',
-      status: 'completed',
-      price: 350000,
-      note: 'Tổng hợp kết quả khám tim, huyết áp và tư vấn chế độ sinh hoạt.',
-      type: 'Khám thường',
-    },
-    {
-      id: 'APT-20260912',
-      doctorName: 'TS.BS Nguyễn Thị Lan',
-      specialty: 'Nội tổng quát',
-      hospital: 'BV Bạch Mai Hà Nội',
-      date: '12/09/2026',
-      time: '09:30 - 10:00',
-      status: 'upcoming',
-      price: 280000,
-      note: 'Khám định kỳ, kiểm tra cholesterol và bệnh nền.',
-      type: 'Tái khám',
-    },
-    {
-      id: 'APT-20260915',
-      doctorName: 'BSCKII Lê Văn Nam',
-      specialty: 'Ngoại khoa',
-      hospital: 'BV 108 Hà Nội',
-      date: '15/09/2026',
-      time: '14:00 - 14:45',
-      status: 'pending',
-      price: 420000,
-      note: 'Chờ xác nhận lịch tư vấn trước phẫu thuật.',
-      type: 'Tư vấn',
-    },
-    {
-      id: 'APT-20260918',
-      doctorName: 'ThS.BS Phạm Minh Khoa',
-      specialty: 'Nhi khoa',
-      hospital: 'BV Nhi Trung Ương',
-      date: '18/09/2026',
-      time: '10:15 - 10:45',
-      status: 'cancelled',
-      price: 250000,
-      note: 'Lịch khám bị hủy do bệnh nhân đổi thời gian.',
-      type: 'Khám thường',
-    },
+  readonly tabs: { id: Tab; label: string }[] = [
+    { id: 'upcoming', label: 'Sắp tới' },
+    { id: 'completed', label: 'Đã hoàn thành' },
+    { id: 'cancelled', label: 'Đã hủy' },
   ];
 
-  readonly filteredAppointments = computed(() => {
-    const tab = this.activeTab();
+  readonly activeTab = signal<Tab>('upcoming');
+  readonly appointments = signal<Appointment[]>([]);
+  readonly loading = signal(true);
+  readonly error = signal('');
+  readonly isMock = signal(true);
 
-    switch (tab) {
-      case 'Sắp tới':
-        return this.appointments.filter(item => item.status === 'upcoming');
-      case 'Đã hoàn thành':
-        return this.appointments.filter(item => item.status === 'completed');
-      case 'Đã hủy':
-        return this.appointments.filter(item => item.status === 'cancelled');
-      default:
-        return this.appointments;
+  readonly cancelTarget = signal<Appointment | null>(null);
+  cancelReason = '';
+  readonly reasonError = signal('');
+  consentAccepted = false;
+  consentError = false;
+  readonly submitting = signal(false);
+
+  readonly detail = signal<Appointment | null>(null);
+  readonly detailRecord = signal<MedicalRecord | null>(null);
+  readonly detailLoading = signal(false);
+  readonly detailError = signal('');
+
+  readonly toast = signal('');
+  readonly toastType = signal<'success' | 'error'>('success');
+  private toastTimer?: ReturnType<typeof setTimeout>;
+  private tick?: ReturnType<typeof setInterval>;
+  readonly clock = signal(Date.now());
+
+  ngOnInit(): void {
+    this.useMockData();
+    this.tick = setInterval(() => this.clock.set(Date.now()), 1000);
+  }
+
+  ngOnDestroy(): void {
+    if (this.tick) {
+      clearInterval(this.tick);
     }
-  });
-
-  readonly upcomingCount = computed(() => this.appointments.filter(item => item.status === 'upcoming').length);
-  readonly completedCount = computed(() => this.appointments.filter(item => item.status === 'completed').length);
-  readonly cancelledCount = computed(() => this.appointments.filter(item => item.status === 'cancelled').length);
-
-  statusLabel(status: VisitStatus): string {
-    switch (status) {
-      case 'upcoming':
-        return 'Sắp tới';
-      case 'completed':
-        return 'Đã hoàn thành';
-      case 'cancelled':
-        return 'Đã hủy';
-      default:
-        return 'Chờ xác nhận';
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer);
     }
+  }
+
+  private headers(): HttpHeaders {
+    return new HttpHeaders({
+      Authorization: `Bearer ${this.tokens.accessToken() ?? ''}`,
+    });
+  }
+
+  load(): void {
+    this.isMock.set(false);
+    this.loading.set(true);
+    this.error.set('');
+
+    this.http
+      .get<Appointment[]>('/api/v1/appointments/me', { headers: this.headers() })
+      .subscribe({
+        next: (rows) => {
+          this.appointments.set(rows);
+          this.loading.set(false);
+        },
+        error: (e) => {
+          this.error.set(
+            e?.error?.message || 'Không thể tải lịch sử khám. Vui lòng thử lại.'
+          );
+          this.loading.set(false);
+        },
+      });
+  }
+
+  useMockData(): void {
+    const date = (offset: number, time: string) => {
+      const d = new Date(Date.now() + offset * 86400000);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+
+      return {
+        date: `${yyyy}-${mm}-${dd}`,
+        startTime: time,
+        endTime: `${String((Number(time.slice(0, 2)) + 1) % 24).padStart(2, '0')}:${time.slice(3, 5)}:00`,
+      };
+    };
+
+    const relativeSchedule = (hoursFromNow: number) => {
+      const start = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+      const format = (value: Date) => {
+        const yyyy = value.getFullYear();
+        const mm = String(value.getMonth() + 1).padStart(2, '0');
+        const dd = String(value.getDate()).padStart(2, '0');
+        const hh = String(value.getHours()).padStart(2, '0');
+        const min = String(value.getMinutes()).padStart(2, '0');
+
+        return {
+          date: `${yyyy}-${mm}-${dd}`,
+          startTime: `${hh}:${min}:00`,
+          endTime: `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}:00`,
+        };
+      };
+
+      return format(start);
+    };
+
+    const doctor = (
+      name: string,
+      title: string,
+      specialty: string,
+      room: string
+    ) => ({
+      academicTitle: title,
+      roomNumber: room,
+      specialty: { name: specialty },
+      user: { fullName: name },
+    });
+
+    const prescription: PrescriptionItem[] = [
+      {
+        medicineName: 'Amlodipine 5 mg',
+        activeIngredient: 'Amlodipine',
+        totalQuantity: 30,
+        unit: 'viên',
+        usageInstructions: 'Uống 1 viên mỗi ngày, sau ăn sáng.',
+        dosageMorning: '1 viên',
+        dosageNoon: '—',
+        dosageAfternoon: '—',
+        dosageNight: '—',
+      },
+      {
+        medicineName: 'Atorvastatin 10 mg',
+        activeIngredient: 'Atorvastatin',
+        totalQuantity: 30,
+        unit: 'viên',
+        usageInstructions: 'Uống buổi tối trước khi ngủ.',
+        dosageMorning: '—',
+        dosageNoon: '—',
+        dosageAfternoon: '—',
+        dosageNight: '1 viên',
+      },
+    ];
+
+    this.appointments.set([
+      {
+        id: 'mock-upcoming-01',
+        appointmentCode: 'APT-DEMO-2601',
+        status: 'CONFIRMED',
+        totalAmount: 350000,
+        doctor: doctor('Trần Văn Tiến', 'PGS.TS.BS', 'Tim mạch', 'A203'),
+        schedule: relativeSchedule(72),
+      },
+      {
+        id: 'mock-upcoming-02',
+        appointmentCode: 'APT-DEMO-2602',
+        status: 'CONFIRMED',
+        totalAmount: 280000,
+        doctor: doctor('Trần Quốc Bảo', 'ThS.BS', 'Nội tổng quát', 'B105'),
+        schedule: relativeSchedule(8),
+      },
+      {
+        id: 'mock-upcoming-03',
+        appointmentCode: 'APT-DEMO-2603',
+        status: 'CONFIRMED',
+        totalAmount: 260000,
+        doctor: doctor('Phạm Hoàng Long', 'BSCKII', 'Da liễu', 'D108'),
+        schedule: relativeSchedule(1.5),
+      },
+      {
+        id: 'mock-completed-01',
+        appointmentCode: 'APT-DEMO-2518',
+        status: 'COMPLETED',
+        totalAmount: 420000,
+        doctor: doctor('Lê Thu Hà', 'BSCKII', 'Nội tiết', 'C312'),
+        schedule: date(-12, '08:30:00'),
+        medicalRecord: {
+          clinicalNotes: 'Tăng huyết áp nguyên phát, hiện ổn định với điều trị.',
+          icd10PrimaryCode: 'I10',
+          icd10SecondaryCodes: 'E78.5',
+          doctorAdvice:
+            'Duy trì thuốc đều đặn, đo huyết áp tại nhà mỗi sáng. Tái khám sau 4 tuần.',
+          followUpDate: date(16, '00:00:00').date,
+          dietAdvice: 'Giảm muối, hạn chế thức ăn nhiều dầu mỡ.',
+          digitallySigned: true,
+          prescription: {
+            prescriptionCode: 'RX-DEMO-771',
+            digitallySigned: true,
+            items: prescription,
+          },
+        },
+      },
+      {
+        id: 'mock-cancelled-01',
+        appointmentCode: 'APT-DEMO-2509',
+        status: 'CANCELLED_BY_PATIENT',
+        totalAmount: 250000,
+        cancellationReason: 'Bệnh nhân có lịch công tác đột xuất.',
+        doctor: doctor('Phạm Hoàng Long', 'ThS.BS', 'Nhi khoa', 'D108'),
+        schedule: date(-4, '10:15:00'),
+      },
+    ]);
+
+    this.error.set('');
+    this.loading.set(false);
+    this.isMock.set(true);
+    this.activeTab.set('upcoming');
+  }
+
+  count(tab: Tab): number {
+    return this.appointments().filter((a) => this.tabFor(a.status) === tab).length;
+  }
+
+  itemsForTab(): Appointment[] {
+    return this.appointments().filter((a) => this.tabFor(a.status) === this.activeTab());
+  }
+
+  emptyTitle(): string {
+    return this.activeTab() === 'upcoming'
+      ? 'Bạn chưa có lịch khám sắp tới'
+      : this.activeTab() === 'completed'
+        ? 'Chưa có lần khám hoàn thành'
+        : 'Chưa có lịch đã hủy';
+  }
+
+  private tabFor(status: string): Tab | null {
+    if (['CONFIRMED', 'CHECKED_IN'].includes(status)) {
+      return 'upcoming';
+    }
+    if (status === 'COMPLETED') {
+      return 'completed';
+    }
+    if (status.includes('CANCELLED')) {
+      return 'cancelled';
+    }
+    return null;
+  }
+
+  doctorName(a: Appointment): string {
+    const name = a.doctor?.user?.fullName || 'Bác sĩ';
+    return `${a.doctor?.academicTitle ? `${a.doctor.academicTitle} ` : ''}${name}`;
+  }
+
+  statusLabel(status: string): string {
+    return (
+      {
+        CONFIRMED: 'Đã xác nhận',
+        CHECKED_IN: 'Đã check-in',
+        COMPLETED: 'Đã hoàn thành',
+        CANCELLED: 'Đã hủy',
+        CANCELLED_BY_PATIENT: 'Đã hủy',
+        CANCELLED_BY_CLINIC: 'Cơ sở đã hủy',
+      } as Record<string, string>
+    )[status] || status;
+  }
+
+  canCancel(a: Appointment): boolean {
+    return ['CONFIRMED'].includes(a.status);
+  }
+
+  openCancel(a: Appointment): void {
+    if (!this.canCancel(a)) {
+      return;
+    }
+
+    this.cancelTarget.set(a);
+    this.cancelReason = '';
+    this.reasonError.set('');
+    this.consentAccepted = false;
+    this.consentError = false;
+  }
+
+  closeCancel(): void {
+    if (!this.submitting()) {
+      this.cancelTarget.set(null);
+    }
+  }
+
+  scheduledAt(a: Appointment): number {
+    return new Date(`${a.schedule?.date}T${a.schedule?.startTime}+07:00`).getTime();
+  }
+
+  remainingMs(): number {
+    return this.cancelTarget() ? this.scheduledAt(this.cancelTarget()!) - this.clock() : 0;
+  }
+
+  remainingText(): string {
+    const ms = Math.max(0, this.remainingMs());
+    const d = Math.floor(ms / 86400000);
+    const h = Math.floor((ms % 86400000) / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+
+    return d ? `${d} ngày ${h} giờ` : `${h} giờ ${m} phút ${s} giây`;
+  }
+
+  refundBand(): 'green' | 'yellow' | 'red' {
+    const hours = this.remainingMs() / 3600000;
+
+    if (hours > 24) {
+      return 'green';
+    }
+
+    if (hours > 2) {
+      return 'yellow';
+    }
+
+    return 'red';
+  }
+
+  refundMessage(): string {
+    const band = this.refundBand();
+
+    if (band === 'green') {
+      return 'Được hoàn 100% chi phí khám';
+    }
+
+    if (band === 'yellow') {
+      return 'Được hoàn 70% chi phí khám (khấu trừ 30% phí điều phối ca trực)';
+    }
+
+    return 'Hủy trong vòng dưới 2 giờ trước khám không được hoàn phí';
+  }
+
+  submitCancel(): void {
+    const a = this.cancelTarget();
+
+    if (!a || this.submitting()) {
+      return;
+    }
+
+    if (!this.cancelReason.trim()) {
+      this.reasonError.set('Vui lòng nhập lý do hủy.');
+      return;
+    }
+
+    if (!this.consentAccepted) {
+      this.consentError = true;
+      return;
+    }
+
+    this.submitting.set(true);
+    const reason = this.cancelReason.trim();
+    const payload = {
+      reason,
+      consentAccepted: true,
+    };
+
+    const success = (updated: object = {}) => {
+      this.appointments.update((rows) =>
+        rows.map((row) =>
+          row.id === a.id
+            ? { ...row, ...updated, status: 'CANCELLED_BY_PATIENT', cancellationReason: reason }
+            : row
+        )
+      );
+
+      this.cancelTarget.set(null);
+      this.submitting.set(false);
+      this.showToast('Đã hủy lịch khám thành công.', 'success');
+
+      if (!this.isMock()) {
+        this.load();
+      }
+    };
+
+    if (this.isMock()) {
+      setTimeout(() => success(payload), 500);
+      return;
+    }
+
+    this.http
+      .post(`/api/v1/appointments/${a.id}/cancel`, payload, { headers: this.headers() })
+      .subscribe({
+        next: (updated) => success(updated as object),
+        error: (e) => {
+          this.submitting.set(false);
+          this.showToast(
+            e?.error?.message || 'Không thể hủy lịch. Vui lòng thử lại.',
+            'error'
+          );
+        },
+      });
+  }
+
+  showToast(text: string, type: 'success' | 'error'): void {
+    this.toast.set(text);
+    this.toastType.set(type);
+
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer);
+    }
+
+    this.toastTimer = setTimeout(() => this.toast.set(''), 4500);
+  }
+
+  directions(a: Appointment): void {
+    const query = encodeURIComponent(`phòng khám ${a.doctor?.roomNumber || ''}`);
+    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank', 'noopener');
+  }
+
+  showDetails(a: Appointment): void {
+    this.detail.set(a);
+    this.detailRecord.set(a.medicalRecord || null);
+    this.detailError.set('');
+
+    if (a.medicalRecord) {
+      return;
+    }
+
+    this.detailLoading.set(true);
+
+    this.http
+      .get<MedicalRecord>(`/api/v1/clinical/medical-records/appointment/${a.id}`, {
+        headers: this.headers(),
+      })
+      .subscribe({
+        next: (r) => {
+          this.detailRecord.set(r);
+          this.detailLoading.set(false);
+        },
+        error: (e) => {
+          this.detailError.set(
+            e?.error?.message || 'Chưa có dữ liệu hồ sơ khám cho lần khám này.'
+          );
+          this.detailLoading.set(false);
+        },
+      });
+  }
+
+  secondaryDiagnosis(): string {
+    const r = this.detailRecord();
+    return r?.secondaryDiagnoses?.join(', ') || r?.icd10SecondaryCodes || 'Không có';
+  }
+
+  download(url?: string): void {
+    if (!url) {
+      return;
+    }
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    a.rel = 'noopener';
+    a.click();
   }
 }

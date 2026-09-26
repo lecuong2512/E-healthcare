@@ -70,6 +70,9 @@ export class AppointmentEntity {
   @Column({ name: 'cancelled_by', type: 'uuid', nullable: true })
   cancelledBy!: string | null;
 
+  @Column({ name: 'consent_nd13_accepted_at', type: 'timestamptz', nullable: true })
+  consentNd13AcceptedAt!: Date | null;
+
   @Column({ name: 'refund_amount', type: 'numeric', precision: 12, scale: 2, default: 0 })
   refundAmount!: number;
 

@@ -42,6 +42,7 @@ import { MedicalRecordEntity } from "./entities/medical-record.entity";
 import { PrescriptionEntity } from "./entities/prescription.entity";
 import { PrescriptionItemEntity } from "./entities/prescription-item.entity";
 import { AddEmrPrescriptionTables1790065218000 } from "./migrations/1790065218000-add-emr-prescription-tables";
+import { AddAppointmentConsent1790151600000 } from "./migrations/1790151600000-add-appointment-consent";
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -86,12 +87,13 @@ export function createDataSource(url: string): DataSource {
       AddAppointmentLifecycleAndVouchers1789800000000,
       AddClinicCancellationOutbox1789801200000,
       AddAppointmentCreatedAt1789801800000,
-      AddEmrPrescriptionTables1790065218000,
       AddReceptionQueueAndCounterPayment1789923600000,
       AddWalkInPatientAndIdempotency1789927200000,
       AddReceptionAuditLogs1789930800000,
       AllowSharedPatientPhone1789934400000,
       UniquePatientCitizenId1789938000000,
+      AddEmrPrescriptionTables1790065218000,
+      AddAppointmentConsent1790151600000,
     ],
   });
 }
