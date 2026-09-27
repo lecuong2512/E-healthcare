@@ -10,7 +10,7 @@ export class AppointmentController {
   @Get('me') @Roles(Role.PATIENT) listMine(@Req() req: AuthenticatedRequest) { return this.lifecycle.listForPatient(req.auth!.userId); }
   @Get('me/vouchers') @Roles(Role.PATIENT) listVouchers(@Req() req: AuthenticatedRequest) { return this.lifecycle.listVouchers(req.auth!.userId); }
   @Get('vouchers/validate') @Roles(Role.PATIENT) validateVoucher(@Query('code') code: string, @Query('totalAmount') totalAmount: string, @Req() req: AuthenticatedRequest) { return this.lifecycle.validateVoucher(req.auth!.userId, code || '', Number(totalAmount)); }
-  @Post(':id/cancel') @Roles(Role.PATIENT) cancelMine(@Param('id') id: string, @Body() dto: CancelAppointmentDto, @Req() req: AuthenticatedRequest) { return this.lifecycle.cancelByPatient(id, req.auth!, dto.reason); }
+  @Post(':id/cancel') @Roles(Role.PATIENT) cancelMine(@Param('id') id: string, @Body() dto: CancelAppointmentDto, @Req() req: AuthenticatedRequest) { return this.lifecycle.cancelByPatient(id, req.auth!, dto.reason, dto.consentAccepted); }
   @Post(':id/cancel-by-clinic') @Roles(Role.DOCTOR, Role.ADMIN) cancelByClinic(@Param('id') id: string, @Body() dto: CancelAppointmentDto, @Req() req: AuthenticatedRequest) { return this.lifecycle.cancelByClinic(id, req.auth!, dto.reason); }
   @Patch(':id/status') @Roles(Role.DOCTOR, Role.RECEPTIONIST, Role.ADMIN) updateStatus(@Param('id') id: string, @Body() dto: UpdateAppointmentStatusDto, @Req() req: AuthenticatedRequest) { return this.lifecycle.transition(id, dto.status, req.auth!); }
 }

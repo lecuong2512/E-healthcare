@@ -52,6 +52,7 @@ describe('BookingStepperPage', () => {
     component.selectedDoctorId.set(component.doctors[0].id);
     component.selectedSlotId.set('m1');
     component.selectPayment('momo');
+    component.consentAccepted = true;
     component.patientForm.setValue({
       fullName: 'Nguyễn Văn A',
       phone: '0912345678',
@@ -62,7 +63,28 @@ describe('BookingStepperPage', () => {
 
     component.submitBooking();
 
-    expect(router.navigate).toHaveBeenCalledWith(['/patient/payment-qr', 'momo']);
+    expect(router.navigate).toHaveBeenCalledWith(['/patient/payment-qr', 'momo'], {
+      state: { consent_nd13_accepted_at: jasmine.any(String) },
+    });
+  });
+
+  it('rejects booking submission and sets consentError when consent is not accepted', () => {
+    component.selectedDoctorId.set(component.doctors[0].id);
+    component.selectedSlotId.set('m1');
+    component.selectPayment('momo');
+    component.consentAccepted = false;
+    component.patientForm.setValue({
+      fullName: 'Nguyễn Văn A',
+      phone: '0912345678',
+      dob: '2000-01-01',
+      gender: 'Nam',
+      reason: 'Khám định kỳ',
+    });
+
+    component.submitBooking();
+
+    expect(component.consentError).toBeTrue();
+    expect(router.navigate).not.toHaveBeenCalled();
   });
 
   it('applies a voucher and recalculates the payable amount', () => {

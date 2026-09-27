@@ -1,0 +1,263 @@
+<main class="medical-history-page min-h-screen bg-slate-50 px-4 py-7 sm:px-6 lg:px-8">
+  <div class="mx-auto max-w-5xl space-y-6">
+    <header class="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p class="text-sm font-semibold text-sky-700">HỒ SƠ SỨC KHỎE</p>
+        <h1 class="mt-1 text-3xl font-bold text-slate-900">Lịch sử khám</h1>
+        <p class="mt-2 text-slate-500">Lịch hẹn, kết quả khám và đơn thuốc của bạn</p>
+        @if (isMock()) {
+          <span class="mt-2 inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">CHẾ ĐỘ DỮ LIỆU MẪU</span>
+        }
+      </div>
+
+      <div class="flex gap-2">
+        <button (click)="isMock() ? load() : useMockData()" class="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
+          {{ isMock() ? 'Dùng dữ liệu thật' : 'Xem dữ liệu mẫu' }}
+        </button>
+        <a routerLink="/patient/booking" class="rounded-xl bg-sky-700 px-4 py-3 font-semibold text-white">Đặt lịch mới</a>
+      </div>
+    </header>
+
+    @if (toast()) {
+      <div class="rounded-xl border px-4 py-3" [class.border-emerald-200]="toastType() === 'success'" [class.bg-emerald-50]="toastType() === 'success'" [class.text-emerald-800]="toastType() === 'success'" [class.border-rose-200]="toastType() === 'error'" [class.bg-rose-50]="toastType() === 'error'" [class.text-rose-800]="toastType() === 'error'">
+        {{ toast() }}
+      </div>
+    }
+
+    <nav class="flex gap-2 overflow-x-auto rounded-2xl border bg-white p-2">
+      @for (tab of tabs; track tab.id) {
+        <button (click)="activeTab.set(tab.id)" class="whitespace-nowrap rounded-xl px-4 py-3 text-sm font-semibold" [class.bg-sky-700]="activeTab() === tab.id" [class.text-white]="activeTab() === tab.id" [class.text-slate-600]="activeTab() !== tab.id">
+          {{ tab.label }}
+          <span class="ml-1 opacity-75">{{ count(tab.id) }}</span>
+        </button>
+      }
+    </nav>
+
+    @if (loading()) {
+      <div class="rounded-2xl border bg-white p-12 text-center text-slate-500">
+        <span class="inline-block animate-spin">◌</span>
+        Đang tải lịch sử khám…
+      </div>
+    } @else if (error()) {
+      <section class="rounded-2xl border border-rose-200 bg-white p-8 text-center">
+        <p class="font-semibold text-rose-700">{{ error() }}</p>
+        <div class="mt-4 flex justify-center gap-2">
+          <button (click)="load()" class="rounded-lg border px-4 py-2 text-slate-700">Thử lại</button>
+          <button (click)="useMockData()" class="rounded-lg bg-sky-700 px-4 py-2 text-white">Xem giao diện với dữ liệu mẫu</button>
+        </div>
+      </section>
+    } @else {
+      @if (itemsForTab().length === 0) {
+        <section class="rounded-2xl border border-dashed bg-white px-6 py-16 text-center">
+          <div class="text-4xl">▤</div>
+          <h2 class="mt-3 text-lg font-bold">{{ emptyTitle() }}</h2>
+          <p class="mt-1 text-slate-500">Các lịch khám trong nhóm này sẽ xuất hiện tại đây.</p>
+        </section>
+      }
+      <div class="space-y-4">
+        @for (item of itemsForTab(); track item.id) {
+          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex flex-col gap-5 md:flex-row md:items-start">
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h2 class="text-lg font-bold text-slate-900">{{ doctorName(item) }}</h2>
+                  <span class="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">{{ statusLabel(item.status) }}</span>
+                </div>
+                <p class="mt-1 text-sm text-slate-500">
+                  {{ item.doctor?.specialty?.name || 'Chuyên khoa' }}
+                  <span class="px-1">·</span>
+                  Phòng {{ item.doctor?.roomNumber || '—' }}
+                </p>
+
+                <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                  <p>
+                    <span class="text-slate-400">Ngày khám</span><br>
+                    <b>{{ item.schedule?.date | date: 'EEEE, dd/MM/yyyy' }}</b>
+                  </p>
+                  <p>
+                    <span class="text-slate-400">Giờ khám</span><br>
+                    <b>{{ item.schedule?.startTime | slice: 0 : 5 }} – {{ item.schedule?.endTime | slice: 0 : 5 }}</b>
+                  </p>
+                  <p>
+                    <span class="text-slate-400">Mã lịch</span><br>
+                    <b>{{ item.appointmentCode || item.id }}</b>
+                  </p>
+                  <p>
+                    <span class="text-slate-400">Chi phí</span><br>
+                    <b>{{ item.totalAmount | number }} ₫</b>
+                  </p>
+                </div>
+
+                @if (activeTab() === 'cancelled') {
+                  <div class="mt-4 rounded-xl bg-rose-50 p-3 text-sm">
+                    <b class="text-rose-800">Lý do hủy</b>
+                    <p class="mt-1 text-rose-700">{{ item.cancellationReason || 'Không có lý do được cung cấp.' }}</p>
+                  </div>
+                }
+
+                @if (activeTab() === 'upcoming') {
+                  <p class="mt-4 text-xs text-slate-500">Địa chỉ phòng khám do cơ sở y tế cung cấp khi xác nhận lịch.</p>
+                  <div class="mt-4 flex flex-wrap gap-2">
+                    <button (click)="openCancel(item)" [disabled]="!canCancel(item)" class="rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-40">
+                      Hủy lịch khám
+                    </button>
+                    <button (click)="directions(item)" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700">
+                      Chỉ đường đến phòng khám ↗
+                    </button>
+                  </div>
+                }
+
+                @if (activeTab() === 'completed') {
+                  <button (click)="showDetails(item)" class="mt-4 rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white">
+                    Xem chi tiết lần khám
+                  </button>
+                }
+              </div>
+
+              @if (activeTab() === 'upcoming') {
+                <div class="flex shrink-0 flex-col items-center rounded-xl border border-slate-200 bg-slate-50 p-4 md:w-40">
+                  <div class="flex h-28 w-28 items-center justify-center rounded-lg bg-white text-center text-xs text-slate-500" [attr.data-qr]="item.appointmentCode || item.id">
+                    <div>
+                      <div class="text-4xl text-slate-900">▦</div>
+                      QR check-in
+                    </div>
+                  </div>
+                  <span class="mt-2 text-xs font-medium text-slate-600">Xuất trình khi đến viện</span>
+                </div>
+              }
+            </div>
+          </article>
+        }
+      </div>
+    }
+  </div>
+</main>
+
+@if (cancelTarget()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4" (click)="closeCancel()">
+    <section class="my-auto w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl" (click)="$event.stopPropagation()">
+      <div class="flex items-start justify-between">
+        <div>
+          <p class="text-sm font-semibold text-rose-700">XÁC NHẬN HỦY</p>
+          <h2 class="mt-1 text-xl font-bold">Hủy lịch khám?</h2>
+        </div>
+        <button (click)="closeCancel()" aria-label="Đóng" class="rounded-lg px-3 py-1 text-2xl text-slate-400">×</button>
+      </div>
+
+      <div class="mt-4 rounded-xl bg-slate-50 p-4 text-sm">
+        <b>{{ doctorName(cancelTarget()!) }}</b>
+        <p class="mt-1 text-slate-600">{{ cancelTarget()!.schedule?.date | date: 'dd/MM/yyyy' }} · {{ cancelTarget()!.schedule?.startTime | slice: 0 : 5 }}</p>
+        <p class="mt-1 text-slate-500">Còn {{ remainingText() }} đến giờ khám</p>
+      </div>
+
+      <div class="mt-4 rounded-xl p-4 text-sm font-semibold" [class.bg-emerald-50]="refundBand() === 'green'" [class.text-emerald-800]="refundBand() === 'green'" [class.bg-amber-50]="refundBand() === 'yellow'" [class.text-amber-800]="refundBand() === 'yellow'" [class.bg-rose-50]="refundBand() === 'red'" [class.text-rose-800]="refundBand() === 'red'">
+        {{ refundMessage() }}
+        <p class="mt-1 text-xs font-normal opacity-75">Mức hoàn phí cuối cùng do hệ thống xác nhận.</p>
+      </div>
+
+      <label class="mt-4 block text-sm font-semibold">
+        Lý do hủy <span class="text-rose-600">*</span>
+        <textarea [(ngModel)]="cancelReason" rows="3" class="mt-2 w-full rounded-xl border border-slate-300 p-3 font-normal focus:border-sky-500 focus:outline-none" placeholder="Nhập lý do hủy lịch"></textarea>
+      </label>
+
+      @if (reasonError()) {
+        <p class="mt-1 text-sm text-rose-600">{{ reasonError() }}</p>
+      }
+
+      <div class="mt-4">
+        <app-patient-consent-checkbox
+          [(ngModel)]="consentAccepted"
+          [ngModelOptions]="{ standalone: true }"
+          [showError]="consentError"
+          (ngModelChange)="consentError = false"
+        ></app-patient-consent-checkbox>
+      </div>
+
+      <div class="mt-5 flex justify-end gap-2">
+        <button (click)="closeCancel()" [disabled]="submitting()" class="rounded-xl border px-4 py-2.5 font-semibold text-slate-600 disabled:opacity-50">Đóng</button>
+        <button
+          (click)="submitCancel()"
+          [disabled]="submitting() || !cancelReason.trim() || !consentAccepted"
+          class="rounded-xl bg-rose-700 px-4 py-2.5 font-semibold text-white disabled:opacity-50"
+        >
+          {{ submitting() ? 'Đang gửi…' : 'Xác nhận hủy' }}
+        </button>
+      </div>
+    </section>
+  </div>
+}
+
+@if (detail()) {
+  <div class="fixed inset-0 z-40 overflow-y-auto bg-slate-950/50 p-3 sm:p-6" (click)="detail.set(null)">
+    <section class="mx-auto my-4 max-w-3xl rounded-2xl bg-white p-5 sm:p-7" (click)="$event.stopPropagation()">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-semibold text-sky-700">HỒ SƠ LẦN KHÁM</p>
+          <h2 class="text-2xl font-bold">{{ doctorName(detail()!) }}</h2>
+        </div>
+        <button (click)="detail.set(null)" class="px-3 text-2xl text-slate-400">×</button>
+      </div>
+
+      @if (detailLoading()) {
+        <p class="py-12 text-center text-slate-500">Đang tải hồ sơ…</p>
+      } @else if (detailError()) {
+        <p class="mt-5 rounded-xl bg-amber-50 p-4 text-amber-800">{{ detailError() }}</p>
+      } @else {
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          <div class="rounded-xl bg-sky-50 p-4 sm:col-span-2">
+            <h3 class="font-bold">Chẩn đoán</h3>
+            <p class="mt-2">Bệnh chính: {{ detailRecord()?.primaryDiagnosis || detailRecord()?.clinicalNotes || 'Chưa có dữ liệu' }}</p>
+            <p class="mt-1">Bệnh kèm theo: {{ secondaryDiagnosis() }}</p>
+            <p class="mt-1">Mã ICD-10: {{ detailRecord()?.icd10PrimaryCode || '—' }}<span *ngIf="detailRecord()?.icd10SecondaryCodes">, {{ detailRecord()?.icd10SecondaryCodes }}</span></p>
+          </div>
+
+          <div class="rounded-xl bg-slate-50 p-4 sm:col-span-2">
+            <h3 class="font-bold">Lời dặn bác sĩ</h3>
+            <p class="mt-2 whitespace-pre-line">{{ detailRecord()?.doctorAdvice || 'Chưa có lời dặn.' }}</p>
+            <p class="mt-2">Chế độ ăn uống: {{ detailRecord()?.dietAdvice || 'Theo hướng dẫn của bác sĩ.' }}</p>
+            <p class="mt-2">Tái khám: {{ detailRecord()?.followUpDate ? (detailRecord()?.followUpDate | date: 'dd/MM/yyyy') : 'Chưa hẹn' }}</p>
+          </div>
+        </div>
+
+        <section class="mt-5">
+          <h3 class="font-bold">Đơn thuốc điện tử</h3>
+          @if (detailRecord()?.prescription?.items?.length) {
+            <div class="mt-3 space-y-3">
+              @for (med of detailRecord()!.prescription!.items!; track med.medicineName) {
+                <article class="rounded-xl border p-4">
+                  <div class="flex flex-wrap justify-between gap-2">
+                    <b>{{ med.medicineName }}</b>
+                    <span>{{ med.totalQuantity }} {{ med.unit }}</span>
+                  </div>
+                  <p class="mt-1 text-sm text-slate-500">Hoạt chất: {{ med.activeIngredient || '—' }}</p>
+                  <div class="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                    <span>Sáng: {{ med.dosageMorning || '—' }}</span>
+                    <span>Trưa: {{ med.dosageNoon || '—' }}</span>
+                    <span>Chiều: {{ med.dosageAfternoon || '—' }}</span>
+                    <span>Tối: {{ med.dosageNight || '—' }}</span>
+                  </div>
+                  <p class="mt-2 text-sm">{{ med.usageInstructions || 'Cách dùng theo hướng dẫn bác sĩ' }} <span class="text-slate-500">(trước/sau ăn theo chỉ dẫn)</span></p>
+                </article>
+              }
+            </div>
+          } @else {
+            <p class="mt-2 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Chưa có đơn thuốc hoặc hồ sơ không kèm đơn thuốc.</p>
+          }
+        </section>
+
+        <div class="mt-5 flex flex-wrap gap-2">
+          <button (click)="download(detailRecord()?.prescription?.pdfUrl)" [disabled]="!detailRecord()?.prescription?.pdfUrl" class="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
+            Tải đơn thuốc PDF
+          </button>
+          <button (click)="download(detailRecord()?.resultPdfUrl)" [disabled]="!detailRecord()?.resultPdfUrl" class="rounded-xl border px-4 py-2.5 text-sm font-semibold disabled:opacity-40">
+            Tải kết quả khám PDF
+          </button>
+        </div>
+
+        @if (detailRecord()?.prescription?.digitallySigned || detailRecord()?.digitallySigned) {
+          <p class="mt-3 text-xs text-emerald-700">✓ Tài liệu có metadata xác nhận chữ ký số của bác sĩ/phòng khám.</p>
+        }
+      }
+    </section>
+  </div>
+}

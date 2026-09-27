@@ -10,10 +10,12 @@ import {
   UnauthorizedException,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { Request, Response } from "express";
 import { Public } from "../../common/decorators/auth.decorators";
 import { GoogleAuthService } from "./google-auth.service";
 import { GoogleCompleteDto } from "./dto/google-complete.dto";
+import { GoogleIdTokenDto } from "./dto/google-id-token.dto";
 import { environment } from "../../config/environment";
 import { writeSession } from "./session.controller";
 import { googleCookieBase } from "./cookie-security";
@@ -89,6 +91,28 @@ export class GoogleAuthController {
       });
       response.redirect(`${frontend}/register?google=complete`);
     }
+  }
+
+  /** Nhận Google ID token từ client SDK thay cho redirect authorization flow. */
+  @Post()
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  async authenticateIdToken(
+    @Body() dto: GoogleIdTokenDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.google.authenticateIdToken(dto.idToken);
+    if (result.session) return writeSession(response, result.session);
+    response.cookie(COMPLETE_COOKIE, result.completionToken!, {
+      ...googleCookieBase(),
+      sameSite: "strict",
+      maxAge: 600000,
+    });
+    return {
+      requiresProfile: true,
+      email: result.profile!.email,
+      fullName: result.profile!.name,
+    };
   }
 
   // Hoàn tất đăng ký Google lần đầu.

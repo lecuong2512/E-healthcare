@@ -44,6 +44,7 @@ import { PrescriptionItemEntity } from "./entities/prescription-item.entity";
 import { EmrAddendumEntity } from "./entities/emr-addendum.entity";
 import { AddEmrPrescriptionTables1790065218000 } from "./migrations/1790065218000-add-emr-prescription-tables";
 import { CreateEmrAddendumsTable1790150000000 } from "./migrations/1790150000000-create-emr-addendums-table";
+import { AddAppointmentConsent1790151600000 } from "./migrations/1790151600000-add-appointment-consent";
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -72,6 +73,7 @@ export function createDataSource(url: string): DataSource {
       DoctorQueueCounterEntity,
       CounterPaymentTransactionEntity,
       ReceptionAuditLogEntity,
+      EmrAddendumEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -95,6 +97,7 @@ export function createDataSource(url: string): DataSource {
       AllowSharedPatientPhone1789934400000,
       UniquePatientCitizenId1789938000000,
       CreateEmrAddendumsTable1790150000000,
+      AddAppointmentConsent1790151600000,
     ],
   });
 }

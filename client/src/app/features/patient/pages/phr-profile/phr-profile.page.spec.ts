@@ -87,6 +87,7 @@ describe('PhrProfilePage', () => {
   });
 
   it('should update the PHR profile when saveChanges is called', () => {
+    component['consentAccepted'] = true;
     component['form'].fullName = 'Changed Name';
     component['form'].citizenId = '123456789';
     component['form'].gender = Gender.FEMALE;
@@ -100,24 +101,37 @@ describe('PhrProfilePage', () => {
 
     component['saveChanges']();
 
-    expect(phrService.updateMyPhr).toHaveBeenCalledWith({
-      fullName: 'Changed Name',
-      citizenId: '123456789',
-      gender: Gender.FEMALE,
-      dateOfBirth: '2000-01-01',
-      address: 'Changed address',
-      healthInsurance: 'DN 4 99 999999999',
-      bloodType: 'A+',
-      allergies: 'Penicillin',
-      chronicDiseases: 'Hen phế quản',
-      surgeryHistory: 'Không có',
-    });
+    expect(phrService.updateMyPhr).toHaveBeenCalledWith(
+      jasmine.objectContaining({
+        fullName: 'Changed Name',
+        citizenId: '123456789',
+        gender: Gender.FEMALE,
+        dateOfBirth: '2000-01-01',
+        address: 'Changed address',
+        healthInsurance: 'DN 4 99 999999999',
+        bloodType: 'A+',
+        allergies: 'Penicillin',
+        chronicDiseases: 'Hen phế quản',
+        surgeryHistory: 'Không có',
+        consent_nd13_accepted_at: jasmine.any(String),
+      })
+    );
 
     expect(component['isSaved']).toBeTrue();
     expect(component['isSaving']).toBeFalse();
   });
 
+  it('should reject saving and set consentError when consent checkbox is not accepted', () => {
+    component['consentAccepted'] = false;
+    component['saveChanges']();
+
+    expect(component['consentError']).toBeTrue();
+    expect(component['errorMessage']).toContain('Vui lòng xác nhận đồng ý');
+    expect(phrService.updateMyPhr).not.toHaveBeenCalled();
+  });
+
   it('should trim text fields before sending the update request', () => {
+    component['consentAccepted'] = true;
     component['form'].fullName = '  Nguyễn Tùng  ';
     component['form'].citizenId = ' 123456789 ';
     component['form'].address = '  Hà Nội  ';
@@ -129,18 +143,21 @@ describe('PhrProfilePage', () => {
 
     component['saveChanges']();
 
-    expect(phrService.updateMyPhr).toHaveBeenCalledWith({
-      fullName: 'Nguyễn Tùng',
-      citizenId: '123456789',
-      gender: Gender.MALE,
-      dateOfBirth: '1992-08-12',
-      address: 'Hà Nội',
-      healthInsurance: 'DN 4 01 234567890',
-      bloodType: 'O+',
-      allergies: 'Penicillin',
-      chronicDiseases: 'Hen phế quản',
-      surgeryHistory: 'Không có',
-    });
+    expect(phrService.updateMyPhr).toHaveBeenCalledWith(
+      jasmine.objectContaining({
+        fullName: 'Nguyễn Tùng',
+        citizenId: '123456789',
+        gender: Gender.MALE,
+        dateOfBirth: '1992-08-12',
+        address: 'Hà Nội',
+        healthInsurance: 'DN 4 01 234567890',
+        bloodType: 'O+',
+        allergies: 'Penicillin',
+        chronicDiseases: 'Hen phế quản',
+        surgeryHistory: 'Không có',
+        consent_nd13_accepted_at: jasmine.any(String),
+      })
+    );
   });
 
   it('should restore the last saved profile when cancelChanges is called', () => {
