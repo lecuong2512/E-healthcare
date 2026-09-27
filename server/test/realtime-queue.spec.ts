@@ -7,6 +7,7 @@ import { DataSource } from 'typeorm';
 import { Socket } from 'socket.io';
 import { DoctorEntity } from '../src/database/entities/doctor.entity';
 import { SessionService } from '../src/modules/auth/session.service';
+import { RedisService } from '../src/common/redis/redis.service';
 import { environment } from '../src/config/environment';
 import { QueueEventsService } from '../src/modules/realtime/queue-events.service';
 import { QueueGateway } from '../src/modules/realtime/queue.gateway';
@@ -175,7 +176,12 @@ describe('Realtime queue', () => {
   });
 
   it('classifies only a verified expired access token as expired', async () => {
-    const realSessions = new SessionService(database as unknown as DataSource);
+    const realSessions = new SessionService(
+      database as unknown as DataSource,
+      {
+        isBlacklisted: jest.fn().mockResolvedValue(false),
+      } as unknown as RedisService,
+    );
     const expired = sign({ type: 'access' }, environment.JWT_ACCESS_SECRET!, {
       algorithm: 'HS256', issuer: 'ehealth-api', audience: 'ehealth-client', expiresIn: -1,
     });
