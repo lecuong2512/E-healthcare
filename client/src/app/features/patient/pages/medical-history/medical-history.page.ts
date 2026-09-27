@@ -369,11 +369,11 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   refundBand(): 'green' | 'yellow' | 'red' {
     const hours = this.remainingMs() / 3600000;
 
-    if (hours > 24) {
+    if (hours >= 24) {
       return 'green';
     }
 
-    if (hours > 2) {
+    if (hours >= 2) {
       return 'yellow';
     }
 
