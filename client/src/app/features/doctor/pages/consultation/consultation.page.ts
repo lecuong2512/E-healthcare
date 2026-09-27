@@ -57,6 +57,26 @@ export class ConsultationPage {
   get safePreviewUrl():SafeResourceUrl|null{return this.preview?this.sanitizer.bypassSecurityTrustResourceUrl(this.preview.url):null;}
   saveDraft(){if(this.isLocked)return;this.saveMessage='Thông tin đang nhập được giữ ở trạng thái nháp trong phiên khám này.';}
   completeConsultation(){if(this.isLocked)return;this.router.navigate(['/doctor/queue']);}
+  get isChronicPatient(): boolean {
+    const c = (this.chronicDiseases || '').toLowerCase();
+    const hasPhrChronic = !!c && !c.includes('chưa') && !c.includes('không');
+    const hasChronicIcd = this.icdTags.some((t) =>
+      ['i10', 'i20', 'e11', 'j45'].some((code) => t.code.toLowerCase().startsWith(code)),
+    );
+    return hasPhrChronic || hasChronicIcd;
+  }
+  getRxDailyDose(rx: Rx): number {
+    return (rx.doses || []).reduce((sum, d) => sum + (Number(d) || 0), 0);
+  }
+  getRxDays(rx: Rx): number {
+    const daily = this.getRxDailyDose(rx);
+    if (daily <= 0 || !rx.quantity) return 0;
+    return Math.ceil(rx.quantity / daily);
+  }
+  get hasChronicOver30Warning(): boolean {
+    if (!this.isChronicPatient) return false;
+    return this.rxList.some((rx) => this.getRxDays(rx) > 30);
+  }
   getBmiColor(bmiInput: number | null | undefined | string): string {  const bmi = typeof bmiInput === 'string' ? parseFloat(bmiInput) : bmiInput;  if (bmi == null) return 'inherit'; if (bmi < 18.5) return '#F59E0B';  if (bmi < 25) return '#22C55E';  if (bmi < 30) return '#F97316';  return '#EF4444';}
   openAddendumModal() { this.addendumReason = ''; this.addendumClinicalNotes = this.clinicalNotes; this.addendumDoctorAdvice = this.doctorAdvice; this.addendumIcd10Secondary = ''; this.addendumFollowUpDate = this.followUpDate; this.addendumError = ''; this.showAddendumModal = true; }
   closeAddendumModal() { this.showAddendumModal = false; this.addendumError = ''; }

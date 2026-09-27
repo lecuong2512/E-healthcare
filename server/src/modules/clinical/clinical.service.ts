@@ -59,6 +59,14 @@ const CHRONIC_DISEASE_KEYWORDS = [
   'than man',
 ];
 
+const ALLERGY_GROUP_MAPPINGS: Record<string, string[]> = {
+  penicillin: ['penicillin', 'amoxicillin', 'ampicillin', 'augmentin', 'oxacillin', 'cloxacillin'],
+  aspirin: ['aspirin', 'acetylsalicylic acid', 'cardiopirin', 'aspilets'],
+  sulfonamide: ['sulfonamide', 'sulfamethoxazole', 'bactrim', 'cotrimoxazole'],
+  cephalosporin: ['cephalosporin', 'cefuroxime', 'cefalexin', 'ceftriaxone', 'cefixime'],
+  nsaid: ['nsaid', 'ibuprofen', 'meloxicam', 'diclofenac', 'celecoxib'],
+};
+
 @Injectable()
 export class ClinicalService {
   constructor(
@@ -224,11 +232,25 @@ export class ClinicalService {
           : '';
 
         for (const allergy of allergyTokens) {
-          if (
-            medNameLower.includes(allergy) ||
-            (activeIngLower && activeIngLower.includes(allergy)) ||
-            (allergy.length >= 4 && allergy.includes(medNameLower))
-          ) {
+          const matchingTerms = [allergy];
+          for (const [groupKey, members] of Object.entries(ALLERGY_GROUP_MAPPINGS)) {
+            if (allergy.includes(groupKey) || groupKey.includes(allergy)) {
+              for (const member of members) {
+                if (!matchingTerms.includes(member)) {
+                  matchingTerms.push(member);
+                }
+              }
+            }
+          }
+
+          const isMatched = matchingTerms.some(
+            (term) =>
+              medNameLower.includes(term) ||
+              (activeIngLower && activeIngLower.includes(term)) ||
+              (term.length >= 4 && term.includes(medNameLower)),
+          );
+
+          if (isMatched) {
             warnings.push({
               medicineName: item.medicineName,
               matchedAllergy: allergy,
