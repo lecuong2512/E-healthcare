@@ -118,3 +118,46 @@ export interface MedicalRecordDetailResponse extends MedicalRecordData {
   prescription?: PrescriptionData | null;
   warnings?: DrugSafetyWarning[];
 }
+
+export interface EmrClinicalSnapshot {
+  clinicalNotes: string;
+  doctorAdvice: string | null;
+  icd10PrimaryCode: string;
+  icd10SecondaryCodes: string | null;
+  followUpDate: string | null;
+  vitalSigns: VitalSigns | null;
+}
+
+export interface EmrAddendumData {
+  id: string;
+  medicalRecordId: string;
+  doctorId: string;
+  doctorName?: string;
+  doctorLicenseNumber?: string | null;
+  reason: string;
+  previousContent: EmrClinicalSnapshot;
+  updatedContent: EmrClinicalSnapshot;
+  createdAt: string;
+}
+
+export interface CreateEmrAddendumRequest {
+  reason: string;
+  clinicalNotes?: string;
+  doctorAdvice?: string | null;
+  icd10SecondaryCodes?: string | null;
+  followUpDate?: string | null;
+  vitalSigns?: VitalSignsInput | null;
+}
+
+export interface EmrHistoryResponse {
+  recordId: string;
+  appointmentId: string;
+  patientId: string;
+  doctorId: string;
+  isLocked: boolean;
+  lockedAt: string | null;
+  completedAt: string | null;
+  originalSnapshot: EmrClinicalSnapshot;
+  currentSnapshot: EmrClinicalSnapshot;
+  addendums: EmrAddendumData[];
+}

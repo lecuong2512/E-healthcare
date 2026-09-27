@@ -41,7 +41,9 @@ import { ReceptionAuditLogEntity } from "./entities/reception-audit-log.entity";
 import { MedicalRecordEntity } from "./entities/medical-record.entity";
 import { PrescriptionEntity } from "./entities/prescription.entity";
 import { PrescriptionItemEntity } from "./entities/prescription-item.entity";
+import { EmrAddendumEntity } from "./entities/emr-addendum.entity";
 import { AddEmrPrescriptionTables1790065218000 } from "./migrations/1790065218000-add-emr-prescription-tables";
+import { CreateEmrAddendumsTable1790150000000 } from "./migrations/1790150000000-create-emr-addendums-table";
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -92,6 +94,7 @@ export function createDataSource(url: string): DataSource {
       AddReceptionAuditLogs1789930800000,
       AllowSharedPatientPhone1789934400000,
       UniquePatientCitizenId1789938000000,
+      CreateEmrAddendumsTable1790150000000,
     ],
   });
 }
