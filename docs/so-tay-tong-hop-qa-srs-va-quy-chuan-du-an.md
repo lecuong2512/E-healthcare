@@ -140,6 +140,7 @@ graph TD
 | **Card 3.2** | Quầy tiếp đón Lễ tân check-in QR & Khách vãng lai | SRS-REC-01 | Nguyễn Mạnh Thi | PR #22 (`feature/SRS-REC-01-02...`) | `client/.../checkin-desk/`, `server/.../reception/` |
 | **Card 3.3** | Hàng đợi Bệnh nhân Buồng khám Realtime WS | SRS-DOC-02 | Nguyễn Văn Tùng | PR #21 (`feature/srs-doc-02-04...`) | `server/.../queue.gateway.ts`, `client/.../patient-queue/` |
 | **Card 3.4** | Buồng khám EMR: Vitals, ICD-10, Kê đơn | SRS-DOC-03, 04 | Nguyễn Văn Tùng | PR #24 (`feature/3.3-emr-prescription`) | `client/.../consultation/`, `server/.../clinical/` |
+| **Card 3.5** | [SRS-DOC & REC] Kiểm thử Chu trình Khám Lâm sàng & Cảnh báo Dị ứng Thuốc | SRS-DOC-02..04, SRS-REC-01, Sec 3.4 & 5.4, TT 52/2017 & TT 46/2018 | Lê Việt Cường | PR #32 (`feature/card-3.5-clinical-workflow-allergy-test`) | `server/test/clinical-drug-safety.spec.ts`, `server/test/clinical-workflow-e2e.spec.ts`, `consultation.page.spec.ts`, `allergy-alert-modal.component.spec.ts`, `patient-queue.page.spec.ts` |
 | **Card 3.6** | UI Khai báo & Quản lý Ca trực Bác sĩ | SRS-DOC-01 | Trần Văn Tiến | PR #25 (`feature/SRS-DOC-01-doctor-schedule`) | `client/.../schedule-config/` |
 | **Card 3.7** | Quên mật khẩu OTP, Token Blacklist & PHR API | SRS-AUTH-01..03 | Đồng Văn Tú | `feature/auth-password-reset-phr` | `server/.../password-reset.service.ts` |
 | **Card 3.8** | Màn hình Bảng gọi số Sảnh chờ Fullscreen TV | Section 3.4, SRS-REC-01 | Trần Trọng Hoàn | PR #30 (`feature/card-3.8-queue-board-integration`) | `client/.../queue-board/` |
@@ -157,6 +158,7 @@ graph TD
 Khi QA hoặc Debug từng phân hệ, tra cứu các tài liệu chuyên sâu tương ứng:
 
 ### 5.1. Báo cáo Bàn giao & Kỹ thuật
+- **Báo cáo Nghiệm thu Chu trình Khám & Dị ứng Thuốc (Card 3.5):** [bao-cao-nghiem-thu-card-3.5-chu-trinh-kham-va-canh-bao-di-ung.md](file:///d:/Intern/E-healthcare/docs/bao-cao-nghiem-thu-card-3.5-chu-trinh-kham-va-canh-bao-di-ung.md)
 - **Báo cáo Hủy lịch & Hoàn tiền (PAT-04):** [bao-cao-SRS-PAT-04-cancel-appointment-refund.md](file:///d:/Intern/E-healthcare/docs/bao-cao-SRS-PAT-04-cancel-appointment-refund.md)
 - **Báo cáo Phụ lục Bệnh án (EMR Addendum):** [Bao_Cao_EMR_Addendum.docx](file:///d:/Intern/E-healthcare/docs/Bao_Cao_EMR_Addendum.docx)
 - **Báo cáo Hạ tầng BullMQ & Cron (Card 3.12):** [bao-cao-card-3.12-bullmq-cron-schedulers.md](file:///d:/Intern/E-healthcare/docs/bao-cao-card-3.12-bullmq-cron-schedulers.md)
@@ -220,6 +222,7 @@ k6 run tests-load/k6-slot-concurrency.js
 
 | Mã Card | URL màn hình QA | Hành vi Kiểm thử Cốt lõi | Tiêu chí Nghiệm thu Đạt chuẩn (Pass Criteria) |
 |---|---|---|---|
+| **Card 3.5** | `/doctor/consultation`, `/doctor/queue` | Chu trình khám lâm sàng & Cảnh báo dị ứng | - Quét QR check-in tiếp đón $\to$ realtime cập nhật hàng đợi khám.<br/>- Bật popup đỏ khi kê thuốc trùng nhóm dị ứng PHR.<br/>- Chặn đơn thuốc bệnh mạn tính $>30$ ngày (TT 52/2017/TT-BYT).<br/>- Khóa sau 24h và bắt buộc tạo EMR Addendum (TT 46/2018/TT-BYT). |
 | **Card 3.6** | `/doctor/schedule` | Đăng ký ca trực tuần | - Chọn ngày, ca sáng/chiều, thời lượng slot 15/30m.<br/>- Danh sách ca trực hiển thị trực quan theo tuần. |
 | **Card 3.7** | `/login`, `/profile` | Quên mật khẩu & PHR | - Nhập SĐT/Email $\rightarrow$ Nhận OTP $\rightarrow$ Đổi mật khẩu mới.<br/>- Đăng xuất thu hồi token trên Redis blacklist. |
 | **Card 3.8** | `/receptionist/queue-board` | Bảng gọi số TV sảnh | - Chế độ toàn màn hình Fullscreen.<br/>- Realtime Socket.io nhảy số khám và phát âm thanh chuông. |
