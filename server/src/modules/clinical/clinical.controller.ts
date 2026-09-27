@@ -19,6 +19,7 @@ import {
   UpdateMedicalRecordDto,
   SearchIcd10Dto,
   PrescriptionSafetyCheckDto,
+  CreateEmrAddendumDto,
 } from './dto';
 
 @Controller('clinical')
@@ -126,6 +127,39 @@ export class ClinicalController {
       req.auth!.userId,
       req.auth!.role,
       appointmentId,
+    );
+  }
+
+  /**
+   * Create EMR Addendum after 24h lock.
+   */
+  @Post('records/:id/addendums')
+  @Roles(Role.DOCTOR)
+  async createEmrAddendum(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) recordId: string,
+    @Body() dto: CreateEmrAddendumDto,
+  ) {
+    return this.clinicalService.createEmrAddendum(
+      req.auth!.userId,
+      recordId,
+      dto,
+    );
+  }
+
+  /**
+   * Get EMR clinical history and addendums timeline.
+   */
+  @Get('records/:id/history')
+  @Roles(Role.DOCTOR, Role.PATIENT)
+  async getEmrHistory(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) recordId: string,
+  ) {
+    return this.clinicalService.getEmrHistory(
+      req.auth!.userId,
+      req.auth!.role,
+      recordId,
     );
   }
 }
