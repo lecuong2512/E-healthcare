@@ -146,7 +146,11 @@ describe('Card 3.10: EMR Addendum (Section 5.4 & SRS-DOC-03)', () => {
       }),
     };
 
-    service = new ClinicalService(mockDataSource as any, icd10Service);
+    const mockQueueEvents = {
+      statusChanged: jest.fn().mockResolvedValue(undefined),
+    };
+
+    service = new ClinicalService(mockDataSource as any, icd10Service, mockQueueEvents as any);
     controller = new ClinicalController(service, icd10Service);
   });
 

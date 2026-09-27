@@ -18,6 +18,7 @@ export const RECEPTIONIST_ROUTES: Routes = [
   },
   {
     path: 'queue-board',
+    data: { presentationMode: true },
     loadComponent: () => import('./pages/queue-board/queue-board.page').then((m) => m.QueueBoardPage),
   },
 ];
