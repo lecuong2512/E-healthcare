@@ -235,6 +235,35 @@ describe('Secure distributed slot reservation', () => {
     expect(queryRunner.commitTransaction).toHaveBeenCalled();
     expect((await service.getSlotLockStatus(doctorId, slotId)).isLocked).toBe(false);
   });
+
+  it('keeps an online booking pending with a holding slot and active reservation', async () => {
+    const reservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+    const appointment = await service.confirmBooking(
+      {
+        doctorId,
+        slotId,
+        reservationId: reservation.data.reservationId,
+        reasonForVisit: 'Khám tổng quát',
+        paymentMethod: PaymentMethod.VNPAY,
+      },
+      patientA,
+    );
+
+    expect(appointment.status).toBe(AppointmentStatus.PENDING_PAYMENT);
+    expect(appointment.paymentStatus).toBe(PaymentStatus.PENDING);
+    expect(queryRunner.manager!.save).toHaveBeenCalledWith(
+      DoctorScheduleEntity,
+      expect.objectContaining({ status: SlotStatus.HOLDING }),
+    );
+    expect(queryRunner.manager!.create).toHaveBeenCalledWith(
+      AppointmentEntity,
+      expect.objectContaining({
+        reservationId: reservation.data.reservationId,
+        paymentStatus: PaymentStatus.PENDING,
+      }),
+    );
+    expect((await service.getSlotLockStatus(doctorId, slotId)).isLocked).toBe(true);
+  });
 });
 
 describe('Booking mutation authorization', () => {

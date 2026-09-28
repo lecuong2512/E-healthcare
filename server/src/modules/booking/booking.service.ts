@@ -217,7 +217,11 @@ export class BookingService {
         throw new NotFoundException('Không tìm thấy khung giờ khám.');
       }
 
-      if (slot.status === SlotStatus.BOOKED || slot.status === SlotStatus.OFF) {
+      if (
+        slot.status === SlotStatus.HOLDING ||
+        slot.status === SlotStatus.BOOKED ||
+        slot.status === SlotStatus.OFF
+      ) {
         throw new HttpException(
           {
             statusCode: HttpStatus.CONFLICT,
@@ -227,8 +231,8 @@ export class BookingService {
         );
       }
 
-      // Update slot status to BOOKED
-      slot.status = SlotStatus.BOOKED;
+      const payAtClinic = dto.paymentMethod === PaymentMethod.PAY_AT_CLINIC;
+      slot.status = payAtClinic ? SlotStatus.BOOKED : SlotStatus.HOLDING;
       await queryRunner.manager.save(DoctorScheduleEntity, slot);
 
       // Always price from the doctor record; never trust a browser-supplied amount.
@@ -257,9 +261,10 @@ export class BookingService {
         patientId,
         doctorId: dto.doctorId,
         scheduleId: dto.slotId,
+        reservationId: dto.reservationId,
         status: dto.paymentMethod === PaymentMethod.PAY_AT_CLINIC ? AppointmentStatus.CONFIRMED : AppointmentStatus.PENDING_PAYMENT,
         reasonForVisit: dto.reasonForVisit,
-        paymentStatus: PaymentStatus.UNPAID,
+        paymentStatus: payAtClinic ? PaymentStatus.UNPAID : PaymentStatus.PENDING,
         paymentMethod: dto.paymentMethod,
         totalAmount,
         discountAmount,
@@ -283,8 +288,10 @@ export class BookingService {
 
       await queryRunner.commitTransaction();
 
-      // Release Redis distributed lock after successful DB commit
-      await this.redisService.releaseLockIfOwner(lockKey, dto.reservationId);
+      // Online payment keeps the reservation lock until a verified terminal result.
+      if (payAtClinic) {
+        await this.redisService.releaseLockIfOwner(lockKey, dto.reservationId);
+      }
 
       return {
         id: saved.id,

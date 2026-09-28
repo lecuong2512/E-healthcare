@@ -41,6 +41,9 @@ export class AppointmentEntity {
   @Column({ name: 'schedule_id', type: 'uuid' })
   scheduleId!: string;
 
+  @Column({ name: 'reservation_id', type: 'uuid', nullable: true })
+  reservationId!: string | null;
+
   @ManyToOne(() => DoctorScheduleEntity)
   @JoinColumn({ name: 'schedule_id' })
   schedule!: DoctorScheduleEntity;
