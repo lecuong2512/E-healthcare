@@ -11,9 +11,6 @@
       </div>
 
       <div class="flex gap-2">
-        <button (click)="isMock() ? load() : useMockData()" class="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
-          {{ isMock() ? 'Dùng dữ liệu thật' : 'Xem dữ liệu mẫu' }}
-        </button>
         <a routerLink="/patient/booking" class="rounded-xl bg-sky-700 px-4 py-3 font-semibold text-white">Đặt lịch mới</a>
       </div>
     </header>
@@ -43,7 +40,6 @@
         <p class="font-semibold text-rose-700">{{ error() }}</p>
         <div class="mt-4 flex justify-center gap-2">
           <button (click)="load()" class="rounded-lg border px-4 py-2 text-slate-700">Thử lại</button>
-          <button (click)="useMockData()" class="rounded-lg bg-sky-700 px-4 py-2 text-white">Xem giao diện với dữ liệu mẫu</button>
         </div>
       </section>
     } @else {
@@ -108,9 +104,19 @@
                 }
 
                 @if (activeTab() === 'completed') {
-                  <button (click)="showDetails(item)" class="mt-4 rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white">
-                    Xem chi tiết lần khám
-                  </button>
+                  <div class="mt-4 flex flex-wrap items-center gap-2">
+                    <button nz-button (click)="showDetails(item)">
+                      Xem chi tiết lần khám
+                    </button>
+                    @if (canReview(item)) {
+                      <button nz-button nzType="primary" (click)="openReview(item)">
+                        Đánh giá bác sĩ
+                      </button>
+                    } @else if (item.review) {
+                      <span class="text-sm font-semibold text-emerald-700">Đã đánh giá</span>
+                      <nz-rate [ngModel]="item.review.rating" nzDisabled></nz-rate>
+                    }
+                  </div>
                 }
               </div>
 
@@ -132,6 +138,49 @@
     }
   </div>
 </main>
+
+<nz-modal
+  [nzVisible]="reviewModalVisible()"
+  nzTitle="Đánh giá bác sĩ"
+  nzOkText="Gửi đánh giá"
+  nzCancelText="Hủy"
+  [nzOkLoading]="reviewSubmitting()"
+  [nzOkDisabled]="reviewRating() < 1"
+  [nzClosable]="!reviewSubmitting()"
+  [nzMaskClosable]="!reviewSubmitting()"
+  (nzOnOk)="submitReview()"
+  (nzOnCancel)="closeReview()"
+>
+  <ng-container *nzModalContent>
+    @if (reviewTarget()) {
+      <p class="mb-4 text-sm text-slate-600">
+        Chia sẻ trải nghiệm khám với <b>{{ doctorName(reviewTarget()!) }}</b>.
+      </p>
+    }
+    <label class="block font-semibold text-slate-800">
+      Mức độ hài lòng <span class="text-rose-600">*</span>
+    </label>
+    <nz-rate
+      class="mt-2 text-2xl"
+      [ngModel]="reviewRating()"
+      (ngModelChange)="reviewRating.set($event)"
+    ></nz-rate>
+
+    <label class="mt-5 block font-semibold text-slate-800" for="doctor-review-comment">
+      Nhận xét
+    </label>
+    <textarea
+      id="doctor-review-comment"
+      nz-input
+      rows="4"
+      maxlength="500"
+      [(ngModel)]="reviewComment"
+      class="mt-2"
+      placeholder="Chia sẻ trải nghiệm của bạn về buổi khám..."
+    ></textarea>
+    <p class="mt-1 text-right text-xs text-slate-500">{{ reviewComment.length }} / 500</p>
+  </ng-container>
+</nz-modal>
 
 @if (cancelTarget()) {
   <div class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4" (click)="closeCancel()">

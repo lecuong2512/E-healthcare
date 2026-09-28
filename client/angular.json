@@ -38,7 +38,14 @@
                 "output": "/assets"
               }
             ],
-            "styles": ["src/styles.scss"],
+            "styles": [
+              "../node_modules/ng-zorro-antd/button/style/index.min.css",
+              "../node_modules/ng-zorro-antd/input/style/index.min.css",
+              "../node_modules/ng-zorro-antd/message/style/index.min.css",
+              "../node_modules/ng-zorro-antd/modal/style/index.min.css",
+              "../node_modules/ng-zorro-antd/rate/style/index.min.css",
+              "src/styles.scss"
+            ],
             "scripts": []
           },
           "configurations": {
@@ -96,7 +103,14 @@
                 "input": "public"
               }
             ],
-            "styles": ["src/styles.scss"],
+            "styles": [
+              "../node_modules/ng-zorro-antd/button/style/index.min.css",
+              "../node_modules/ng-zorro-antd/input/style/index.min.css",
+              "../node_modules/ng-zorro-antd/message/style/index.min.css",
+              "../node_modules/ng-zorro-antd/modal/style/index.min.css",
+              "../node_modules/ng-zorro-antd/rate/style/index.min.css",
+              "src/styles.scss"
+            ],
             "scripts": []
           }
         }
