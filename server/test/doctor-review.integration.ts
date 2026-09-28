@@ -8,6 +8,7 @@ import { createDataSource } from '../src/database/database-options';
 import { environment } from '../src/config/environment';
 import { DoctorCacheService } from '../src/modules/doctor/doctor-cache.service';
 import { DoctorReviewService } from '../src/modules/doctor/doctor-review.service';
+import { DoctorSearchService } from '../src/modules/doctor/doctor-search.service';
 
 const url = environment.TEST_DATABASE_URL;
 if (!url || !new URL(url).pathname.startsWith('/ehealth_review_test_')) {
@@ -15,6 +16,9 @@ if (!url || !new URL(url).pathname.startsWith('/ehealth_review_test_')) {
     'TEST_DATABASE_URL must target a dedicated ehealth_review_test_* database.',
   );
 }
+const testRedisUrl = environment.TEST_REDIS_URL;
+const redisTest =
+  testRedisUrl && new URL(testRedisUrl).pathname === '/15' ? it : it.skip;
 
 describe('Doctor review concurrency on PostgreSQL', () => {
   let database: DataSource;
@@ -84,8 +88,8 @@ describe('Doctor review concurrency on PostgreSQL', () => {
     );
     const [doctor] = await database.query(
       `INSERT INTO doctors
-       (user_id, specialty_id, license_number, consultation_fee, room_number)
-       VALUES ($1, $2, $3, 300000, 'P101') RETURNING id`,
+       (user_id, specialty_id, license_number, consultation_fee, room_number, rating_average)
+       VALUES ($1, $2, $3, 300000, 'P101', 1.00) RETURNING id`,
       [doctorUserId, specialty.id, randomUUID()],
     );
     doctorId = doctor.id as string;
@@ -145,5 +149,50 @@ describe('Doctor review concurrency on PostgreSQL', () => {
     );
     expect(reviewCount.total).toBe(2);
     expect(doctor.rating_average).toBe(4);
+  });
+
+  redisTest('refreshes cached doctor list and detail ratings after a review', async () => {
+    const previousRedisUrl = environment.REDIS_URL;
+    environment.REDIS_URL = testRedisUrl;
+    const realCache = new DoctorCacheService();
+    const redisClient = (
+      realCache as unknown as {
+        client: {
+          connect(): Promise<void>;
+          flushDb(): Promise<string>;
+        };
+      }
+    ).client;
+
+    try {
+      await redisClient.connect();
+      await redisClient.flushDb();
+      const search = new DoctorSearchService(database, realCache);
+      const reviews = new DoctorReviewService(database, realCache);
+      const appointmentId = await createCompletedAppointment(patientIds[0]);
+
+      const initialList = await search.search({ page: 1, limit: 10 });
+      const initialDetail = (await search.findOne(doctorId)) as {
+        ratingAverage: number;
+      };
+      expect(initialList.data[0].ratingAverage).toBe(1);
+      expect(initialDetail.ratingAverage).toBe(1);
+
+      await reviews.create(doctorId, patientIds[0], {
+        appointmentId,
+        rating: 5,
+      });
+
+      const refreshedList = await search.search({ page: 1, limit: 10 });
+      const refreshedDetail = (await search.findOne(doctorId)) as {
+        ratingAverage: number;
+      };
+      expect(refreshedList.data[0].ratingAverage).toBe(5);
+      expect(refreshedDetail.ratingAverage).toBe(5);
+    } finally {
+      await redisClient.flushDb();
+      realCache.onApplicationShutdown();
+      environment.REDIS_URL = previousRedisUrl;
+    }
   });
 });
