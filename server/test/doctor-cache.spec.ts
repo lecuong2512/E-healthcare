@@ -40,4 +40,27 @@ describe("DoctorCacheService", () => {
     await expect(cache.invalidateDoctorData("doctor-id")).resolves.toBeUndefined();
     expect(failingClient.del).not.toHaveBeenCalled();
   });
+
+  it("invalidates cached doctor lists and the reviewed doctor detail", async () => {
+    const cache = new DoctorCacheService();
+    const client = {
+      isReady: true,
+      scanIterator: () => ({
+        async *[Symbol.asyncIterator]() {
+          yield ["ehealth:doctor:list:first", "ehealth:doctor:list:second"];
+        },
+      }),
+      del: jest.fn().mockResolvedValue(3),
+    };
+    (cache as unknown as { client: typeof client }).client = client;
+    const detailKey = cache.key("detail", "doctor-id");
+
+    await cache.invalidateDoctorData("doctor-id");
+
+    expect(client.del).toHaveBeenCalledWith([
+      "ehealth:doctor:list:first",
+      "ehealth:doctor:list:second",
+      detailKey,
+    ]);
+  });
 });

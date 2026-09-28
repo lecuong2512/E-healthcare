@@ -289,6 +289,44 @@ describe('MedicalHistoryPage', () => {
       ).toBeFalse();
     });
 
+    it('renders the review action only for an unreviewed completed appointment', () => {
+      component.appointments.set([completed]);
+      component.activeTab.set('completed');
+      fixture.detectChanges();
+
+      const buttons = Array.from(
+        fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>
+      );
+      expect(buttons.some((button) => button.textContent?.includes('Đánh giá bác sĩ'))).toBeTrue();
+
+      component.appointments.set([
+        {
+          ...completed,
+          review: { id: 'review-1', rating: 5, comment: null, createdAt: '2026-09-28' },
+        },
+      ]);
+      fixture.detectChanges();
+      const updatedButtons = Array.from(
+        fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>
+      );
+      expect(
+        updatedButtons.some((button) => button.textContent?.includes('Đánh giá bác sĩ'))
+      ).toBeFalse();
+      expect(fixture.nativeElement.textContent).toContain('Đã đánh giá');
+      expect(fixture.nativeElement.querySelector('nz-rate')).not.toBeNull();
+    });
+
+    it('does not render a review action for upcoming statuses', () => {
+      component.appointments.set([
+        { ...completed, id: 'confirmed-1', status: 'CONFIRMED' },
+        { ...completed, id: 'checked-in-1', status: 'CHECKED_IN' },
+      ]);
+      component.activeTab.set('upcoming');
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.textContent).not.toContain('Đánh giá bác sĩ');
+    });
+
     it('opens the modal with a reset form', () => {
       component.reviewRating.set(5);
       component.reviewComment = 'old';
@@ -300,6 +338,31 @@ describe('MedicalHistoryPage', () => {
       expect(component.reviewRating()).toBe(0);
       expect(component.reviewComment).toBe('');
     });
+
+    it('renders rating validation and the 500-character comment limit', fakeAsync(() => {
+      component.openReview(completed);
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+
+      const okButton = document.querySelector(
+        '.ant-modal-footer .ant-btn-primary'
+      ) as HTMLButtonElement;
+      const textarea = document.querySelector(
+        '#doctor-review-comment'
+      ) as HTMLTextAreaElement;
+      expect(okButton.disabled).toBeTrue();
+      expect(textarea.maxLength).toBe(500);
+      expect(document.body.textContent).toContain('0 / 500');
+
+      component.reviewRating.set(5);
+      component.reviewComment = 'a'.repeat(500);
+      fixture.detectChanges();
+      expect(okButton.disabled).toBeFalse();
+      expect(document.body.textContent).toContain('500 / 500');
+      component.closeReview();
+      fixture.detectChanges();
+    }));
 
     it('posts the review and marks the appointment as reviewed', () => {
       const messages = TestBed.inject(NzMessageService);
@@ -332,6 +395,28 @@ describe('MedicalHistoryPage', () => {
       expect(component.appointments()[0].doctor?.ratingAverage).toBe(4.5);
       expect(component.reviewModalVisible()).toBeFalse();
       expect(messages.success).toHaveBeenCalled();
+    });
+
+    it('blocks duplicate submission while the first request is pending', () => {
+      component.openReview(completed);
+      component.reviewRating.set(5);
+
+      component.submitReview();
+      component.submitReview();
+
+      const requests = httpMock.match('/api/v1/doctors/doctor-review-01/reviews');
+      expect(requests.length).toBe(1);
+      expect(component.reviewSubmitting()).toBeTrue();
+      requests[0].flush({
+        id: 'review-02',
+        appointmentId: 'appointment-review-01',
+        doctorId: 'doctor-review-01',
+        rating: 5,
+        comment: null,
+        createdAt: '2026-09-28T06:00:00.000Z',
+        ratingAverage: 5,
+      });
+      expect(component.reviewSubmitting()).toBeFalse();
     });
 
     it('keeps the modal open and reports an API error', () => {

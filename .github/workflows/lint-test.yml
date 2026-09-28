@@ -66,13 +66,14 @@ jobs:
           test -d client || { echo "Missing client directory"; exit 1; }
           echo "Monorepo structure verified."
 
-      - name: Install Monorepo Dependencies (If package.json has scripts)
+      - name: Install Monorepo Dependencies
         run: |
-          if [ -s package.json ] && grep -q '"dependencies"' package.json; then
-            echo "Installing root dependencies..."
+          if [ -f package-lock.json ]; then
+            echo "Installing locked monorepo dependencies..."
             npm ci
           else
-            echo "Base scaffold state: root package.json is in scaffold initialization."
+            echo "Missing package-lock.json"
+            exit 1
           fi
 
       - name: Run Linting Checks
@@ -90,3 +91,9 @@ jobs:
           else
             echo "Skipping build: build scripts will be executed upon full module initialization."
           fi
+
+      - name: Run Server Tests
+        run: npm run test --workspace=@ehealth/server
+
+      - name: Run Client Tests
+        run: npm run test --workspace=ehealth-web-client -- --watch=false --browsers=ChromeHeadless
