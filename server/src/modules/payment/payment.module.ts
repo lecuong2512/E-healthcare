@@ -6,6 +6,7 @@ import { PaymentConfiguration } from './payment-config';
 import { PaymentController } from './payment.controller';
 import { PaymentFinalizerService } from './payment-finalizer.service';
 import { PaymentService } from './payment.service';
+import { PaymentReconciliationService } from './payment-reconciliation.service';
 import { MomoProvider } from './providers/momo.provider';
 import { PaymentProvider } from './providers/payment-provider.interface';
 import { VnpayProvider } from './providers/vnpay.provider';
@@ -17,6 +18,7 @@ import { VnpayProvider } from './providers/vnpay.provider';
     PaymentConfiguration,
     PaymentFinalizerService,
     PaymentService,
+    PaymentReconciliationService,
     {
       provide: VNPAY_PROVIDER,
       inject: [PaymentConfiguration],

@@ -58,6 +58,80 @@ export class PaymentFinalizerService {
     return finalized.outcome;
   }
 
+  async expireReservationForReconciliation(
+    provider: VerifiedPaymentResult['provider'],
+    merchantTransactionId: string,
+  ): Promise<void> {
+    const finalized = await this.dataSource.transaction(async (manager) => {
+      const payment = await manager
+        .getRepository(PaymentTransactionEntity)
+        .createQueryBuilder('payment')
+        .setLock('pessimistic_write')
+        .where('payment.provider = :provider', { provider })
+        .andWhere('payment.merchant_transaction_id = :merchantTransactionId', {
+          merchantTransactionId,
+        })
+        .getOne();
+      if (!payment) throw new NotFoundException('Payment transaction not found.');
+
+      const appointment = await manager
+        .getRepository(AppointmentEntity)
+        .createQueryBuilder('appointment')
+        .setLock('pessimistic_write')
+        .where('appointment.id = :id', { id: payment.appointmentId })
+        .getOneOrFail();
+      const schedule = await manager
+        .getRepository(DoctorScheduleEntity)
+        .createQueryBuilder('schedule')
+        .setLock('pessimistic_write')
+        .where('schedule.id = :id', { id: appointment.scheduleId })
+        .getOneOrFail();
+
+      if (
+        ![
+          PaymentTransactionStatus.PENDING,
+          PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+        ].includes(payment.status) ||
+        appointment.status !== AppointmentStatus.PENDING_PAYMENT
+      ) {
+        return {};
+      }
+
+      payment.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
+      appointment.status = AppointmentStatus.EXPIRED;
+      appointment.cancelledAt = new Date();
+      appointment.cancellationReason =
+        'Hết thời gian giữ chỗ; giao dịch cần được đối soát.';
+      if (schedule.status === SlotStatus.HOLDING) {
+        schedule.status = SlotStatus.AVAILABLE;
+      }
+      await manager.save(payment);
+      await manager.save(appointment);
+      await manager.save(schedule);
+      return {
+        release: {
+          key: BookingService.formatSlotLockKey(
+            appointment.doctorId,
+            appointment.scheduleId,
+          ),
+          reservationId: payment.reservationId,
+        },
+      };
+    });
+
+    if (finalized.release) {
+      try {
+        await this.redis.releaseLockIfOwner(
+          finalized.release.key,
+          finalized.release.reservationId,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`Expired reservation cleanup failed: ${message}`);
+      }
+    }
+  }
+
   private async finalizeWithin(
     manager: EntityManager,
     result: VerifiedPaymentResult,
@@ -97,6 +171,22 @@ export class PaymentFinalizerService {
     payment.signatureVerified = result.signatureVerified;
     payment.sanitizedProviderPayload = result.sanitizedPayload;
 
+    if (payment.status === PaymentTransactionStatus.SUCCESS) {
+      await manager.save(payment);
+      return { outcome: 'ALREADY_FINALIZED' };
+    }
+    if (
+      [
+        PaymentTransactionStatus.FAILED,
+        PaymentTransactionStatus.TIMEOUT,
+        PaymentTransactionStatus.SUPERSEDED,
+      ].includes(payment.status) &&
+      result.state !== 'SUCCESS'
+    ) {
+      await manager.save(payment);
+      return { outcome: 'ALREADY_FINALIZED' };
+    }
+
     if (result.state === 'PENDING' || result.state === 'UNKNOWN') {
       if (result.state === 'UNKNOWN') {
         payment.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
@@ -108,10 +198,6 @@ export class PaymentFinalizerService {
       };
     }
 
-    if (payment.status === PaymentTransactionStatus.SUCCESS) {
-      await manager.save(payment);
-      return { outcome: 'ALREADY_FINALIZED' };
-    }
     if (
       [
         PaymentTransactionStatus.FAILED,
@@ -121,7 +207,11 @@ export class PaymentFinalizerService {
       result.state === 'SUCCESS'
     ) {
       payment.status = PaymentTransactionStatus.LATE_SUCCESS;
+      payment.paidAt = new Date();
+      appointment.paymentStatus = PaymentStatus.REFUND_PENDING;
+      appointment.paidAt = payment.paidAt;
       await manager.save(payment);
+      await manager.save(appointment);
       return { outcome: 'LATE_SUCCESS' };
     }
     if (payment.status === PaymentTransactionStatus.FAILED) {
@@ -129,9 +219,20 @@ export class PaymentFinalizerService {
       return { outcome: 'ALREADY_FINALIZED' };
     }
     if (appointment.status !== AppointmentStatus.PENDING_PAYMENT) {
-      payment.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
+      if (result.state === 'SUCCESS') {
+        payment.status = PaymentTransactionStatus.LATE_SUCCESS;
+        payment.paidAt = new Date();
+        appointment.paymentStatus = PaymentStatus.REFUND_PENDING;
+        appointment.paidAt = payment.paidAt;
+        await manager.save(appointment);
+        await manager.save(payment);
+        return { outcome: 'LATE_SUCCESS' };
+      }
+      payment.status = PaymentTransactionStatus.FAILED;
+      appointment.paymentStatus = PaymentStatus.FAILED;
       await manager.save(payment);
-      return { outcome: 'RECONCILIATION_REQUIRED' };
+      await manager.save(appointment);
+      return { outcome: 'FAILED' };
     }
 
     if (result.state === 'SUCCESS') {

@@ -140,6 +140,14 @@ describe('PaymentFinalizerService', () => {
     expect(redis.releaseLockIfOwner).not.toHaveBeenCalled();
   });
 
+  it('does not let an unknown query overwrite an already successful payment', async () => {
+    payment.status = PaymentTransactionStatus.SUCCESS;
+    await expect(service.finalize(verified('UNKNOWN'))).resolves.toBe(
+      'ALREADY_FINALIZED',
+    );
+    expect(payment.status).toBe(PaymentTransactionStatus.SUCCESS);
+  });
+
   it('is replay-safe for an already successful transaction', async () => {
     payment.status = PaymentTransactionStatus.SUCCESS;
     await expect(service.finalize(verified('SUCCESS'))).resolves.toBe('ALREADY_FINALIZED');
@@ -152,7 +160,24 @@ describe('PaymentFinalizerService', () => {
     await expect(service.finalize(verified('SUCCESS'))).resolves.toBe('LATE_SUCCESS');
     expect(payment.status).toBe(PaymentTransactionStatus.LATE_SUCCESS);
     expect(appointment.status).toBe(AppointmentStatus.CANCELLED);
+    expect(appointment.paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
     expect(redis.releaseLockIfOwner).not.toHaveBeenCalled();
+  });
+
+  it('expires the held slot into reconciliation without claiming payment failure', async () => {
+    await service.expireReservationForReconciliation(
+      PaymentMethod.VNPAY,
+      payment.merchantTransactionId,
+    );
+
+    expect(payment.status).toBe(PaymentTransactionStatus.RECONCILIATION_REQUIRED);
+    expect(appointment.status).toBe(AppointmentStatus.EXPIRED);
+    expect(appointment.paymentStatus).toBe(PaymentStatus.PENDING);
+    expect(schedule.status).toBe(SlotStatus.AVAILABLE);
+    expect(redis.releaseLockIfOwner).toHaveBeenCalledWith(
+      'lock:doctor:doctor-id:slot:schedule-id',
+      payment.reservationId,
+    );
   });
 
   it('rejects callback amount tampering before any state transition', async () => {
