@@ -15,6 +15,7 @@ export interface VnpayConfig {
   hashSecret: string;
   payUrl: string;
   returnUrl: string;
+  ipnUrl: string;
   queryUrl: string;
 }
 

@@ -13,6 +13,7 @@ describe('VNPAY 2.1 sandbox provider', () => {
     hashSecret: secret,
     payUrl: 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
     returnUrl: 'https://app.example.test/patient/payment-result',
+    ipnUrl: 'https://api.example.test/api/v1/payments/vnpay/ipn',
     queryUrl: 'https://sandbox.vnpayment.vn/merchant_webapi/api/transaction',
   };
 
