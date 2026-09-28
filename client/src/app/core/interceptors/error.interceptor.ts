@@ -12,6 +12,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
   const isPublic = isPublicEndpoint(req.url);
   const isReception = isReceptionEndpoint(req.url);
+  const isLocallyHandledBusinessError =
+    isReception || isDoctorReviewEndpoint(req.url);
 
   return next(req).pipe(
     catchError((error: unknown) => {
@@ -28,7 +30,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       // Reception facade maps its typed business errors (candidate selection,
       // slot conflict, expired QR, payment/check-in rules) into page state.
       // Keep 401 centralized, but avoid duplicate or misleading global toasts.
-      if (isReception && error.status !== 401) {
+      if (isLocallyHandledBusinessError && error.status !== 401) {
         return throwError(() => error);
       }
 
@@ -69,4 +71,8 @@ function isPublicEndpoint(url: string): boolean {
 
 function isReceptionEndpoint(url: string): boolean {
   return url.includes('/reception/');
+}
+
+function isDoctorReviewEndpoint(url: string): boolean {
+  return /\/doctors\/[^/]+\/reviews(?:\?|$)/.test(url);
 }
