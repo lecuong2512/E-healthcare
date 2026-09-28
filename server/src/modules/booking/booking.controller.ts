@@ -32,29 +32,27 @@ export class BookingController {
    * Lệnh nguyên tử Redis: SET lock:doctor:{doctorId}:slot:{slotId} {userId} NX EX 600
    * Xử lý tranh chấp: trả về HTTP 409 Conflict nếu slot đã bị khóa.
    */
-  @Public()
+  @Roles(Role.PATIENT)
   @Post('reserve-slot')
   @HttpCode(HttpStatus.CREATED)
   async reserveSlot(
     @Body() dto: ReserveSlotDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<ReserveSlotResponse> {
-    const authenticatedUserId = req.auth?.userId;
-    return this.bookingService.reserveSlot(dto, authenticatedUserId);
+    return this.bookingService.reserveSlot(dto, req.auth!.userId);
   }
 
   /**
    * Endpoint giải phóng giữ chỗ khi người dùng hủy thao tác.
    */
-  @Public()
+  @Roles(Role.PATIENT)
   @Post('release-slot')
   @HttpCode(HttpStatus.OK)
   async releaseSlot(
     @Body() dto: ReleaseSlotDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<ReleaseSlotResponse> {
-    const authenticatedUserId = req.auth?.userId;
-    return this.bookingService.releaseSlot(dto, authenticatedUserId);
+    return this.bookingService.releaseSlot(dto, req.auth!.userId);
   }
 
   /**
@@ -69,8 +67,7 @@ export class BookingController {
     @Body() dto: ConfirmBookingDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<AppointmentResponse> {
-    const authenticatedUserId = req.auth?.userId;
-    return this.bookingService.confirmBooking(dto, authenticatedUserId);
+    return this.bookingService.confirmBooking(dto, req.auth!.userId);
   }
 
   /**
@@ -81,7 +78,7 @@ export class BookingController {
   async getSlotLock(
     @Param('doctorId') doctorId: string,
     @Param('slotId') slotId: string,
-  ): Promise<{ isLocked: boolean; holder: string | null; ttlSeconds: number }> {
+  ): Promise<{ isLocked: boolean; ttlSeconds: number }> {
     return this.bookingService.getSlotLockStatus(doctorId, slotId);
   }
 }

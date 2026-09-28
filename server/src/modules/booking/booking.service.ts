@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { randomUUID } from 'node:crypto';
 import { RedisService } from '../../common/redis/redis.service';
 import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
@@ -52,10 +53,10 @@ export class BookingService {
    */
   async reserveSlot(
     dto: ReserveSlotDto,
-    authenticatedUserId?: string,
+    authenticatedUserId: string,
   ): Promise<ReserveSlotResponse> {
-    const userId = dto.userId || authenticatedUserId;
-    if (!userId) {
+    const reservationId = randomUUID();
+    if (!authenticatedUserId) {
       throw new BadRequestException('userId là bắt buộc để giữ chỗ.');
     }
 
@@ -83,14 +84,14 @@ export class BookingService {
     const lockKey = BookingService.formatSlotLockKey(dto.doctorId, dto.slotId);
     const acquired = await this.redisService.setNxEx(
       lockKey,
-      userId,
+      reservationId,
       BookingService.LOCK_TTL_SECONDS,
     );
 
     if (!acquired) {
       // Check if current user already holds this lock (idempotent re-entry)
       const currentHolder = await this.redisService.get(lockKey);
-      if (currentHolder === userId) {
+      if (currentHolder === reservationId) {
         const remainingTtl = await this.redisService.ttl(lockKey);
         const ttl = remainingTtl > 0 ? remainingTtl : BookingService.LOCK_TTL_SECONDS;
         return {
@@ -99,7 +100,7 @@ export class BookingService {
           data: {
             doctorId: dto.doctorId,
             slotId: dto.slotId,
-            userId,
+            reservationId,
             expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
             ttlSeconds: ttl,
           },
@@ -108,7 +109,7 @@ export class BookingService {
 
       // Slot contention: Lock already held by another user
       this.logger.warn(
-        `Slot contention detected for slot ${dto.slotId} of doctor ${dto.doctorId} by user ${userId}`,
+        `Slot contention detected for slot ${dto.slotId} of doctor ${dto.doctorId}`,
       );
       throw new HttpException(
         {
@@ -130,7 +131,7 @@ export class BookingService {
       data: {
         doctorId: dto.doctorId,
         slotId: dto.slotId,
-        userId,
+        reservationId,
         expiresAt,
         ttlSeconds: BookingService.LOCK_TTL_SECONDS,
       },
@@ -143,15 +144,17 @@ export class BookingService {
    */
   async releaseSlot(
     dto: ReleaseSlotDto,
-    authenticatedUserId?: string,
+    authenticatedUserId: string,
   ): Promise<ReleaseSlotResponse> {
-    const userId = dto.userId || authenticatedUserId;
-    if (!userId) {
+    if (!authenticatedUserId) {
       throw new BadRequestException('userId là bắt buộc để hủy giữ chỗ.');
     }
 
     const lockKey = BookingService.formatSlotLockKey(dto.doctorId, dto.slotId);
-    const released = await this.redisService.releaseLockIfOwner(lockKey, userId);
+    const released = await this.redisService.releaseLockIfOwner(
+      lockKey,
+      dto.reservationId,
+    );
 
     if (!released) {
       return {
@@ -173,9 +176,9 @@ export class BookingService {
    */
   async confirmBooking(
     dto: ConfirmBookingDto,
-    authenticatedUserId?: string,
+    authenticatedUserId: string,
   ): Promise<AppointmentResponse> {
-    const patientId = authenticatedUserId ?? dto.patientId;
+    const patientId = authenticatedUserId;
     if (!patientId) {
       throw new BadRequestException('patientId là bắt buộc để chốt lịch hẹn.');
     }
@@ -184,7 +187,7 @@ export class BookingService {
 
     // Verify Redis lock
     const currentHolder = await this.redisService.get(lockKey);
-    if (currentHolder && currentHolder !== patientId) {
+    if (currentHolder !== dto.reservationId) {
       throw new HttpException(
         {
           statusCode: HttpStatus.CONFLICT,
@@ -281,7 +284,7 @@ export class BookingService {
       await queryRunner.commitTransaction();
 
       // Release Redis distributed lock after successful DB commit
-      await this.redisService.del(lockKey);
+      await this.redisService.releaseLockIfOwner(lockKey, dto.reservationId);
 
       return {
         id: saved.id,
@@ -313,13 +316,12 @@ export class BookingService {
   async getSlotLockStatus(
     doctorId: string,
     slotId: string,
-  ): Promise<{ isLocked: boolean; holder: string | null; ttlSeconds: number }> {
+  ): Promise<{ isLocked: boolean; ttlSeconds: number }> {
     const lockKey = BookingService.formatSlotLockKey(doctorId, slotId);
     const holder = await this.redisService.get(lockKey);
     const ttl = await this.redisService.ttl(lockKey);
     return {
       isLocked: !!holder,
-      holder,
       ttlSeconds: ttl > 0 ? ttl : 0,
     };
   }

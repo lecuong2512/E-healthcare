@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsNotEmpty, IsUUID } from 'class-validator';
 import { IReleaseSlotRequest } from '@shared/interfaces';
 
 export class ReleaseSlotDto implements IReleaseSlotRequest {
@@ -10,7 +10,7 @@ export class ReleaseSlotDto implements IReleaseSlotRequest {
   @IsNotEmpty({ message: 'slotId không được để trống.' })
   slotId!: string;
 
-  @IsOptional()
-  @IsString({ message: 'userId phải là chuỗi ký tự.' })
-  userId?: string;
+  @IsUUID('all', { message: 'reservationId phải là UUID hợp lệ.' })
+  @IsNotEmpty({ message: 'reservationId không được để trống.' })
+  reservationId!: string;
 }
