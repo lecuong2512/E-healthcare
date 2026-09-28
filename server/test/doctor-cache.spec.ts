@@ -23,4 +23,21 @@ describe("DoctorCacheService", () => {
     );
     expect(cache.stats()).toEqual({ hits: 0, misses: 1, hitRate: 0 });
   });
+
+  it("does not fail the request when Redis invalidation throws", async () => {
+    const cache = new DoctorCacheService();
+    const failingClient = {
+      isReady: true,
+      scanIterator: () => ({
+        async *[Symbol.asyncIterator]() {
+          throw new Error("Redis unavailable");
+        },
+      }),
+      del: jest.fn(),
+    };
+    (cache as unknown as { client: typeof failingClient }).client = failingClient;
+
+    await expect(cache.invalidateDoctorData("doctor-id")).resolves.toBeUndefined();
+    expect(failingClient.del).not.toHaveBeenCalled();
+  });
 });

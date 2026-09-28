@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testin
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { NzMessageService } from 'ng-zorro-antd/message';
 
 import { MedicalHistoryPage } from './medical-history.page';
 import { TokenStoreService } from '../../../../core/services/token-store.service';
@@ -18,6 +20,7 @@ describe('MedicalHistoryPage', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        provideNoopAnimations(),
         {
           provide: TokenStoreService,
           useValue: {
@@ -31,6 +34,8 @@ describe('MedicalHistoryPage', () => {
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
+    const initialRequest = httpMock.expectOne('/api/v1/appointments/me');
+    initialRequest.flush([]);
   });
 
   afterEach(() => {
@@ -38,9 +43,10 @@ describe('MedicalHistoryPage', () => {
     fixture.destroy();
   });
 
-  it('should create the component and initialize mock appointments', () => {
+  it('should create the component and load real appointments by default', () => {
     expect(component).toBeTruthy();
-    expect(component.appointments().length).toBeGreaterThan(0);
+    expect(component.appointments()).toEqual([]);
+    expect(component.isMock()).toBeFalse();
     expect(component.activeTab()).toBe('upcoming');
   });
 
@@ -193,6 +199,7 @@ describe('MedicalHistoryPage', () => {
     });
 
     it('should successfully cancel in mock mode and update local status', fakeAsync(() => {
+      component.useMockData();
       const appt = component.appointments()[0];
       component.openCancel(appt);
       component.cancelReason = 'Có việc bận đột xuất';
@@ -260,6 +267,89 @@ describe('MedicalHistoryPage', () => {
       expect(component.submitting()).toBeFalse();
       expect(component.toast()).toBe('Lịch hẹn không thể hủy');
       expect(component.toastType()).toBe('error');
+    });
+  });
+
+  describe('Doctor review flow', () => {
+    const completed = {
+      id: 'appointment-review-01',
+      status: 'COMPLETED',
+      doctor: { id: 'doctor-review-01', user: { fullName: 'Bác sĩ An' } },
+      review: null,
+    };
+
+    it('only allows completed appointments without an existing review', () => {
+      expect(component.canReview(completed)).toBeTrue();
+      expect(component.canReview({ ...completed, status: 'CONFIRMED' })).toBeFalse();
+      expect(
+        component.canReview({
+          ...completed,
+          review: { id: 'review-1', rating: 5, comment: null, createdAt: '2026-09-28' },
+        })
+      ).toBeFalse();
+    });
+
+    it('opens the modal with a reset form', () => {
+      component.reviewRating.set(5);
+      component.reviewComment = 'old';
+
+      component.openReview(completed);
+
+      expect(component.reviewTarget()).toEqual(completed);
+      expect(component.reviewModalVisible()).toBeTrue();
+      expect(component.reviewRating()).toBe(0);
+      expect(component.reviewComment).toBe('');
+    });
+
+    it('posts the review and marks the appointment as reviewed', () => {
+      const messages = TestBed.inject(NzMessageService);
+      spyOn(messages, 'success');
+      component.appointments.set([completed]);
+      component.openReview(completed);
+      component.reviewRating.set(4);
+      component.reviewComment = '  Tư vấn rõ ràng  ';
+
+      component.submitReview();
+
+      const request = httpMock.expectOne('/api/v1/doctors/doctor-review-01/reviews');
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toEqual({
+        appointmentId: 'appointment-review-01',
+        rating: 4,
+        comment: 'Tư vấn rõ ràng',
+      });
+      request.flush({
+        id: 'review-01',
+        appointmentId: 'appointment-review-01',
+        doctorId: 'doctor-review-01',
+        rating: 4,
+        comment: 'Tư vấn rõ ràng',
+        createdAt: '2026-09-28T06:00:00.000Z',
+        ratingAverage: 4.5,
+      });
+
+      expect(component.appointments()[0].review?.rating).toBe(4);
+      expect(component.appointments()[0].doctor?.ratingAverage).toBe(4.5);
+      expect(component.reviewModalVisible()).toBeFalse();
+      expect(messages.success).toHaveBeenCalled();
+    });
+
+    it('keeps the modal open and reports an API error', () => {
+      const messages = TestBed.inject(NzMessageService);
+      spyOn(messages, 'error');
+      component.openReview(completed);
+      component.reviewRating.set(5);
+
+      component.submitReview();
+      const request = httpMock.expectOne('/api/v1/doctors/doctor-review-01/reviews');
+      request.flush(
+        { message: 'Ca khám này đã được đánh giá.' },
+        { status: 409, statusText: 'Conflict' }
+      );
+
+      expect(component.reviewSubmitting()).toBeFalse();
+      expect(component.reviewModalVisible()).toBeTrue();
+      expect(messages.error).toHaveBeenCalledWith('Ca khám này đã được đánh giá.');
     });
   });
 });
