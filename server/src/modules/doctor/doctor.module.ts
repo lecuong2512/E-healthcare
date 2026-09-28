@@ -6,14 +6,21 @@ import { DoctorScheduleService } from "./doctor-schedule.service";
 import { DoctorCacheService } from "./doctor-cache.service";
 import { DoctorSearchController } from "./doctor-search.controller";
 import { DoctorSearchService } from "./doctor-search.service";
+import { DoctorReviewController } from "./doctor-review.controller";
+import { DoctorReviewService } from "./doctor-review.service";
 
 @Module({
   imports: [DatabaseModule],
-  controllers: [DoctorScheduleController, DoctorSearchController],
+  controllers: [
+    DoctorScheduleController,
+    DoctorSearchController,
+    DoctorReviewController,
+  ],
   providers: [
     DoctorScheduleService,
     DoctorSearchService,
     DoctorCacheService,
+    DoctorReviewService,
     OwnDoctorGuard,
   ],
 })
