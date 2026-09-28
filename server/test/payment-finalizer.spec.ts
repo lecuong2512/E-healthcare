@@ -180,6 +180,34 @@ describe('PaymentFinalizerService', () => {
     );
   });
 
+  it('keeps a single consistent state when a verified IPN wins the timeout race', async () => {
+    await Promise.all([
+      service.finalize(verified('SUCCESS')),
+      service.expireReservationForReconciliation(
+        PaymentMethod.VNPAY,
+        payment.merchantTransactionId,
+      ),
+    ]);
+
+    expect(payment.status).toBe(PaymentTransactionStatus.SUCCESS);
+    expect(appointment.status).toBe(AppointmentStatus.CONFIRMED);
+    expect(appointment.paymentStatus).toBe(PaymentStatus.PAID);
+    expect(schedule.status).toBe(SlotStatus.BOOKED);
+  });
+
+  it('routes payment to late-success when timeout wins the IPN race', async () => {
+    await service.expireReservationForReconciliation(
+      PaymentMethod.VNPAY,
+      payment.merchantTransactionId,
+    );
+    await service.finalize(verified('SUCCESS'));
+
+    expect(payment.status).toBe(PaymentTransactionStatus.LATE_SUCCESS);
+    expect(appointment.status).toBe(AppointmentStatus.EXPIRED);
+    expect(appointment.paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
+    expect(schedule.status).toBe(SlotStatus.AVAILABLE);
+  });
+
   it('rejects callback amount tampering before any state transition', async () => {
     await expect(
       service.finalize({ ...verified('SUCCESS'), amountVnd: 1 }),
