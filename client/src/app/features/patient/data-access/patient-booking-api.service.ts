@@ -1,0 +1,95 @@
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { Observable } from 'rxjs';
+import { PaymentMethod } from '@shared/enums';
+import {
+  AppointmentResponse,
+  ConfirmBookingRequest,
+  InitiatePaymentResponse,
+  PaymentStatusResponse,
+  ReleaseSlotRequest,
+  ReleaseSlotResponse,
+  ReserveSlotRequest,
+  ReserveSlotResponse,
+} from '@shared/interfaces';
+import { environment } from '../../../../environments/environment';
+
+export interface PatientDoctorSummary {
+  id: string;
+  fullName: string;
+  academicTitle: string | null;
+  specialty: { id: string; name: string };
+  consultationFee: number;
+  bioDescription: string | null;
+  roomNumber: string;
+  ratingAverage: number;
+}
+
+export interface PatientDoctorSchedule {
+  id: string;
+  doctorId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  status: string;
+}
+
+export interface PatientDoctorDetail extends PatientDoctorSummary {
+  availableSchedules: PatientDoctorSchedule[];
+}
+
+export interface PatientDoctorSearchResponse {
+  data: PatientDoctorSummary[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+
+@Injectable({ providedIn: 'root' })
+export class PatientBookingApiService {
+  private readonly http = inject(HttpClient);
+  private readonly api = environment.apiBaseUrl;
+
+  searchDoctors(): Observable<PatientDoctorSearchResponse> {
+    return this.http.get<PatientDoctorSearchResponse>(`${this.api}/doctors/search`, {
+      params: { page: 1, limit: 100 },
+    });
+  }
+
+  getDoctor(doctorId: string): Observable<PatientDoctorDetail> {
+    return this.http.get<PatientDoctorDetail>(
+      `${this.api}/doctors/${encodeURIComponent(doctorId)}`,
+    );
+  }
+
+  reserveSlot(request: ReserveSlotRequest): Observable<ReserveSlotResponse> {
+    return this.http.post<ReserveSlotResponse>(`${this.api}/booking/reserve-slot`, request);
+  }
+
+  releaseSlot(request: ReleaseSlotRequest): Observable<ReleaseSlotResponse> {
+    return this.http.post<ReleaseSlotResponse>(`${this.api}/booking/release-slot`, request);
+  }
+
+  confirmBooking(request: ConfirmBookingRequest): Observable<AppointmentResponse> {
+    return this.http.post<AppointmentResponse>(
+      `${this.api}/booking/confirm-booking`,
+      request,
+    );
+  }
+
+  initiatePayment(
+    appointmentId: string,
+    provider: PaymentMethod.VNPAY | PaymentMethod.MOMO,
+    idempotencyKey: string,
+  ): Observable<InitiatePaymentResponse> {
+    return this.http.post<InitiatePaymentResponse>(
+      `${this.api}/payments/${encodeURIComponent(appointmentId)}/initiate`,
+      { provider },
+      { headers: new HttpHeaders({ 'Idempotency-Key': idempotencyKey }) },
+    );
+  }
+
+  getPaymentStatus(appointmentId: string): Observable<PaymentStatusResponse> {
+    return this.http.get<PaymentStatusResponse>(
+      `${this.api}/payments/${encodeURIComponent(appointmentId)}/status`,
+    );
+  }
+}
