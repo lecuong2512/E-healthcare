@@ -35,6 +35,15 @@ describe('AdminDashboardService', () => {
     await new AdminDashboardService({ query } as unknown as DataSource).overview(7);
     expect(query.mock.calls[0][0]).toContain("status IN ('CANCELLED', 'CANCELLED_BY_PATIENT', 'CANCELLED_BY_CLINIC')");
   });
+  it('asks PostgreSQL for ISO trend dates so chart labels remain stable across time zones', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ visits: '0', revenue: '0', completed: '0', cancelled: '0', noShows: '0' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    await new AdminDashboardService({ query } as unknown as DataSource).overview(7);
+    expect(query.mock.calls[2][0]).toContain("TO_CHAR(DATE(created_at), 'YYYY-MM-DD') AS day");
+  });
   it('stores the administrator confirmation before a report is issued', async () => {
     const repository = { create: jest.fn(value => value), save: jest.fn(value => Promise.resolve(value)) };
     const service = new AdminDashboardService({ getRepository: jest.fn(() => repository) } as unknown as DataSource);

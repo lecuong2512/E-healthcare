@@ -54,6 +54,10 @@ new_doctors AS (
   ) s ON s.row_no = ((u.row_no - 1) % 3) + 1
   RETURNING id, specialty_id
 ),
+numbered_doctors AS (
+  SELECT id, specialty_id, row_number() OVER (ORDER BY id) AS doctor_no
+  FROM new_doctors
+),
 new_patient AS (
   INSERT INTO users (email, full_name, gender, date_of_birth, status)
   VALUES ('demo.kpi.patient@ehealth.local', 'Bệnh nhân KPI Demo', 'OTHER', '1992-01-01', 'ACTIVE')
@@ -61,9 +65,10 @@ new_patient AS (
 ),
 new_schedules AS (
   INSERT INTO doctor_schedules (doctor_id, date, start_time, end_time, status)
-  SELECT d.id, CURRENT_DATE - day_offset, '08:00', '08:30', 'BOOKED'
-  FROM new_doctors d
-  CROSS JOIN generate_series(0, 6) AS day_offset
+  SELECT d.id, CURRENT_DATE - pattern.day_offset, '08:00', '08:30', 'BOOKED'
+  FROM numbered_doctors d
+  JOIN (VALUES (0, 6), (1, 4), (2, 5), (3, 6), (4, 5), (5, 6), (6, 5)) AS pattern(day_offset, visits)
+    ON d.doctor_no <= pattern.visits
   RETURNING id, doctor_id, date
 )
 INSERT INTO appointments (
