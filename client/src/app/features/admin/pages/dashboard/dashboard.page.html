@@ -9,9 +9,9 @@
       <article class="trend-card">
         <div class="chart-heading"><h2>Doanh thu & lượt khám theo tuần</h2><div class="legend"><span class="revenue-key"></span>Doanh thu <span class="visit-key"></span>Lượt khám</div></div>
         @if(kpi().trend.length){
-          <svg class="weekly-chart" viewBox="0 0 620 228" role="img" aria-label="Biểu đồ doanh thu và lượt khám">
-            <g class="grid"><line x1="52" x2="570" y1="38" y2="38"/><line x1="52" x2="570" y1="107" y2="107"/><line x1="52" x2="570" y1="176" y2="176"/></g>
-            <g class="axis-label"><text x="17" y="42">{{revenueAxisLabel(1)}}</text><text x="17" y="111">{{revenueAxisLabel(.5)}}</text><text x="39" y="180">0</text><text x="580" y="42">{{visitAxisLabel(1)}}</text><text x="580" y="111">{{visitAxisLabel(.5)}}</text><text x="580" y="180">0</text></g>
+          <svg class="weekly-chart" viewBox="0 0 665 228" role="img" aria-label="Biểu đồ doanh thu và lượt khám">
+            <g class="grid"><line x1="52" x2="595" y1="38" y2="38"/><line x1="52" x2="595" y1="107" y2="107"/><line x1="52" x2="595" y1="176" y2="176"/></g>
+            <g class="axis-label"><text x="17" y="42">{{revenueAxisLabel(1)}}</text><text x="17" y="111">{{revenueAxisLabel(.5)}}</text><text x="39" y="180">0</text><text x="618" y="42">{{visitAxisLabel(1)}}</text><text x="618" y="111">{{visitAxisLabel(.5)}}</text><text x="618" y="180">0</text></g>
             @for(point of kpi().trend; track point.day; let index = $index){
               <rect class="revenue-bar" [attr.x]="chartX(index)-19" [attr.y]="revenueY(point.revenue)" width="38" [attr.height]="revenueHeight(point.revenue)"><title>{{ chartDay(point.day) }}: {{ point.revenue | number }} VND</title></rect>
               <text class="day-label" [attr.x]="chartX(index)" y="211">{{chartDay(point.day)}}</text>
