@@ -37,6 +37,6 @@
         } @else {<div class="payment-empty">Chưa có thanh toán trong kỳ.</div>}
       </article>
     </div>
-    <article class="performance"><h2>Hiệu suất bác sĩ</h2><table><thead><tr><th>Bác sĩ</th><th>Chuyên khoa</th><th>Ca hoàn thành</th><th>Thời gian TB</th><th>Điểm đánh giá</th></tr></thead><tbody>@for(doctor of kpi().doctorPerformance;track doctor.name){<tr><td>{{doctor.name}}</td><td>{{doctor.specialty}}</td><td>{{doctor.completedCases}}</td><td>{{doctor.averageMinutes}} phút</td><td>★★★★★ {{doctor.rating}}</td></tr>} @empty {<tr><td colspan="5">Chưa có dữ liệu hiệu suất trong kỳ.</td></tr>}</tbody></table></article>
+    <article class="performance"><h2>Hiệu suất bác sĩ</h2><table><thead><tr><th>Bác sĩ</th><th>Chuyên khoa</th><th>Ca hoàn thành</th><th>Thời gian TB</th><th>Điểm đánh giá</th></tr></thead><tbody>@for(doctor of kpi().doctorPerformance;track doctor.name){<tr><td>{{doctor.name}}</td><td><span class="specialty-badge">{{doctor.specialty}}</span></td><td class="completed-cases">{{doctor.completedCases}}</td><td class="average-minutes">{{doctor.averageMinutes}} phút</td><td><span class="rating"><i><b [style.width.%]="doctor.rating * 20"></b></i><em>★</em>{{doctor.rating}}</span></td></tr>} @empty {<tr><td colspan="5">Chưa có dữ liệu hiệu suất trong kỳ.</td></tr>}</tbody></table></article>
   </section>
 </main>
