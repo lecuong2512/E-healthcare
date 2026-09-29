@@ -2,6 +2,7 @@ import { DataSource } from 'typeorm';
 import { StaffAdminService } from '../src/modules/admin/staff-admin.service';
 import { Gender, Role, UserStatus } from '@shared/enums';
 import { DoctorRecurringShiftEntity } from '../src/database/entities/doctor-recurring-shift.entity';
+import { UserEntity } from '../src/database/entities/user.entity';
 
 describe('StaffAdminService', () => {
   it('changes an employee account state without deleting the account', async () => {
@@ -43,5 +44,16 @@ describe('StaffAdminService', () => {
       approvalStatus: 'APPROVED', approvedBy: 'admin-1',
     });
     expect(repository.save).toHaveBeenCalledWith(expect.objectContaining({ approvalStatus: 'APPROVED', approvedBy: 'admin-1' }));
+  });
+
+  it('updates a doctor professional profile without creating a new account', async () => {
+    const user = { id: 'u1', fullName: 'BS Cu', status: UserStatus.ACTIVE };
+    const doctor = { id: 'd1', userId: 'u1', roomNumber: 'P.101', licenseNumber: 'OLD', yearsExperience: 2 };
+    const userRepo = { findOneBy: jest.fn().mockResolvedValue(user), save: jest.fn(async (value) => value) };
+    const doctorRepo = { findOneBy: jest.fn().mockResolvedValue(doctor), save: jest.fn(async (value) => value) };
+    const service = new StaffAdminService({ getRepository: jest.fn((entity) => entity === UserEntity ? userRepo : doctorRepo) } as unknown as DataSource);
+
+    await expect(service.updateProfile('u1', { fullName: 'BS Moi', roomNumber: 'P.202', licenseNumber: 'CCHN-NEW', yearsExperience: 9 })).resolves.toMatchObject({ fullName: 'BS Moi' });
+    expect(doctorRepo.save).toHaveBeenCalledWith(expect.objectContaining({ roomNumber: 'P.202', licenseNumber: 'CCHN-NEW', yearsExperience: 9 }));
   });
 });

@@ -18,6 +18,9 @@ export class StaffAdminController {
   @Patch(':userId/status')
   changeStatus(@Param('userId') userId: string, @Body('status') status: UserStatus) { return this.service.changeStatus(userId, status); }
 
+  @Patch(':userId')
+  updateProfile(@Param('userId') userId: string, @Body() body: Parameters<StaffAdminService['updateProfile']>[1]) { return this.service.updateProfile(userId, body); }
+
   @Get('recurring-shifts')
   listRecurringShifts() { return this.service.listRecurringShifts(); }
 

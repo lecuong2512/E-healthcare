@@ -31,9 +31,9 @@ export class StaffMgmtPage {
       error: () => { this.submitting.set(false); this.errorMessage.set('Không thể tạo tài khoản. Vui lòng kiểm tra lại thông tin.'); },
     });
   }
-  changeStatus(person: StaffView, status: 'ACTIVE' | 'BLOCKED'): void { this.api.changeStatus(person.id, status).subscribe({ next: () => this.loadStaff() }); }
+  changeStatus(person: StaffView, status: 'ACTIVE' | 'BLOCKED' | 'SUSPENDED'): void { this.api.changeStatus(person.id, status).subscribe({ next: () => this.loadStaff() }); }
   approveRecurringShift(shift: RecurringShiftRow): void { this.api.approveRecurringShift(shift.id).subscribe({ next: () => this.loadRecurringShifts() }); }
   private loadStaff(): void { this.api.list().subscribe({ next: result => this.staff.set(result.data.map((person, index) => this.toView(person, index))), error: () => this.staff.set([]) }); }
   private loadRecurringShifts(): void { this.api.listRecurringShifts().subscribe({ next: shifts => this.recurringShifts.set(shifts), error: () => this.recurringShifts.set([]) }); }
-  private toView(person: StaffRow, index: number): StaffView { return { id: person.id, code: `NV-${String(index + 1).padStart(5, '0')}`, name: person.fullName, role: person.email ? 'Nhân sự y tế' : 'Nhân sự', facility: 'Trung tâm', status: person.status === 'ACTIVE' ? 'Hoạt động' : person.status === 'BLOCKED' ? 'Đã khóa' : 'Chờ kích hoạt' }; }
+  private toView(person: StaffRow, index: number): StaffView { return { id: person.id, code: `NV-${String(index + 1).padStart(5, '0')}`, name: person.fullName, role: person.email ? 'Nhân sự y tế' : 'Nhân sự', facility: 'Trung tâm', status: person.status === 'ACTIVE' ? 'Hoạt động' : person.status === 'BLOCKED' ? 'Đã khóa' : person.status === 'SUSPENDED' ? 'Tạm ngưng' : 'Chờ kích hoạt' }; }
 }

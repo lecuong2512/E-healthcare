@@ -9,6 +9,7 @@ import { DoctorSpecialtyEntity } from '../../database/entities/doctor-specialty.
 import { DoctorRecurringShiftEntity } from '../../database/entities/doctor-recurring-shift.entity';
 
 export interface CreateStaffInput { fullName: string; email: string; password: string; role: Role; gender: Gender; dateOfBirth: string; specialtyId?: string; specialtyIds?: string[]; licenseNumber?: string; roomNumber?: string; academicTitle?: string; yearsExperience?: number; }
+export interface UpdateStaffProfileInput { fullName?: string; licenseNumber?: string; roomNumber?: string; academicTitle?: string | null; yearsExperience?: number; }
 
 @Injectable()
 export class StaffAdminService {
@@ -33,6 +34,27 @@ export class StaffAdminService {
       if (input.role === Role.DOCTOR) { const doctor = await manager.save(manager.create(DoctorEntity, { userId: user.id, specialtyId: specialtyIds[0], licenseNumber: input.licenseNumber!, academicTitle: input.academicTitle ?? null, yearsExperience: input.yearsExperience!, consultationFee: 0, bioDescription: null, roomNumber: input.roomNumber!, ratingAverage: 5 })); for (const [index, specialtyId] of specialtyIds.entries()) await manager.save(manager.create(DoctorSpecialtyEntity, { doctorId: doctor.id, specialtyId, isPrimary: index === 0 })); }
       return user;
     });
+  }
+
+  async updateProfile(userId: string, input: UpdateStaffProfileInput) {
+    const userRepository = this.dataSource.getRepository(UserEntity);
+    const user = await userRepository.findOneBy({ id: userId });
+    if (!user) throw new NotFoundException('Không tìm thấy nhân sự.');
+    if (input.fullName?.trim()) user.fullName = input.fullName.trim();
+    await userRepository.save(user);
+    const doctorRepository = this.dataSource.getRepository(DoctorEntity);
+    const doctor = await doctorRepository.findOneBy({ userId });
+    if (doctor) {
+      if (input.licenseNumber?.trim()) doctor.licenseNumber = input.licenseNumber.trim();
+      if (input.roomNumber?.trim()) doctor.roomNumber = input.roomNumber.trim();
+      if (input.academicTitle !== undefined) doctor.academicTitle = input.academicTitle?.trim() || null;
+      if (input.yearsExperience !== undefined) {
+        if (input.yearsExperience < 0) throw new BadRequestException('Số năm kinh nghiệm không hợp lệ.');
+        doctor.yearsExperience = input.yearsExperience;
+      }
+      await doctorRepository.save(doctor);
+    }
+    return user;
   }
 
   async listRecurringShifts() {
