@@ -2,8 +2,7 @@
   <header><b>✥ E-Healthcare</b><span>Medical</span><i>TN</i></header>
   <section>
     <h1>Bảng điều hành & KPI vận hành</h1><small>SRS-ADM-03</small>
-    <div class="toolbar"><nav><button (click)="select(1)">Hôm nay</button><button class="active" (click)="select(7)">7 ngày qua</button><button (click)="select(30)">Tháng này</button></nav><div><button (click)="approve()">{{approved()?'Đã phê duyệt':'Xác nhận xuất báo cáo'}}</button><a [class.disabled]="!approved()" [attr.href]="exportUrl('xlsx')">⇩ Xuất Excel .xlsx</a><a [class.disabled]="!approved()" [attr.href]="exportUrl('pdf')">⇩ Xuất PDF</a></div></div>
-    @if(approved()){<aside>✓ Báo cáo đã được người quản trị xác nhận trước khi phát hành.</aside>} @else {<aside class="pending">Cần xác nhận của người quản trị trước khi xuất báo cáo.</aside>}
+    <div class="toolbar"><nav><button (click)="select(1)">Hôm nay</button><button class="active" (click)="select(7)">7 ngày qua</button><button (click)="select(30)">Tháng này</button></nav><div><a [attr.href]="exportUrl('xlsx')">⇩ Xuất Excel .xlsx</a><a [attr.href]="exportUrl('pdf')">⇩ Xuất PDF</a></div></div>
     <div class="metrics">
       <article><span>Tổng lượt khám</span><b>{{kpi().visits | number}}</b><em><mark [class.negative]="isNegative(kpi().comparison?.visits)">{{deltaText(kpi().comparison?.visits)}}</mark> <small>vs tuần trước</small></em></article>
       <article><span>Tổng doanh thu</span><b>{{kpi().revenue | number}} VND</b><em><mark [class.negative]="isNegative(kpi().comparison?.revenue)">{{deltaText(kpi().comparison?.revenue)}}</mark> <small>vs tuần trước</small></em></article>

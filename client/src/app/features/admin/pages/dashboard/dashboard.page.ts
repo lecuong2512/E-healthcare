@@ -5,12 +5,11 @@ const EMPTY: DashboardKpi={visits:0,revenue:0,completionRate:0,cancellationRate:
 @Component({selector:'app-admin-dashboard-page',standalone:true,imports:[CommonModule],templateUrl:'./dashboard.page.html',styleUrl:'./dashboard.page.scss',changeDetection:ChangeDetectionStrategy.OnPush})
 export class AdminDashboardPage {
   private readonly api=inject(AdminDashboardApiService);
-  readonly days=signal(7); readonly kpi=signal<DashboardKpi>(EMPTY); readonly approved=signal(false);
+  readonly days=signal(7); readonly kpi=signal<DashboardKpi>(EMPTY);
   ngOnInit(){this.load();}
-  select(days:number){this.days.set(days);this.approved.set(false);this.load();}
+  select(days:number){this.days.set(days);this.load();}
   load(){this.api.overview(this.days()).subscribe({next:value=>this.kpi.set(value)});}
-  approve(){this.api.approve(this.days()).subscribe({next:()=>this.approved.set(true)});}
-  exportUrl(type:'xlsx'|'pdf'){return this.approved() ? `/api/v1/admin/dashboard/export/${type}?days=${this.days()}` : null;}
+  exportUrl(type:'xlsx'|'pdf'){return `/api/v1/admin/dashboard/export/${type}?days=${this.days()}`;}
   chartDay(day:string){return ['CN','T2','T3','T4','T5','T6','T7'][new Date(`${day}T00:00:00Z`).getUTCDay()];}
   chartX(index:number){const count=this.kpi().trend.length; return 70 + index * (500 / Math.max(1,count-1));}
   private chartScale(value:number,max:number){return 176 - (value / Math.max(1,max)) * 138;}
