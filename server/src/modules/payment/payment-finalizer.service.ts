@@ -284,7 +284,10 @@ export class PaymentFinalizerService {
       payment.reconciliationManualReview = false;
     }
 
-    if (payment.status === PaymentTransactionStatus.SUCCESS) {
+    if (
+      payment.status === PaymentTransactionStatus.SUCCESS ||
+      payment.status === PaymentTransactionStatus.LATE_SUCCESS
+    ) {
       await manager.save(payment);
       return { outcome: 'ALREADY_FINALIZED' };
     }
