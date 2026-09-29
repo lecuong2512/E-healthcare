@@ -6,6 +6,7 @@ import { UserRoleEntity } from '../../database/entities/auth.entity';
 import { DoctorEntity } from '../../database/entities/doctor.entity';
 import { hashPassword } from '../../common/utils/crypto.util';
 import { DoctorSpecialtyEntity } from '../../database/entities/doctor-specialty.entity';
+import { DoctorRecurringShiftEntity } from '../../database/entities/doctor-recurring-shift.entity';
 
 export interface CreateStaffInput { fullName: string; email: string; password: string; role: Role; gender: Gender; dateOfBirth: string; specialtyId?: string; specialtyIds?: string[]; licenseNumber?: string; roomNumber?: string; academicTitle?: string; yearsExperience?: number; }
 
@@ -32,5 +33,19 @@ export class StaffAdminService {
       if (input.role === Role.DOCTOR) { const doctor = await manager.save(manager.create(DoctorEntity, { userId: user.id, specialtyId: specialtyIds[0], licenseNumber: input.licenseNumber!, academicTitle: input.academicTitle ?? null, yearsExperience: input.yearsExperience!, consultationFee: 0, bioDescription: null, roomNumber: input.roomNumber!, ratingAverage: 5 })); for (const [index, specialtyId] of specialtyIds.entries()) await manager.save(manager.create(DoctorSpecialtyEntity, { doctorId: doctor.id, specialtyId, isPrimary: index === 0 })); }
       return user;
     });
+  }
+
+  async listRecurringShifts() {
+    return this.dataSource.getRepository(DoctorRecurringShiftEntity).find({ order: { createdAt: 'DESC' } });
+  }
+
+  async approveRecurringShift(shiftId: string, approvedBy: string) {
+    const repository = this.dataSource.getRepository(DoctorRecurringShiftEntity);
+    const shift = await repository.findOneBy({ id: shiftId });
+    if (!shift) throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y cáº¥u hÃ¬nh ca trá»±c.');
+    shift.approvalStatus = 'APPROVED';
+    shift.approvedBy = approvedBy;
+    shift.approvedAt = new Date();
+    return repository.save(shift);
   }
 }

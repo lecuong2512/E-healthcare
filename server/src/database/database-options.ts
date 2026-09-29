@@ -47,6 +47,8 @@ import { CreateEmrAddendumsTable1790150000000 } from "./migrations/1790150000000
 import { AddAppointmentConsent1790151600000 } from "./migrations/1790151600000-add-appointment-consent";
 import { DoctorSpecialtyEntity } from './entities/doctor-specialty.entity';
 import { AddDoctorSpecialties1790310000000 } from './migrations/1790310000000-add-doctor-specialties';
+import { DoctorRecurringShiftEntity } from './entities/doctor-recurring-shift.entity';
+import { AddDoctorRecurringShifts1790313600000 } from './migrations/1790313600000-add-doctor-recurring-shifts';
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -65,6 +67,7 @@ export function createDataSource(url: string): DataSource {
       SpecialtyEntity,
       DoctorEntity,
       DoctorSpecialtyEntity,
+      DoctorRecurringShiftEntity,
       DoctorScheduleEntity,
       AppointmentEntity,
       VoucherEntity,
@@ -102,6 +105,7 @@ export function createDataSource(url: string): DataSource {
       CreateEmrAddendumsTable1790150000000,
       AddAppointmentConsent1790151600000,
       AddDoctorSpecialties1790310000000,
+      AddDoctorRecurringShifts1790313600000,
     ],
   });
 }
