@@ -87,18 +87,10 @@ export class PaymentController {
   @Public()
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @Post('momo/ipn')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.NO_CONTENT)
   async momoIpn(
     @Body() payload: Record<string, unknown>,
-  ): Promise<{ resultCode: number; message: string }> {
-    try {
-      const outcome = await this.payments.handleMomoIpn(payload);
-      if (outcome === 'RECONCILIATION_REQUIRED' || outcome === 'LATE_SUCCESS') {
-        return { resultCode: 99, message: 'Reconciliation required' };
-      }
-      return { resultCode: 0, message: 'Success' };
-    } catch {
-      return { resultCode: 99, message: 'Invalid payment notification' };
-    }
+  ): Promise<void> {
+    await this.payments.handleMomoIpn(payload);
   }
 }

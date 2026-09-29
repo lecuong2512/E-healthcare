@@ -140,6 +140,6 @@ describe('Payment HTTP authorization and DTO contract', () => {
     await request(app.getHttpServer())
       .post('/api/v1/payments/momo/ipn')
       .send({ orderId: 'PAY01' })
-      .expect(200, { resultCode: 0, message: 'Success' });
+      .expect(204, '');
   });
 });

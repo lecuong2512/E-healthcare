@@ -27,6 +27,7 @@ describe('PaymentReconciliationService', () => {
     state: 'SUCCESS',
     responseCode: '00',
     signatureVerified: true,
+    sourceValidated: true,
     sanitizedPayload: {},
   };
 

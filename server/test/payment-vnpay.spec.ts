@@ -1,6 +1,7 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
 import { PaymentMethod } from '@shared/enums';
+import { PaymentTransactionEntity } from '../src/database/entities/payment-trans.entity';
 import { VnpayProvider } from '../src/modules/payment/providers/vnpay.provider';
 import { safeEqualHex } from '../src/modules/payment/security/safe-signature';
 import { VnpayCanonicalizer } from '../src/modules/payment/security/vnpay-canonicalizer';
@@ -16,6 +17,8 @@ describe('VNPAY 2.1 sandbox provider', () => {
     ipnUrl: 'https://api.example.test/api/v1/payments/vnpay/ipn',
     queryUrl: 'https://sandbox.vnpayment.vn/merchant_webapi/api/transaction',
   };
+
+  afterEach(() => jest.restoreAllMocks());
 
   it('canonicalizes sorted VNPAY fields and excludes secure hash fields', () => {
     const canonical = new VnpayCanonicalizer().canonicalize({
@@ -82,7 +85,85 @@ describe('VNPAY 2.1 sandbox provider', () => {
       amountVnd: 300_000,
       state: 'SUCCESS',
       signatureVerified: true,
+      sourceValidated: true,
     });
+  });
+
+  it.each([
+    ['01', 'PENDING'],
+    ['04', 'UNKNOWN'],
+    ['07', 'UNKNOWN'],
+    ['02', 'FINAL_FAILED'],
+  ])('maps VNPAY transaction status %s to %s', async (transactionStatus, state) => {
+    const payload: Record<string, string> = {
+      vnp_TmnCode: config.tmnCode,
+      vnp_TxnRef: 'PAY-STATE',
+      vnp_Amount: '30000000',
+      vnp_ResponseCode: '00',
+      vnp_TransactionStatus: transactionStatus,
+    };
+    payload.vnp_SecureHash = new VnpaySignatureService(secret).sign(payload);
+
+    await expect(new VnpayProvider(config).verifyCallback(payload)).resolves.toMatchObject({
+      state,
+    });
+  });
+
+  it.each([
+    ['vnp_TxnRef', 'ANOTHER-ORDER'],
+    ['vnp_TmnCode', 'ATTACKER'],
+    ['vnp_Amount', '10000'],
+  ])('rejects a signed query response with mismatched %s', async (field, value) => {
+    const response: Record<string, string> = {
+      vnp_ResponseId: 'response-1',
+      vnp_Command: 'querydr',
+      vnp_ResponseCode: '00',
+      vnp_Message: 'Success',
+      vnp_TmnCode: config.tmnCode,
+      vnp_TxnRef: 'PAY-QUERY',
+      vnp_Amount: '30000000',
+      vnp_BankCode: 'NCB',
+      vnp_PayDate: '20260928130000',
+      vnp_TransactionNo: '12345',
+      vnp_TransactionType: '01',
+      vnp_TransactionStatus: '00',
+      vnp_OrderInfo: 'Query PAY-QUERY',
+      vnp_PromotionCode: '',
+      vnp_PromotionAmount: '',
+      [field]: value,
+    };
+    const signData = [
+      response.vnp_ResponseId,
+      response.vnp_Command,
+      response.vnp_ResponseCode,
+      response.vnp_Message,
+      response.vnp_TmnCode,
+      response.vnp_TxnRef,
+      response.vnp_Amount,
+      response.vnp_BankCode,
+      response.vnp_PayDate,
+      response.vnp_TransactionNo,
+      response.vnp_TransactionType,
+      response.vnp_TransactionStatus,
+      response.vnp_OrderInfo,
+      response.vnp_PromotionCode,
+      response.vnp_PromotionAmount,
+    ].join('|');
+    response.vnp_SecureHash = createHmac('sha512', secret)
+      .update(signData, 'utf8')
+      .digest('hex');
+    jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => response,
+    } as Response);
+
+    await expect(
+      new VnpayProvider(config).queryStatus({
+        merchantTransactionId: 'PAY-QUERY',
+        amountVnd: 300_000,
+        createdAt: new Date('2026-09-28T12:00:00.000Z'),
+      } as PaymentTransactionEntity),
+    ).rejects.toBeInstanceOf(BadGatewayException);
   });
 
   it('rejects tampering, malformed amounts, and invalid integer VND input', async () => {

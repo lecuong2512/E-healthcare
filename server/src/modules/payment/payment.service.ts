@@ -126,6 +126,7 @@ export class PaymentService {
           paidAt: null,
           callbackReceivedAt: null,
           signatureVerified: false,
+          sourceValidated: false,
           sanitizedProviderPayload: null,
         }),
       );

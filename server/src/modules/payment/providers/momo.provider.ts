@@ -82,7 +82,7 @@ export class MomoProvider implements PaymentProvider {
     if (result.partnerCode !== this.config.partnerCode) {
       throw new BadRequestException('Invalid MoMo partner code.');
     }
-    return this.normalize(result);
+    return this.normalize(result, true, true);
   }
 
   async queryStatus(
@@ -118,11 +118,15 @@ export class MomoProvider implements PaymentProvider {
     ) {
       throw new BadGatewayException('MoMo query amount mismatch.');
     }
-    return this.normalize({
-      ...result,
-      amount: result.amount ?? Number(transaction.amountVnd),
-      signature: '',
-    });
+    return this.normalize(
+      {
+        ...result,
+        amount: result.amount ?? Number(transaction.amountVnd),
+        signature: '',
+      },
+      false,
+      true,
+    );
   }
 
   private verifyCreateResponse(result: MomoPayload, context: PaymentContext): void {
@@ -144,7 +148,11 @@ export class MomoProvider implements PaymentProvider {
     }
   }
 
-  private normalize(payload: MomoPayload): VerifiedPaymentResult {
+  private normalize(
+    payload: MomoPayload,
+    signatureVerified: boolean,
+    sourceValidated: boolean,
+  ): VerifiedPaymentResult {
     const resultCode = Number(payload.resultCode);
     const amountVnd = Number(payload.amount);
     if (!Number.isSafeInteger(resultCode) || !Number.isSafeInteger(amountVnd)) {
@@ -161,7 +169,8 @@ export class MomoProvider implements PaymentProvider {
       state: this.mapState(resultCode),
       responseCode: String(resultCode),
       rawProviderStatus: String(resultCode),
-      signatureVerified: true,
+      signatureVerified,
+      sourceValidated,
       sanitizedPayload: this.sanitize(payload),
     };
   }

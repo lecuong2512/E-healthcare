@@ -75,13 +75,11 @@ export class VnpayProvider implements PaymentProvider {
       merchantTransactionId: params.vnp_TxnRef,
       providerTransactionId: params.vnp_TransactionNo || undefined,
       amountVnd,
-      state:
-        responseCode === '00' && transactionStatus === '00'
-          ? 'SUCCESS'
-          : 'FINAL_FAILED',
+      state: this.mapState(responseCode, transactionStatus),
       responseCode,
       rawProviderStatus: transactionStatus,
       signatureVerified: true,
+      sourceValidated: true,
       sanitizedPayload: this.sanitize(params),
     };
   }
@@ -129,25 +127,27 @@ export class VnpayProvider implements PaymentProvider {
     if (!this.verifyQueryResponse(result)) {
       throw new BadGatewayException('Invalid VNPAY query signature.');
     }
+    if (
+      result.vnp_TxnRef !== transaction.merchantTransactionId ||
+      result.vnp_TmnCode !== this.config.tmnCode ||
+      !result.vnp_Amount ||
+      this.parseProviderAmount(result.vnp_Amount) !== Number(transaction.amountVnd)
+    ) {
+      throw new BadGatewayException('VNPAY query response mismatch.');
+    }
     const responseCode = result.vnp_ResponseCode || '99';
     const providerStatus = result.vnp_TransactionStatus || '';
-    const amountVnd = result.vnp_Amount
-      ? this.parseProviderAmount(result.vnp_Amount)
-      : Number(transaction.amountVnd);
+    const amountVnd = this.parseProviderAmount(result.vnp_Amount);
     return {
       provider: PaymentMethod.VNPAY,
-      merchantTransactionId: transaction.merchantTransactionId,
+      merchantTransactionId: result.vnp_TxnRef,
       providerTransactionId: result.vnp_TransactionNo || undefined,
       amountVnd,
-      state:
-        responseCode === '00' && providerStatus === '00'
-          ? 'SUCCESS'
-          : responseCode === '00'
-            ? 'FINAL_FAILED'
-            : 'UNKNOWN',
+      state: this.mapState(responseCode, providerStatus),
       responseCode,
       rawProviderStatus: providerStatus,
       signatureVerified: true,
+      sourceValidated: true,
       sanitizedPayload: this.sanitize(result),
     };
   }
@@ -188,6 +188,22 @@ export class VnpayProvider implements PaymentProvider {
       throw new BadRequestException('Invalid VNPAY amount.');
     }
     return scaled / 100;
+  }
+
+  private mapState(
+    responseCode: string,
+    transactionStatus: string,
+  ): VerifiedPaymentResult['state'] {
+    if (responseCode === '00' && transactionStatus === '00') return 'SUCCESS';
+    if (transactionStatus === '01') return 'PENDING';
+    if (['04', '05', '06', '07'].includes(transactionStatus)) return 'UNKNOWN';
+    if (
+      responseCode === '00' &&
+      ['02', '03', '08', '09', '10', '11', '12'].includes(transactionStatus)
+    ) {
+      return 'FINAL_FAILED';
+    }
+    return 'UNKNOWN';
   }
 
   private assertAmount(amountVnd: number): void {

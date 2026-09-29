@@ -82,6 +82,9 @@ export class PaymentTransactionEntity {
   @Column({ name: 'signature_verified', type: 'boolean', default: false })
   signatureVerified!: boolean;
 
+  @Column({ name: 'source_validated', type: 'boolean', default: false })
+  sourceValidated!: boolean;
+
   @Column({ name: 'sanitized_provider_payload', type: 'jsonb', nullable: true })
   sanitizedProviderPayload!: Record<string, unknown> | null;
 

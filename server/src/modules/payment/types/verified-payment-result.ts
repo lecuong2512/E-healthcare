@@ -14,6 +14,7 @@ export interface VerifiedPaymentResult {
   state: VerifiedPaymentState;
   responseCode: string;
   rawProviderStatus?: string;
-  signatureVerified: true;
+  signatureVerified: boolean;
+  sourceValidated: boolean;
   sanitizedPayload: Record<string, string | number | boolean | null>;
 }

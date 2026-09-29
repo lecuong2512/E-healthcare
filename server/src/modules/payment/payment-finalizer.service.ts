@@ -213,6 +213,7 @@ export class PaymentFinalizerService {
     payment.providerStatus = result.rawProviderStatus || null;
     payment.callbackReceivedAt = new Date();
     payment.signatureVerified = result.signatureVerified;
+    payment.sourceValidated = result.sourceValidated;
     payment.sanitizedProviderPayload = result.sanitizedPayload;
 
     if (payment.status === PaymentTransactionStatus.SUCCESS) {

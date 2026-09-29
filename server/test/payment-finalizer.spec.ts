@@ -31,6 +31,7 @@ describe('PaymentFinalizerService', () => {
     responseCode: state === 'SUCCESS' ? '00' : '24',
     rawProviderStatus: state === 'SUCCESS' ? '00' : '24',
     signatureVerified: true,
+    sourceValidated: true,
     sanitizedPayload: { vnp_TxnRef: 'PAY01' },
   });
 
@@ -48,6 +49,7 @@ describe('PaymentFinalizerService', () => {
       providerStatus: null,
       callbackReceivedAt: null,
       signatureVerified: false,
+      sourceValidated: false,
       sanitizedProviderPayload: null,
       paidAt: null,
     } as PaymentTransactionEntity;

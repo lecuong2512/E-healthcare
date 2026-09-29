@@ -131,7 +131,33 @@ describe('MoMo sandbox provider', () => {
       amountVnd: 300_000,
       state,
       signatureVerified: true,
+      sourceValidated: true,
     });
+  });
+
+  it('records query identity validation without claiming a response signature', async () => {
+    jest.spyOn(global, 'fetch').mockImplementationOnce(async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      return {
+        ok: true,
+        json: async () => ({
+          partnerCode: config.partnerCode,
+          orderId: 'PAY-QUERY',
+          requestId: request.requestId,
+          amount: 300_000,
+          transId: 123,
+          resultCode: 0,
+        }),
+      } as Response;
+    });
+    const provider = new MomoProvider(config);
+
+    await expect(
+      provider.queryStatus({
+        merchantTransactionId: 'PAY-QUERY',
+        amountVnd: 300_000,
+      } as never),
+    ).resolves.toMatchObject({ signatureVerified: false, sourceValidated: true });
   });
 
   it('rejects invalid IPN signatures and malformed amounts', async () => {
