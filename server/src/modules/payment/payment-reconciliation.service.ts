@@ -11,6 +11,7 @@ import { PaymentTransactionEntity } from '../../database/entities/payment-trans.
 import { MOMO_PROVIDER, VNPAY_PROVIDER } from './constants/payment.constants';
 import { PaymentFinalizerService } from './payment-finalizer.service';
 import { PaymentProvider } from './providers/payment-provider.interface';
+import { PaymentConfiguration } from './payment-config';
 
 @Injectable()
 export class PaymentReconciliationService {
@@ -21,13 +22,14 @@ export class PaymentReconciliationService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly finalizer: PaymentFinalizerService,
+    private readonly configuration: PaymentConfiguration,
     @Inject(VNPAY_PROVIDER) private readonly vnpay: PaymentProvider,
     @Inject(MOMO_PROVIDER) private readonly momo: PaymentProvider,
   ) {}
 
   @Cron('*/2 * * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
   async reconcileExpired(now = new Date()): Promise<number> {
-    if (this.running || !this.dataSource.isInitialized) return 0;
+    if (!this.configuration.isEnabled() || this.running || !this.dataSource.isInitialized) return 0;
     const lockRunner = this.dataSource.createQueryRunner();
     let acquired = false;
     await lockRunner.connect();

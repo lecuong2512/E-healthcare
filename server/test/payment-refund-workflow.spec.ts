@@ -5,6 +5,7 @@ import { RefundRequestEntity } from '../src/database/entities/refund-request.ent
 import { PaymentTransactionEntity } from '../src/database/entities/payment-trans.entity';
 import { PaymentFinalizerService } from '../src/modules/payment/payment-finalizer.service';
 import { PaymentService } from '../src/modules/payment/payment.service';
+import { PaymentConfiguration } from '../src/modules/payment/payment-config';
 import { PaymentProvider } from '../src/modules/payment/providers/payment-provider.interface';
 
 describe('Payment manual refund workflow', () => {
@@ -67,6 +68,7 @@ describe('Payment manual refund workflow', () => {
     service = new PaymentService(
       dataSource,
       {} as PaymentFinalizerService,
+      { ensureEnabled: jest.fn(), isEnabled: jest.fn().mockReturnValue(true) } as unknown as PaymentConfiguration,
       provider,
       provider,
     );

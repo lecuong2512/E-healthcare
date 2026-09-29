@@ -28,12 +28,15 @@ import {
 } from './constants/payment.constants';
 import { PaymentFinalizerService, PaymentFinalizeOutcome } from './payment-finalizer.service';
 import { PaymentProvider } from './providers/payment-provider.interface';
+import { PaymentConfiguration } from './payment-config';
+import { PaymentProviderError } from './providers/payment-provider.error';
 
 @Injectable()
 export class PaymentService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly finalizer: PaymentFinalizerService,
+    private readonly configuration: PaymentConfiguration,
     @Inject(VNPAY_PROVIDER) private readonly vnpay: PaymentProvider,
     @Inject(MOMO_PROVIDER) private readonly momo: PaymentProvider,
   ) {}
@@ -45,6 +48,7 @@ export class PaymentService {
     dto: InitiatePaymentDto,
     clientIp: string,
   ): Promise<InitiatePaymentResponse> {
+    this.configuration.ensureEnabled();
     if (!this.isUuid(idempotencyKey)) {
       throw new BadRequestException('Idempotency-Key phải là UUID hợp lệ.');
     }
@@ -149,15 +153,21 @@ export class PaymentService {
     });
 
     const provider = this.provider(transaction.provider);
-    const result = await provider.initiate({
-      provider: transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
-      merchantTransactionId: transaction.merchantTransactionId,
-      requestId: transaction.requestId || transaction.merchantTransactionId,
-      amountVnd: Number(transaction.amountVnd),
-      clientIp: this.normalizeIp(clientIp),
-      createdAt: transaction.createdAt,
-      expiresAt: transaction.expiresAt,
-    });
+    let result;
+    try {
+      result = await provider.initiate({
+        provider: transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
+        merchantTransactionId: transaction.merchantTransactionId,
+        requestId: transaction.requestId || transaction.merchantTransactionId,
+        amountVnd: Number(transaction.amountVnd),
+        clientIp: this.normalizeIp(clientIp),
+        createdAt: transaction.createdAt,
+        expiresAt: transaction.expiresAt,
+      });
+    } catch (error) {
+      await this.recordInitiationFailure(transaction.id, error);
+      throw error;
+    }
     return {
       transactionId: transaction.id,
       appointmentId: transaction.appointmentId,
@@ -287,6 +297,27 @@ export class PaymentService {
     if (method === PaymentMethod.VNPAY) return this.vnpay;
     if (method === PaymentMethod.MOMO) return this.momo;
     throw new BadRequestException('Unsupported online payment provider.');
+  }
+
+  private async recordInitiationFailure(transactionId: string, error: unknown): Promise<void> {
+    const definitive = error instanceof PaymentProviderError && error.isDefinitive;
+    const message = error instanceof PaymentProviderError
+      ? `${error.kind}: ${error.message}`
+      : 'UNKNOWN: Provider initiation did not return a trusted result.';
+    await this.dataSource.getRepository(PaymentTransactionEntity).update(
+      { id: transactionId, status: PaymentTransactionStatus.PENDING },
+      definitive
+        ? {
+            status: PaymentTransactionStatus.FAILED,
+            lastReconcileError: message.slice(0, 500),
+            nextReconcileAt: null,
+          }
+        : {
+            status: PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+            lastReconcileError: message.slice(0, 500),
+            nextReconcileAt: new Date(Date.now() + 60_000),
+          },
+    );
   }
 
   private merchantTransactionId(): string {

@@ -8,6 +8,7 @@ import { AppointmentEntity } from '../src/database/entities/appointment.entity';
 import { PaymentTransactionEntity } from '../src/database/entities/payment-trans.entity';
 import { PaymentFinalizerService } from '../src/modules/payment/payment-finalizer.service';
 import { PaymentReconciliationService } from '../src/modules/payment/payment-reconciliation.service';
+import { PaymentConfiguration } from '../src/modules/payment/payment-config';
 import { PaymentProvider } from '../src/modules/payment/providers/payment-provider.interface';
 import { VerifiedPaymentResult } from '../src/modules/payment/types/verified-payment-result';
 
@@ -44,6 +45,7 @@ describe('PaymentReconciliationService', () => {
   let service: PaymentReconciliationService;
   let dataSource: DataSource;
   let lockRunner: { connect: jest.Mock; query: jest.Mock; release: jest.Mock };
+  let configuration: jest.Mocked<Pick<PaymentConfiguration, 'isEnabled'>>;
 
   beforeEach(() => {
     repository = { find: jest.fn().mockResolvedValue([transaction]) };
@@ -71,9 +73,11 @@ describe('PaymentReconciliationService', () => {
     };
     vnpay = { queryStatus: jest.fn().mockResolvedValue(result) };
     momo = { queryStatus: jest.fn() };
+    configuration = { isEnabled: jest.fn().mockReturnValue(true) };
     service = new PaymentReconciliationService(
       dataSource,
       finalizer as unknown as PaymentFinalizerService,
+      configuration as unknown as PaymentConfiguration,
       vnpay as unknown as PaymentProvider,
       momo as unknown as PaymentProvider,
     );
@@ -175,6 +179,15 @@ describe('PaymentReconciliationService', () => {
     await expect(first).resolves.toBe(1);
   });
 
+  it('does not acquire a lock or query providers while payments are disabled', async () => {
+    configuration.isEnabled.mockReturnValueOnce(false);
+
+    await expect(service.reconcileExpired()).resolves.toBe(0);
+
+    expect(dataSource.createQueryRunner).not.toHaveBeenCalled();
+    expect(vnpay.queryStatus).not.toHaveBeenCalled();
+  });
+
   it('allows only one reconciliation leader across service instances', async () => {
     let resolveQuery!: (value: VerifiedPaymentResult) => void;
     let markStarted!: () => void;
@@ -199,6 +212,7 @@ describe('PaymentReconciliationService', () => {
     const secondService = new PaymentReconciliationService(
       dataSource,
       finalizer as unknown as PaymentFinalizerService,
+      configuration as unknown as PaymentConfiguration,
       vnpay as unknown as PaymentProvider,
       momo as unknown as PaymentProvider,
     );

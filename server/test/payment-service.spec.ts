@@ -11,6 +11,8 @@ import { PaymentTransactionEntity } from '../src/database/entities/payment-trans
 import { PaymentFinalizerService } from '../src/modules/payment/payment-finalizer.service';
 import { PaymentService } from '../src/modules/payment/payment.service';
 import { PaymentProvider } from '../src/modules/payment/providers/payment-provider.interface';
+import { PaymentConfiguration } from '../src/modules/payment/payment-config';
+import { PaymentProviderError, PaymentProviderErrorKind } from '../src/modules/payment/providers/payment-provider.error';
 
 describe('PaymentService initiation and status', () => {
   const appointmentId = '552f60d9-a1af-48c7-ad5e-06a707657847';
@@ -23,6 +25,8 @@ describe('PaymentService initiation and status', () => {
   let dataSource: DataSource;
   let vnpay: jest.Mocked<PaymentProvider>;
   let service: PaymentService;
+  let transactionUpdate: jest.Mock;
+  let configuration: jest.Mocked<Pick<PaymentConfiguration, 'ensureEnabled' | 'isEnabled'>>;
 
   beforeEach(() => {
     appointment = {
@@ -70,9 +74,10 @@ describe('PaymentService initiation and status', () => {
         return value;
       }),
     };
+    transactionUpdate = jest.fn().mockResolvedValue({ affected: 1 });
     dataSource = {
       transaction: jest.fn((callback) => callback(manager as unknown as EntityManager)),
-      getRepository: jest.fn(),
+      getRepository: jest.fn(() => ({ update: transactionUpdate })),
     } as unknown as DataSource;
     vnpay = {
       initiate: jest.fn(async (context) => ({
@@ -84,9 +89,14 @@ describe('PaymentService initiation and status', () => {
       queryStatus: jest.fn(),
     };
     const momo = { ...vnpay } as jest.Mocked<PaymentProvider>;
+    configuration = {
+      ensureEnabled: jest.fn(),
+      isEnabled: jest.fn().mockReturnValue(true),
+    };
     service = new PaymentService(
       dataSource,
       { finalize: jest.fn() } as unknown as PaymentFinalizerService,
+      configuration as unknown as PaymentConfiguration,
       vnpay,
       momo,
     );
@@ -197,6 +207,70 @@ describe('PaymentService initiation and status', () => {
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects disabled payments before touching the database', async () => {
+    configuration.ensureEnabled.mockImplementationOnce(() => {
+      throw new Error('disabled');
+    });
+
+    await expect(service.initiate(
+      appointmentId,
+      patientId,
+      idempotencyKey,
+      { provider: PaymentMethod.VNPAY },
+      '127.0.0.1',
+    )).rejects.toThrow('disabled');
+
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+    expect(vnpay.initiate).not.toHaveBeenCalled();
+  });
+
+  it('marks an ambiguous initiation failure for reconciliation', async () => {
+    vnpay.initiate.mockRejectedValueOnce(new PaymentProviderError(
+      PaymentProviderErrorKind.TRANSIENT,
+      'gateway timeout',
+    ));
+
+    await expect(service.initiate(
+      appointmentId,
+      patientId,
+      idempotencyKey,
+      { provider: PaymentMethod.VNPAY },
+      '127.0.0.1',
+    )).rejects.toThrow('gateway timeout');
+
+    expect(transactionUpdate).toHaveBeenCalledWith(
+      { id: 'payment-id', status: PaymentTransactionStatus.PENDING },
+      expect.objectContaining({
+        status: PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+        nextReconcileAt: expect.any(Date),
+        lastReconcileError: 'TRANSIENT: gateway timeout',
+      }),
+    );
+  });
+
+  it('marks a definitive provider rejection as failed', async () => {
+    vnpay.initiate.mockRejectedValueOnce(new PaymentProviderError(
+      PaymentProviderErrorKind.REJECTED,
+      'invalid merchant request',
+    ));
+
+    await expect(service.initiate(
+      appointmentId,
+      patientId,
+      idempotencyKey,
+      { provider: PaymentMethod.VNPAY },
+      '127.0.0.1',
+    )).rejects.toThrow('invalid merchant request');
+
+    expect(transactionUpdate).toHaveBeenCalledWith(
+      { id: 'payment-id', status: PaymentTransactionStatus.PENDING },
+      expect.objectContaining({
+        status: PaymentTransactionStatus.FAILED,
+        nextReconcileAt: null,
+      }),
+    );
   });
 
   it('rejects payment initiation for another patient appointment', async () => {

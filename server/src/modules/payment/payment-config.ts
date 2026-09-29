@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { isIP } from 'node:net';
 import { environment } from '../../config/environment';
 import { MomoConfig } from './providers/momo.provider';
@@ -87,6 +87,16 @@ export class PaymentConfiguration implements OnModuleInit {
     return paymentTimeoutSeconds();
   }
 
+  isEnabled(): boolean {
+    return environment.PAYMENT_ENABLED === 'true';
+  }
+
+  ensureEnabled(): void {
+    if (!this.isEnabled()) {
+      throw new ServiceUnavailableException('Online payment is temporarily disabled.');
+    }
+  }
+
   private validateAll(): void {
     this.vnpay();
     this.momo();
@@ -126,8 +136,6 @@ export class PaymentConfiguration implements OnModuleInit {
   }
 
   private assertEnabled(): void {
-    if (environment.PAYMENT_ENABLED !== 'true') {
-      throw new Error('Online payment is disabled. Set PAYMENT_ENABLED=true to enable it.');
-    }
+    this.ensureEnabled();
   }
 }

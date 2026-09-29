@@ -92,6 +92,8 @@ describe('PaymentConfiguration isolation', () => {
     delete process.env.VNPAY_HASH_SECRET;
     expect(() => new PaymentConfiguration().onModuleInit()).not.toThrow();
     expect(() => new PaymentConfiguration().vnpay()).toThrow(/disabled/i);
+    expect(new PaymentConfiguration().isEnabled()).toBe(false);
+    expect(() => new PaymentConfiguration().ensureEnabled()).toThrow(/temporarily disabled/i);
   });
 
   it('fails closed for missing secrets, non-HTTPS URLs, and unsafe timeout values', () => {

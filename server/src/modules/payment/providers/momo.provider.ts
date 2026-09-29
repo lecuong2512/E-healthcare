@@ -11,6 +11,7 @@ import {
 } from '../types/verified-payment-result';
 import { MomoCanonicalizer } from '../security/momo-canonicalizer';
 import { MomoSignatureService } from '../security/momo-signature.service';
+import { PaymentProviderError, PaymentProviderErrorKind } from './payment-provider.error';
 
 export interface MomoConfig {
   partnerCode: string;
@@ -52,14 +53,39 @@ export class MomoProvider implements PaymentProvider {
       this.canonicalizer.createRequest(payload, this.config.accessKey),
     );
 
-    const response = await fetch(this.config.endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw new BadGatewayException('MoMo create payment failed.');
-    const result = this.toPayload(await response.json());
+    let response: Response;
+    try {
+      response = await fetch(this.config.endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch (error) {
+      throw new PaymentProviderError(
+        PaymentProviderErrorKind.TRANSIENT,
+        'MoMo create payment request failed.',
+        { cause: error },
+      );
+    }
+    if (!response.ok) {
+      throw new PaymentProviderError(
+        response.status >= 400 && response.status < 500
+          ? PaymentProviderErrorKind.REJECTED
+          : PaymentProviderErrorKind.TRANSIENT,
+        `MoMo create payment returned HTTP ${response.status}.`,
+      );
+    }
+    let result: MomoPayload;
+    try {
+      result = this.toPayload(await response.json());
+    } catch (error) {
+      throw new PaymentProviderError(
+        PaymentProviderErrorKind.INVALID_RESPONSE,
+        'MoMo create payment returned an invalid response.',
+        { cause: error },
+      );
+    }
     this.verifyCreateResponse(result, context);
     const payUrl = String(result.payUrl || '');
     this.assertPayUrl(payUrl);
@@ -137,7 +163,10 @@ export class MomoProvider implements PaymentProvider {
     const actualSignature = String(result.signature || '');
     const canonical = this.canonicalizer.createResponse(result, this.config.accessKey);
     if (!this.signature.verify(canonical, actualSignature)) {
-      throw new BadGatewayException('Invalid MoMo create response signature.');
+      throw new PaymentProviderError(
+        PaymentProviderErrorKind.INVALID_RESPONSE,
+        'Invalid MoMo create response signature.',
+      );
     }
     if (
       result.partnerCode !== this.config.partnerCode ||
@@ -145,10 +174,16 @@ export class MomoProvider implements PaymentProvider {
       result.orderId !== context.merchantTransactionId ||
       Number(result.amount) !== context.amountVnd
     ) {
-      throw new BadGatewayException('MoMo create response mismatch.');
+      throw new PaymentProviderError(
+        PaymentProviderErrorKind.INVALID_RESPONSE,
+        'MoMo create response mismatch.',
+      );
     }
     if (Number(result.resultCode) !== 0) {
-      throw new BadGatewayException('MoMo rejected payment creation.');
+      throw new PaymentProviderError(
+        PaymentProviderErrorKind.REJECTED,
+        `MoMo rejected payment creation with code ${String(result.resultCode)}.`,
+      );
     }
   }
 
@@ -195,10 +230,16 @@ export class MomoProvider implements PaymentProvider {
     try {
       url = new URL(value);
     } catch {
-      throw new BadGatewayException('Invalid MoMo payment URL.');
+      throw new PaymentProviderError(
+        PaymentProviderErrorKind.INVALID_RESPONSE,
+        'Invalid MoMo payment URL.',
+      );
     }
     if (url.protocol !== 'https:' || url.hostname !== this.config.allowedPayHost) {
-      throw new BadGatewayException('Untrusted MoMo payment URL.');
+      throw new PaymentProviderError(
+        PaymentProviderErrorKind.INVALID_RESPONSE,
+        'Untrusted MoMo payment URL.',
+      );
     }
   }
 
