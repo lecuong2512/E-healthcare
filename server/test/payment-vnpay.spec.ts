@@ -16,6 +16,7 @@ describe('VNPAY 2.1 sandbox provider', () => {
     returnUrl: 'https://app.example.test/patient/payment-result',
     ipnUrl: 'https://api.example.test/api/v1/payments/vnpay/ipn',
     queryUrl: 'https://sandbox.vnpayment.vn/merchant_webapi/api/transaction',
+    serverIp: '203.0.113.10',
   };
 
   afterEach(() => jest.restoreAllMocks());
@@ -52,6 +53,7 @@ describe('VNPAY 2.1 sandbox provider', () => {
       requestId: 'request-1',
       amountVnd: 300_000,
       clientIp: '127.0.0.1',
+      createdAt: new Date('2026-09-28T13:50:00.000Z'),
       expiresAt: new Date('2026-09-28T14:00:00.000Z'),
     });
     const url = new URL(result.paymentUrl);
@@ -90,10 +92,19 @@ describe('VNPAY 2.1 sandbox provider', () => {
   });
 
   it.each([
+    ['00', 'SUCCESS'],
     ['01', 'PENDING'],
-    ['04', 'UNKNOWN'],
-    ['07', 'UNKNOWN'],
     ['02', 'FINAL_FAILED'],
+    ['04', 'UNKNOWN'],
+    ['05', 'UNKNOWN'],
+    ['06', 'UNKNOWN'],
+    ['07', 'UNKNOWN'],
+    ['08', 'UNKNOWN'],
+    ['09', 'FINAL_FAILED'],
+    ['10', 'FINAL_FAILED'],
+    ['11', 'FINAL_FAILED'],
+    ['12', 'FINAL_FAILED'],
+    ['20', 'FINAL_FAILED'],
   ])('maps VNPAY transaction status %s to %s', async (transactionStatus, state) => {
     const payload: Record<string, string> = {
       vnp_TmnCode: config.tmnCode,
@@ -107,6 +118,34 @@ describe('VNPAY 2.1 sandbox provider', () => {
     await expect(new VnpayProvider(config).verifyCallback(payload)).resolves.toMatchObject({
       state,
     });
+  });
+
+  it('uses the original payment timestamp and configured server IP for querydr', async () => {
+    const provider = new VnpayProvider(config);
+    const createdAt = new Date('2026-09-28T12:34:56.000Z');
+    const initiated = await provider.initiate({
+      provider: PaymentMethod.VNPAY,
+      merchantTransactionId: 'PAY-TIMESTAMP',
+      requestId: 'request-time',
+      amountVnd: 300_000,
+      clientIp: '198.51.100.5',
+      createdAt,
+      expiresAt: new Date('2026-09-28T12:44:56.000Z'),
+    });
+    const payCreateDate = new URL(initiated.paymentUrl).searchParams.get('vnp_CreateDate');
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValueOnce({ ok: false } as Response);
+
+    await expect(
+      provider.queryStatus({
+        merchantTransactionId: 'PAY-TIMESTAMP',
+        amountVnd: 300_000,
+        createdAt,
+      } as PaymentTransactionEntity),
+    ).rejects.toBeInstanceOf(BadGatewayException);
+    const queryPayload = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+
+    expect(queryPayload.vnp_TransactionDate).toBe(payCreateDate);
+    expect(queryPayload.vnp_IpAddr).toBe(config.serverIp);
   });
 
   it.each([
@@ -186,6 +225,7 @@ describe('VNPAY 2.1 sandbox provider', () => {
         requestId: 'request-1',
         amountVnd: 1.5,
         clientIp: '127.0.0.1',
+        createdAt: new Date(),
         expiresAt: new Date(),
       }),
     ).rejects.toBeInstanceOf(BadRequestException);

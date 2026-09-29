@@ -72,6 +72,7 @@ describe('MoMo sandbox provider', () => {
       requestId: 'request-1',
       amountVnd: 300_000,
       clientIp: '127.0.0.1',
+      createdAt: new Date('2026-09-28T13:50:00.000Z'),
       expiresAt: new Date('2026-09-28T14:00:00.000Z'),
     });
 
@@ -96,6 +97,7 @@ describe('MoMo sandbox provider', () => {
         requestId: 'request-1',
         amountVnd: 300_000,
         clientIp: '127.0.0.1',
+        createdAt: new Date(),
         expiresAt: new Date(),
       }),
     ).rejects.toBeInstanceOf(BadGatewayException);
@@ -179,6 +181,7 @@ describe('MoMo sandbox provider', () => {
         requestId: 'request-1',
         amountVnd: 1.5,
         clientIp: '127.0.0.1',
+        createdAt: new Date(),
         expiresAt: new Date(),
       }),
     ).rejects.toBeInstanceOf(BadRequestException);

@@ -17,6 +17,7 @@ export interface VnpayConfig {
   returnUrl: string;
   ipnUrl: string;
   queryUrl: string;
+  serverIp: string;
 }
 
 type VnpayPayload = Record<string, string>;
@@ -36,7 +37,7 @@ export class VnpayProvider implements PaymentProvider {
       vnp_Command: 'pay',
       vnp_TmnCode: this.config.tmnCode,
       vnp_Amount: String(context.amountVnd * 100),
-      vnp_CreateDate: this.formatDate(new Date()),
+      vnp_CreateDate: this.formatDate(context.createdAt),
       vnp_CurrCode: 'VND',
       vnp_IpAddr: context.clientIp,
       vnp_Locale: 'vn',
@@ -75,7 +76,7 @@ export class VnpayProvider implements PaymentProvider {
       merchantTransactionId: params.vnp_TxnRef,
       providerTransactionId: params.vnp_TransactionNo || undefined,
       amountVnd,
-      state: this.mapState(responseCode, transactionStatus),
+      state: this.mapIpnState(responseCode, transactionStatus),
       responseCode,
       rawProviderStatus: transactionStatus,
       signatureVerified: true,
@@ -98,7 +99,7 @@ export class VnpayProvider implements PaymentProvider {
       vnp_TxnRef: transaction.merchantTransactionId,
       vnp_TransactionDate: this.formatDate(transaction.createdAt),
       vnp_CreateDate: this.formatDate(createdAt),
-      vnp_IpAddr: '127.0.0.1',
+      vnp_IpAddr: this.config.serverIp,
       vnp_OrderInfo: orderInfo,
     };
     const signData = [
@@ -143,7 +144,7 @@ export class VnpayProvider implements PaymentProvider {
       merchantTransactionId: result.vnp_TxnRef,
       providerTransactionId: result.vnp_TransactionNo || undefined,
       amountVnd,
-      state: this.mapState(responseCode, providerStatus),
+      state: this.mapQueryState(responseCode, providerStatus),
       responseCode,
       rawProviderStatus: providerStatus,
       signatureVerified: true,
@@ -190,19 +191,31 @@ export class VnpayProvider implements PaymentProvider {
     return scaled / 100;
   }
 
-  private mapState(
+  private mapIpnState(
     responseCode: string,
     transactionStatus: string,
   ): VerifiedPaymentResult['state'] {
     if (responseCode === '00' && transactionStatus === '00') return 'SUCCESS';
+    return this.mapTransactionStatus(transactionStatus);
+  }
+
+  private mapQueryState(
+    responseCode: string,
+    transactionStatus: string,
+  ): VerifiedPaymentResult['state'] {
+    if (responseCode !== '00') return 'UNKNOWN';
+    if (transactionStatus === '00') return 'SUCCESS';
+    return this.mapTransactionStatus(transactionStatus);
+  }
+
+  private mapTransactionStatus(
+    transactionStatus: string,
+  ): VerifiedPaymentResult['state'] {
     if (transactionStatus === '01') return 'PENDING';
-    if (['04', '05', '06', '07'].includes(transactionStatus)) return 'UNKNOWN';
-    if (
-      responseCode === '00' &&
-      ['02', '03', '08', '09', '10', '11', '12'].includes(transactionStatus)
-    ) {
+    if (['02', '09', '10', '11', '12', '20'].includes(transactionStatus)) {
       return 'FINAL_FAILED';
     }
+    if (['04', '05', '06', '07', '08'].includes(transactionStatus)) return 'UNKNOWN';
     return 'UNKNOWN';
   }
 

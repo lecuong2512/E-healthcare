@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
+import { isIP } from 'node:net';
 import { environment } from '../../config/environment';
 import { MomoConfig } from './providers/momo.provider';
 import { VnpayConfig } from './providers/vnpay.provider';
@@ -25,11 +26,15 @@ export class PaymentConfiguration implements OnModuleInit {
       returnUrl: this.required('VNPAY_RETURN_URL'),
       ipnUrl: this.required('VNPAY_IPN_URL'),
       queryUrl: this.required('VNPAY_QUERY_URL'),
+      serverIp: this.required('VNPAY_SERVER_IP'),
     };
     this.assertHttps(config.payUrl, 'VNPAY_PAY_URL');
     this.assertHttps(config.returnUrl, 'VNPAY_RETURN_URL');
     this.assertHttps(config.ipnUrl, 'VNPAY_IPN_URL');
     this.assertHttps(config.queryUrl, 'VNPAY_QUERY_URL');
+    if (!isIP(config.serverIp)) {
+      throw new Error('VNPAY_SERVER_IP must be a valid IPv4 or IPv6 address.');
+    }
     this.assertEnvironmentHost(mode, config.payUrl, 'sandbox.vnpayment.vn', 'pay.vnpay.vn');
     this.assertEnvironmentHost(
       mode,

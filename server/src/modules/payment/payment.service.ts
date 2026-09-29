@@ -139,6 +139,7 @@ export class PaymentService {
       requestId: transaction.requestId || transaction.merchantTransactionId,
       amountVnd: Number(transaction.amountVnd),
       clientIp: this.normalizeIp(clientIp),
+      createdAt: transaction.createdAt,
       expiresAt: transaction.expiresAt,
     });
     return {

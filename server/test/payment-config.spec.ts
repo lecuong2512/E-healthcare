@@ -9,6 +9,7 @@ describe('PaymentConfiguration isolation', () => {
     'VNPAY_HASH_SECRET',
     'VNPAY_PAY_URL',
     'VNPAY_QUERY_URL',
+    'VNPAY_SERVER_IP',
     'VNPAY_RETURN_URL',
     'VNPAY_IPN_URL',
     'MOMO_PARTNER_CODE',
@@ -30,6 +31,7 @@ describe('PaymentConfiguration isolation', () => {
       VNPAY_HASH_SECRET: 'vnpay-secret',
       VNPAY_PAY_URL: 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
       VNPAY_QUERY_URL: 'https://sandbox.vnpayment.vn/merchant_webapi/api/transaction',
+      VNPAY_SERVER_IP: '203.0.113.10',
       VNPAY_RETURN_URL: 'https://app.example.test/patient/payment-result',
       VNPAY_IPN_URL: 'https://api.example.test/api/v1/payments/vnpay/ipn',
       MOMO_PARTNER_CODE: 'MOMOTEST',
@@ -101,5 +103,10 @@ describe('PaymentConfiguration isolation', () => {
 
     process.env.PAYMENT_TIMEOUT_SECONDS = '10';
     expect(() => new PaymentConfiguration().timeoutSeconds()).toThrow(/60 to 3600/);
+  });
+
+  it('rejects an invalid VNPAY server IP at startup', () => {
+    process.env.VNPAY_SERVER_IP = 'localhost';
+    expect(() => new PaymentConfiguration().onModuleInit()).toThrow(/VNPAY_SERVER_IP/);
   });
 });

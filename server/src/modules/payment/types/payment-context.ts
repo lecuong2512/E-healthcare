@@ -6,5 +6,6 @@ export interface PaymentContext {
   requestId: string;
   amountVnd: number;
   clientIp: string;
+  createdAt: Date;
   expiresAt: Date;
 }
