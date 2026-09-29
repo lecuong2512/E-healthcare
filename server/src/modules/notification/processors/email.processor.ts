@@ -9,12 +9,16 @@ import {
   EmailAppointmentCancellationPayload,
 } from '@shared/interfaces';
 import { EmailSenderService } from '../services/email-sender.service';
+import { AppointmentReminderDeliveryService } from '../services/appointment-reminder-delivery.service';
 
 @Processor(QueueName.EMAIL)
 export class EmailProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailProcessor.name);
 
-  constructor(private readonly emailSenderService: EmailSenderService) {
+  constructor(
+    private readonly emailSenderService: EmailSenderService,
+    private readonly reminderDelivery: AppointmentReminderDeliveryService,
+  ) {
     super();
   }
 
@@ -36,7 +40,16 @@ export class EmailProcessor extends WorkerHost {
 
       case JobName.EMAIL_SEND_REMINDER_24H: {
         const payload = job.data as EmailAppointmentReminder24hPayload;
-        await this.emailSenderService.sendAppointmentReminder24h(payload);
+        if (payload.notificationLogId) {
+          await this.reminderDelivery.deliver(
+            payload.notificationLogId,
+            'REMINDER_24H',
+            'SMTP',
+            () => this.emailSenderService.sendAppointmentReminder24h(payload),
+          );
+        } else {
+          await this.emailSenderService.sendAppointmentReminder24h(payload);
+        }
         return { success: true, appointmentCode: payload.appointmentCode };
       }
 

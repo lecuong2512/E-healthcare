@@ -57,7 +57,13 @@ export class NotificationProducerService {
     return this.emailQueue.add(
       JobName.EMAIL_SEND_REMINDER_24H,
       payload,
-      DEFAULT_QUEUE_JOB_OPTIONS,
+      {
+        ...DEFAULT_QUEUE_JOB_OPTIONS,
+        ...(payload.notificationLogId
+          ? { jobId: `appointment-reminder-${payload.notificationLogId}` }
+          : {}),
+        removeOnFail: true,
+      },
     );
   }
 
@@ -89,7 +95,13 @@ export class NotificationProducerService {
     return this.smsQueue.add(
       JobName.SMS_SEND_REMINDER_2H,
       payload,
-      DEFAULT_QUEUE_JOB_OPTIONS,
+      {
+        ...DEFAULT_QUEUE_JOB_OPTIONS,
+        ...(payload.notificationLogId
+          ? { jobId: `appointment-reminder-${payload.notificationLogId}` }
+          : {}),
+        removeOnFail: true,
+      },
     );
   }
 

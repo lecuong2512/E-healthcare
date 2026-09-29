@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { environment } from '../../../config/environment';
 import {
   SmsOtpPayload,
@@ -18,11 +18,25 @@ export class SmsSenderService {
   }
 
   async sendAppointmentReminder2h(payload: SmsAppointmentReminder2hPayload): Promise<void> {
+    if (!environment.SMS_WEBHOOK_URL || !environment.SMS_WEBHOOK_TOKEN) {
+      throw new ServiceUnavailableException('SMS reminder provider is not configured.');
+    }
+    const brandName = environment.SMS_BRAND_NAME?.trim();
+    if (!brandName) {
+      throw new ServiceUnavailableException('SMS reminder Brandname is not configured.');
+    }
     const maskedPhone = this.maskPhoneNumber(payload.phoneNumber);
     const room = payload.roomNumber ? ` tai phong ${payload.roomNumber}` : '';
-    const message = `EHEALTH: Nhac hen quy khach ${payload.patientName} co ca kham luc ${payload.time}${room} voi BS ${payload.doctorName}. Ma hen: ${payload.appointmentCode}. Vui long chuan bi di chuyen va mang theo CCCD/ma QR.`;
+    const message = `${brandName}: Nhac hen quy khach ${payload.patientName} co ca kham luc ${payload.time}${room} voi BS ${payload.doctorName}. Ma hen: ${payload.appointmentCode}. Vui long chuan bi di chuyen va mang theo CCCD/ma QR.`;
 
-    await this.dispatchSms(payload.phoneNumber, message, maskedPhone, 'REMINDER_2H');
+    await this.dispatchSms(
+      payload.phoneNumber,
+      message,
+      maskedPhone,
+      'REMINDER_2H',
+      brandName,
+      payload.notificationLogId,
+    );
   }
 
   async sendAppointmentCancellation(payload: SmsAppointmentCancellationPayload): Promise<void> {
@@ -37,6 +51,8 @@ export class SmsSenderService {
     message: string,
     maskedPhone: string,
     purpose: string,
+    brandName?: string,
+    idempotencyKey?: string,
   ): Promise<void> {
     if (!environment.SMS_WEBHOOK_URL || !environment.SMS_WEBHOOK_TOKEN) {
       this.logger.log(`[MOCK SMS SEND] Purpose: ${purpose} | To: ${maskedPhone}`);
@@ -55,7 +71,12 @@ export class SmsSenderService {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${environment.SMS_WEBHOOK_TOKEN}`,
         },
-        body: JSON.stringify({ phoneNumber, message }),
+        body: JSON.stringify({
+          phoneNumber,
+          message,
+          ...(brandName ? { brandName } : {}),
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+        }),
         signal: AbortSignal.timeout(10000),
         redirect: 'error',
       });

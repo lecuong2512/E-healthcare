@@ -1,14 +1,22 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { AppointmentEntity } from './appointment.entity';
 
 export type AppointmentNotificationChannel = 'EMAIL' | 'SMS';
-export type AppointmentNotificationStatus = 'PENDING' | 'PROCESSING' | 'SENT' | 'FAILED';
+export type AppointmentReminderType = 'REMINDER_24H' | 'REMINDER_2H';
+export type AppointmentNotificationStatus = 'PENDING' | 'SCHEDULED' | 'PROCESSING' | 'SENT' | 'FAILED';
 
 @Entity('appointment_notifications')
+@Index('uq_appointment_notifications_reminder', ['appointmentId', 'notificationType'], {
+  unique: true,
+  where: 'notification_type IS NOT NULL',
+})
 export class AppointmentNotificationEntity {
   @PrimaryGeneratedColumn('uuid') id!: string;
   @Column({ name: 'appointment_id', type: 'uuid' }) appointmentId!: string;
   @ManyToOne(() => AppointmentEntity, { onDelete: 'CASCADE' }) @JoinColumn({ name: 'appointment_id' }) appointment!: AppointmentEntity;
+  @Column({ name: 'notification_type', type: 'varchar', length: 20, nullable: true }) notificationType!: AppointmentReminderType | null;
+  @Column({ name: 'scheduled_at', type: 'timestamptz', nullable: true }) scheduledAt!: Date | null;
+  @Column({ type: 'varchar', length: 40, nullable: true }) provider!: string | null;
   @Column({ type: 'varchar', length: 8 }) channel!: AppointmentNotificationChannel;
   @Column({ type: 'varchar', length: 255 }) recipient!: string;
   @Column({ type: 'varchar', length: 200, nullable: true }) subject!: string | null;

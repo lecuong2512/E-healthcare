@@ -1,132 +1,142 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { existsSync } from 'node:fs';
 import PDFDocument from 'pdfkit';
 import { toBuffer as qrToBuffer } from 'qrcode';
 import {
   PrescriptionPdfPayload,
   MedicalRecordPdfPayload,
 } from '@shared/interfaces';
+import { environment } from '../../../config/environment';
+
+export const PRESCRIPTION_PDF_VERIFICATION_FOOTER =
+  'Quét mã để đối chiếu đơn thuốc gốc tại hệ thống E-Healthcare Portal';
 
 @Injectable()
 export class PdfGeneratorService {
   private readonly logger = new Logger(PdfGeneratorService.name);
 
   async generatePrescriptionPdf(payload: PrescriptionPdfPayload): Promise<Buffer> {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const doc = new PDFDocument({ size: 'A4', margin: 40 });
-        const buffers: Buffer[] = [];
+    const fontPath = environment.PDF_FONT_PATH;
+    if (!fontPath || !existsSync(fontPath)) {
+      throw new ServiceUnavailableException('Prescription PDF font is not configured.');
+    }
+    if (!/^https:\/\//i.test(payload.verificationUrl) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i.test(payload.verificationUrl)) {
+      throw new ServiceUnavailableException('Prescription verification URL must use HTTPS.');
+    }
 
-        doc.on('data', (chunk) => buffers.push(chunk));
-        doc.on('end', () => resolve(Buffer.concat(buffers)));
-        doc.on('error', (err) => reject(err));
+    const qrBuffer = await qrToBuffer(payload.verificationUrl, {
+      width: 112,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+    });
 
-        // Generate QR Code containing prescription code and verification link
-        const qrData = `EHEALTH-RX:${payload.prescriptionCode}|APT:${payload.appointmentCode}|HASH:${payload.verificationHash || 'VERIFIED'}`;
-        const qrBuffer = await qrToBuffer(qrData, { width: 100, margin: 1 });
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 42, bufferPages: true });
+      const buffers: Buffer[] = [];
+      doc.on('data', (chunk: Buffer) => buffers.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', (error: Error) => reject(error));
+      doc.font(fontPath).fillColor('#152b3c');
 
-        // Header
-        doc.fontSize(10).font('Helvetica-Bold').text('BO Y TE - SO Y TE', 40, 40);
-        doc.fontSize(9).font('Helvetica').text('PHONG KHAM DA KHOA QUOC TE E-HEALTHCARE', 40, 55);
-        doc.text('Dia chi: 123 Nguyen Trai, Q.1, TP. Ho Chi Minh - Hotline: 1900-8888', 40, 68);
-
-        // QR Code in top right
-        doc.image(qrBuffer, 460, 35, { width: 85 });
-        doc.fontSize(8).text(`Ma tra cuu: ${payload.prescriptionCode}`, 430, 125, { width: 140, align: 'center' });
-
-        doc.moveDown(3);
-        doc.fontSize(16).font('Helvetica-Bold').text('DON THUOC DIEN TU', { align: 'center' });
-        doc.fontSize(10).font('Helvetica-Oblique').text(`(Ma don thuoc: ${payload.prescriptionCode})`, { align: 'center' });
-        doc.moveDown(1);
-
-        // Patient info box
-        doc.rect(40, 160, 515, 65).stroke('#cccccc');
-        doc.fontSize(10).font('Helvetica-Bold').text('THONG TIN BENH NHAN:', 50, 168);
-        doc.font('Helvetica').text(`Ho va ten: ${payload.patientName}`, 50, 185);
-        doc.text(`Gioi tinh: ${payload.patientGender || 'N/A'}`, 260, 185);
-        doc.text(`Ngay sinh: ${payload.patientDob || 'N/A'}`, 380, 185);
-
-        doc.text(`Ma cuoc hen: ${payload.appointmentCode}`, 50, 202);
-        doc.text(`Dien thoai: ${payload.patientPhone || 'N/A'}`, 260, 202);
-        doc.text(`Ngay ke: ${payload.createdAt}`, 380, 202);
-
-        // Diagnosis
-        doc.moveDown(3.5);
-        doc.font('Helvetica-Bold').text(`Chan doan benh: `, 40, 240, { continued: true });
-        doc.font('Helvetica').text(`${payload.diagnosis} (Ma ICD-10: ${payload.icd10Code})`);
-
-        // Prescription items table
-        doc.moveDown(1);
-        let yPos = 265;
-        doc.font('Helvetica-Bold').text('CHI TIET DON THUOC:', 40, yPos);
-        yPos += 18;
-
-        // Table header
-        doc.rect(40, yPos, 515, 20).fill('#f0f4f8');
-        doc.fillColor('#000000').font('Helvetica-Bold').fontSize(9);
-        doc.text('STT', 45, yPos + 5, { width: 30 });
-        doc.text('Ten thuoc & Hoat chat', 80, yPos + 5, { width: 220 });
-        doc.text('So luong', 310, yPos + 5, { width: 60 });
-        doc.text('Cach dung', 380, yPos + 5, { width: 170 });
-        yPos += 25;
-
-        // Table rows
-        doc.font('Helvetica').fontSize(9);
-        payload.medicines.forEach((med, idx) => {
-          doc.text(`${idx + 1}`, 45, yPos, { width: 30 });
-          doc.font('Helvetica-Bold').text(med.medicineName, 80, yPos, { width: 220 });
-          if (med.activeIngredient) {
-            doc.font('Helvetica-Oblique').fontSize(8).text(`(${med.activeIngredient})`, 80, yPos + 11, { width: 220 });
-            doc.fontSize(9).font('Helvetica');
-          }
-
-          doc.text(`${med.quantity} ${med.unit || 'vien'}`, 310, yPos, { width: 60 });
-
-          const dosageStr = [
-            med.dosageMorning ? `Sang: ${med.dosageMorning}` : '',
-            med.dosageNoon ? `Trua: ${med.dosageNoon}` : '',
-            med.dosageAfternoon ? `Chieu: ${med.dosageAfternoon}` : '',
-            med.dosageNight ? `Toi: ${med.dosageNight}` : '',
-          ].filter(Boolean).join(' | ');
-
-          const instruction = dosageStr ? `${dosageStr}. ${med.usageInstruction}` : med.usageInstruction;
-          doc.text(instruction, 380, yPos, { width: 170 });
-
-          yPos += med.activeIngredient ? 28 : 22;
+      const pageWidth = doc.page.width;
+      const margin = 42;
+      const contentWidth = pageWidth - margin * 2;
+      const ensureSpace = (height: number): void => {
+        if (doc.y + height > doc.page.height - margin - 95) doc.addPage();
+      };
+      const label = (title: string, value: string | null | undefined): void => {
+        if (!value) return;
+        ensureSpace(42);
+        doc.fontSize(9).fillColor('#557080').text(title, margin, doc.y, { width: contentWidth });
+        doc.moveDown(0.2);
+        doc.fontSize(10).fillColor('#152b3c').text(value, margin, doc.y, {
+          width: contentWidth,
+          lineGap: 2,
         });
+        doc.moveDown(0.7);
+      };
 
-        // Doctor advice
-        yPos += 15;
-        if (payload.doctorAdvice) {
-          doc.font('Helvetica-Bold').text('Loi dan cua Bac si:', 40, yPos);
-          yPos += 15;
-          doc.font('Helvetica-Oblique').text(payload.doctorAdvice, 40, yPos, { width: 515 });
-          yPos += 30;
-        }
+      doc.fontSize(20).fillColor('#155e75').text('E-Healthcare Portal', margin, margin);
+      doc.fontSize(10).fillColor('#557080').text('ĐƠN THUỐC ĐIỆN TỬ', margin, doc.y + 5);
+      doc.image(qrBuffer, pageWidth - margin - 84, margin, { width: 84, height: 84 });
+      doc.fontSize(8).text('QR đối chiếu đơn thuốc', pageWidth - margin - 104, margin + 88, {
+        width: 104,
+        align: 'center',
+      });
+      doc.moveDown(1.5);
 
-        // Signature section
-        const signY = Math.max(yPos + 20, 680);
-        doc.font('Helvetica').fontSize(9).text(`Ngay .... thang .... nam 2026`, 380, signY, { width: 160, align: 'center' });
-        doc.font('Helvetica-Bold').text('BAC SI DIEU TRI', 380, signY + 15, { width: 160, align: 'center' });
-        doc.font('Helvetica-Oblique').fontSize(8).text('(Ky, ghi ro ho ten va dong dau)', 380, signY + 28, { width: 160, align: 'center' });
+      label('Mã đơn thuốc', payload.prescriptionCode);
+      label('Mã lịch hẹn', payload.appointmentCode);
+      label(
+        'Ngày kê',
+        new Intl.DateTimeFormat('vi-VN', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(payload.createdAt)),
+      );
+      label('Bệnh nhân', payload.patientName);
+      label('Bác sĩ', payload.doctorName);
+      label('Chẩn đoán', payload.diagnosis);
+      label('ICD-10 chính', payload.icd10Code);
+      label('ICD-10 kèm theo', payload.secondaryIcd10Codes || 'Không có');
 
-        doc.font('Helvetica-Bold').fontSize(10).text(`BS. ${payload.doctorName}`, 380, signY + 70, { width: 160, align: 'center' });
-        if (payload.doctorLicense) {
-          doc.font('Helvetica').fontSize(8).text(`CCHN: ${payload.doctorLicense}`, 380, signY + 85, { width: 160, align: 'center' });
-        }
-
-        // Verification Footer
-        doc.fontSize(7).font('Helvetica').fillColor('#666666').text(
-          `Van ban duoc ky so dien tu boi E-Healthcare System. Ma xac thuc: ${payload.verificationHash || 'N/A'}. Quet ma QR de kiem tra tinh xac thuc.`,
-          40,
-          780,
-          { align: 'center', width: 515 },
+      ensureSpace(50);
+      doc.fontSize(13).fillColor('#155e75').text('Thuốc được kê', margin, doc.y);
+      doc.moveDown(0.5);
+      payload.medicines.forEach((medicine, index) => {
+        ensureSpace(74);
+        doc.fontSize(10).fillColor('#152b3c').text(
+          `${index + 1}. ${medicine.medicineName}${medicine.activeIngredient ? ` (${medicine.activeIngredient})` : ''}`,
+          margin,
+          doc.y,
+          { width: contentWidth },
         );
+        doc.moveDown(0.25);
+        doc.fontSize(9).text(`Số lượng: ${medicine.quantity} ${medicine.unit || ''}`, margin + 14, doc.y);
+        const dosage = [
+          medicine.dosageMorning ? `Sáng: ${medicine.dosageMorning}` : '',
+          medicine.dosageNoon ? `Trưa: ${medicine.dosageNoon}` : '',
+          medicine.dosageAfternoon ? `Chiều: ${medicine.dosageAfternoon}` : '',
+          medicine.dosageNight ? `Tối: ${medicine.dosageNight}` : '',
+        ].filter(Boolean).join(' · ');
+        if (dosage) {
+          doc.moveDown(0.2);
+          doc.text(`Liều dùng: ${dosage}`, margin + 14, doc.y, { width: contentWidth - 14 });
+        }
+        doc.moveDown(0.2);
+        doc.text(`Cách dùng: ${medicine.usageInstruction}`, margin + 14, doc.y, {
+          width: contentWidth - 14,
+          lineGap: 2,
+        });
+        doc.moveDown(0.75);
+      });
 
-        doc.end();
-      } catch (err: any) {
-        this.logger.error(`Error generating prescription PDF: ${err.message}`);
-        reject(err);
+      label('Lời dặn bác sĩ', payload.doctorAdvice);
+      label(
+        'Ngày tái khám',
+        payload.followUpDate
+          ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(`${payload.followUpDate}T00:00:00Z`))
+          : undefined,
+      );
+
+      const pageRange = doc.bufferedPageRange();
+      for (let pageIndex = pageRange.start; pageIndex < pageRange.start + pageRange.count; pageIndex++) {
+        doc.switchToPage(pageIndex);
+        const footerY = doc.page.height - margin - 82;
+        doc.moveTo(margin, footerY - 10).lineTo(pageWidth - margin, footerY - 10)
+          .strokeColor('#cbd5e1').stroke();
+        doc.fontSize(7).fillColor('#475569').text(
+          `SHA-256: ${payload.verificationHash}`,
+          margin,
+          footerY,
+          { width: contentWidth, align: 'center' },
+        );
+        doc.fontSize(8).fillColor('#152b3c').text(
+          PRESCRIPTION_PDF_VERIFICATION_FOOTER,
+          margin,
+          footerY + 18,
+          { width: contentWidth, align: 'center' },
+        );
       }
+
+      doc.end();
     });
   }
 
