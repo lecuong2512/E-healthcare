@@ -11,6 +11,8 @@ import { RedisService } from '../src/common/redis/redis.service';
 import { AppointmentEntity } from '../src/database/entities/appointment.entity';
 import { DoctorScheduleEntity } from '../src/database/entities/doctor-schedule.entity';
 import { PaymentTransactionEntity } from '../src/database/entities/payment-trans.entity';
+import { RefundRequestEntity } from '../src/database/entities/refund-request.entity';
+import { VoucherEntity } from '../src/database/entities/voucher.entity';
 import { PaymentFinalizerService } from '../src/modules/payment/payment-finalizer.service';
 import { VerifiedPaymentResult } from '../src/modules/payment/types/verified-payment-result';
 
@@ -18,7 +20,8 @@ describe('PaymentFinalizerService', () => {
   let payment: PaymentTransactionEntity;
   let appointment: AppointmentEntity;
   let schedule: DoctorScheduleEntity;
-  let manager: { getRepository: jest.Mock; save: jest.Mock };
+  let manager: { getRepository: jest.Mock; create: jest.Mock; save: jest.Mock };
+  let voucher: VoucherEntity | null;
   let redis: jest.Mocked<Pick<RedisService, 'releaseReservationIfOwner'>>;
   let service: PaymentFinalizerService;
 
@@ -64,6 +67,7 @@ describe('PaymentFinalizerService', () => {
       cancellationReason: null,
     } as AppointmentEntity;
     schedule = { id: 'schedule-id', status: SlotStatus.HOLDING } as DoctorScheduleEntity;
+    voucher = null;
     const queryFor = (value: unknown) => ({
       setLock: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -72,17 +76,25 @@ describe('PaymentFinalizerService', () => {
       getOneOrFail: jest.fn().mockResolvedValue(value),
     });
     manager = {
-      getRepository: jest.fn((entity) => ({
-        createQueryBuilder: jest.fn(() =>
-          queryFor(
-            entity === PaymentTransactionEntity
-              ? payment
-              : entity === AppointmentEntity
-                ? appointment
-                : schedule,
+      getRepository: jest.fn((entity) => {
+        if (entity === RefundRequestEntity) {
+          return { findOne: jest.fn().mockResolvedValue(null) };
+        }
+        return {
+          createQueryBuilder: jest.fn(() =>
+            queryFor(
+              entity === PaymentTransactionEntity
+                ? payment
+                : entity === AppointmentEntity
+                  ? appointment
+                  : entity === VoucherEntity
+                    ? voucher
+                    : schedule,
+            ),
           ),
-        ),
-      })) as never,
+        };
+      }) as never,
+      create: jest.fn((_entity, value) => value),
       save: jest.fn(async (value) => value),
     };
     const dataSource = {
@@ -164,7 +176,52 @@ describe('PaymentFinalizerService', () => {
     expect(payment.status).toBe(PaymentTransactionStatus.LATE_SUCCESS);
     expect(appointment.status).toBe(AppointmentStatus.CANCELLED);
     expect(appointment.paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
+    expect(manager.create).toHaveBeenCalledWith(
+      RefundRequestEntity,
+      expect.objectContaining({
+        paymentTransactionId: payment.id,
+        appointmentId: appointment.id,
+        amount: 300_000,
+        status: 'PENDING',
+      }),
+    );
     expect(redis.releaseReservationIfOwner).not.toHaveBeenCalled();
+  });
+
+  it('keeps the canonical appointment paid when a superseded payment succeeds late', async () => {
+    payment.status = PaymentTransactionStatus.SUPERSEDED;
+    appointment.status = AppointmentStatus.CONFIRMED;
+    appointment.paymentStatus = PaymentStatus.PAID;
+    appointment.paidAt = new Date('2026-09-28T10:00:00.000Z');
+
+    await expect(service.finalize(verified('SUCCESS'))).resolves.toBe('LATE_SUCCESS');
+
+    expect(payment.status).toBe(PaymentTransactionStatus.LATE_SUCCESS);
+    expect(appointment.status).toBe(AppointmentStatus.CONFIRMED);
+    expect(appointment.paymentStatus).toBe(PaymentStatus.PAID);
+    expect(appointment.paidAt).toEqual(new Date('2026-09-28T10:00:00.000Z'));
+    expect(manager.create).toHaveBeenCalledWith(
+      RefundRequestEntity,
+      expect.objectContaining({ paymentTransactionId: payment.id }),
+    );
+  });
+
+  it('returns a reserved voucher after final payment failure', async () => {
+    appointment.voucherCode = 'SAVE20';
+    voucher = {
+      id: 'voucher-id',
+      code: 'SAVE20',
+      isUsed: true,
+      usedAt: new Date(),
+      redeemedAppointmentId: appointment.id,
+    } as VoucherEntity;
+
+    await service.finalize(verified('FINAL_FAILED'));
+
+    expect(voucher.isUsed).toBe(false);
+    expect(voucher.usedAt).toBeNull();
+    expect(voucher.redeemedAppointmentId).toBeNull();
+    expect(manager.save).toHaveBeenCalledWith(voucher);
   });
 
   it('expires the held slot into reconciliation without claiming payment failure', async () => {

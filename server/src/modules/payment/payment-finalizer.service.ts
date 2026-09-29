@@ -15,6 +15,8 @@ import { RedisService } from '../../common/redis/redis.service';
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
 import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
 import { PaymentTransactionEntity } from '../../database/entities/payment-trans.entity';
+import { RefundRequestEntity } from '../../database/entities/refund-request.entity';
+import { VoucherEntity } from '../../database/entities/voucher.entity';
 import { BookingService } from '../booking/booking.service';
 import { VerifiedPaymentResult } from './types/verified-payment-result';
 
@@ -102,6 +104,7 @@ export class PaymentFinalizerService {
       if (schedule.status === SlotStatus.HOLDING) {
         schedule.status = SlotStatus.AVAILABLE;
       }
+      await this.releaseVoucherWithin(manager, appointment);
       await manager.save(payment);
       await manager.save(appointment);
       await manager.save(schedule);
@@ -160,6 +163,7 @@ export class PaymentFinalizerService {
       if (schedule.status === SlotStatus.HOLDING) {
         schedule.status = SlotStatus.AVAILABLE;
       }
+      await this.releaseVoucherWithin(manager, appointment);
       await manager.save(appointment);
       await manager.save(schedule);
       return {
@@ -253,10 +257,13 @@ export class PaymentFinalizerService {
     ) {
       payment.status = PaymentTransactionStatus.LATE_SUCCESS;
       payment.paidAt = new Date();
-      appointment.paymentStatus = PaymentStatus.REFUND_PENDING;
-      appointment.paidAt = payment.paidAt;
+      if (appointment.paymentStatus !== PaymentStatus.PAID) {
+        appointment.paymentStatus = PaymentStatus.REFUND_PENDING;
+        appointment.paidAt = payment.paidAt;
+      }
       await manager.save(payment);
       await manager.save(appointment);
+      await this.createLateSuccessRefundWithin(manager, appointment, payment);
       return { outcome: 'LATE_SUCCESS' };
     }
     if (payment.status === PaymentTransactionStatus.FAILED) {
@@ -267,10 +274,13 @@ export class PaymentFinalizerService {
       if (result.state === 'SUCCESS') {
         payment.status = PaymentTransactionStatus.LATE_SUCCESS;
         payment.paidAt = new Date();
-        appointment.paymentStatus = PaymentStatus.REFUND_PENDING;
-        appointment.paidAt = payment.paidAt;
+        if (appointment.paymentStatus !== PaymentStatus.PAID) {
+          appointment.paymentStatus = PaymentStatus.REFUND_PENDING;
+          appointment.paidAt = payment.paidAt;
+        }
         await manager.save(appointment);
         await manager.save(payment);
+        await this.createLateSuccessRefundWithin(manager, appointment, payment);
         return { outcome: 'LATE_SUCCESS' };
       }
       payment.status = PaymentTransactionStatus.FAILED;
@@ -294,6 +304,7 @@ export class PaymentFinalizerService {
       appointment.cancelledAt = new Date();
       appointment.cancellationReason = 'ONLINE_PAYMENT_FAILED';
       schedule.status = SlotStatus.AVAILABLE;
+      await this.releaseVoucherWithin(manager, appointment);
     }
 
     await manager.save(payment);
@@ -317,6 +328,50 @@ export class PaymentFinalizerService {
       metadataKey: BookingService.formatReservationKey(reservationId),
       reservationId,
     };
+  }
+
+  private async releaseVoucherWithin(
+    manager: EntityManager,
+    appointment: AppointmentEntity,
+  ): Promise<void> {
+    if (!appointment.voucherCode) return;
+    const voucher = await manager
+      .getRepository(VoucherEntity)
+      .createQueryBuilder('voucher')
+      .setLock('pessimistic_write')
+      .where('voucher.redeemed_appointment_id = :appointmentId', {
+        appointmentId: appointment.id,
+      })
+      .getOne();
+    if (!voucher || voucher.redeemedAppointmentId !== appointment.id) return;
+    voucher.isUsed = false;
+    voucher.usedAt = null;
+    voucher.redeemedAppointmentId = null;
+    await manager.save(voucher);
+  }
+
+  private async createLateSuccessRefundWithin(
+    manager: EntityManager,
+    appointment: AppointmentEntity,
+    payment: PaymentTransactionEntity,
+  ): Promise<void> {
+    const repository = manager.getRepository(RefundRequestEntity);
+    const existing = await repository.findOne({
+      where: { paymentTransactionId: payment.id },
+    });
+    if (existing) return;
+    await manager.save(
+      manager.create(RefundRequestEntity, {
+        appointmentId: appointment.id,
+        paymentTransactionId: payment.id,
+        provider: payment.provider,
+        amount: Number(payment.amountVnd),
+        status: 'PENDING',
+        attempts: 0,
+        failureReason: null,
+        processedAt: null,
+      }),
+    );
   }
 
   private async cleanupReservation(
