@@ -1,7 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { PaymentMethod, PaymentTransactionStatus } from '@shared/enums';
+import {
+  AppointmentStatus,
+  PaymentMethod,
+  PaymentTransactionStatus,
+} from '@shared/enums';
 import { DataSource, LessThanOrEqual } from 'typeorm';
+import { AppointmentEntity } from '../../database/entities/appointment.entity';
 import { PaymentTransactionEntity } from '../../database/entities/payment-trans.entity';
 import { MOMO_PROVIDER, VNPAY_PROVIDER } from './constants/payment.constants';
 import { PaymentFinalizerService } from './payment-finalizer.service';
@@ -38,6 +43,21 @@ export class PaymentReconciliationService {
       for (const transaction of transactions) {
         await this.reconcileOne(transaction);
         processed += 1;
+      }
+      const orphanAppointments = await this.dataSource
+        .getRepository(AppointmentEntity)
+        .find({
+          where: {
+            status: AppointmentStatus.PENDING_PAYMENT,
+            reservationExpiresAt: LessThanOrEqual(now),
+          },
+          order: { reservationExpiresAt: 'ASC' },
+          take: 50,
+        });
+      for (const appointment of orphanAppointments) {
+        if (await this.finalizer.expireOrphanAppointment(appointment.id, now)) {
+          processed += 1;
+        }
       }
       return processed;
     } finally {

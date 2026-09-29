@@ -1,8 +1,10 @@
 import { DataSource } from 'typeorm';
 import {
+  AppointmentStatus,
   PaymentMethod,
   PaymentTransactionStatus,
 } from '@shared/enums';
+import { AppointmentEntity } from '../src/database/entities/appointment.entity';
 import { PaymentTransactionEntity } from '../src/database/entities/payment-trans.entity';
 import { PaymentFinalizerService } from '../src/modules/payment/payment-finalizer.service';
 import { PaymentReconciliationService } from '../src/modules/payment/payment-reconciliation.service';
@@ -29,9 +31,11 @@ describe('PaymentReconciliationService', () => {
   };
 
   let repository: { find: jest.Mock };
+  let appointmentRepository: { find: jest.Mock };
   let finalizer: {
     finalize: jest.Mock;
     expireReservationForReconciliation: jest.Mock;
+    expireOrphanAppointment: jest.Mock;
   };
   let vnpay: jest.Mocked<Pick<PaymentProvider, 'queryStatus'>>;
   let momo: jest.Mocked<Pick<PaymentProvider, 'queryStatus'>>;
@@ -39,16 +43,17 @@ describe('PaymentReconciliationService', () => {
 
   beforeEach(() => {
     repository = { find: jest.fn().mockResolvedValue([transaction]) };
+    appointmentRepository = { find: jest.fn().mockResolvedValue([]) };
     const dataSource = {
       isInitialized: true,
-      getRepository: jest.fn((entity) => {
-        expect(entity).toBe(PaymentTransactionEntity);
-        return repository;
-      }),
+      getRepository: jest.fn((entity) =>
+        entity === PaymentTransactionEntity ? repository : appointmentRepository,
+      ),
     } as unknown as DataSource;
     finalizer = {
       finalize: jest.fn().mockResolvedValue('SUCCESS'),
       expireReservationForReconciliation: jest.fn().mockResolvedValue(undefined),
+      expireOrphanAppointment: jest.fn().mockResolvedValue(true),
     };
     vnpay = { queryStatus: jest.fn().mockResolvedValue(result) };
     momo = { queryStatus: jest.fn() };
@@ -88,6 +93,25 @@ describe('PaymentReconciliationService', () => {
     expect(finalizer.expireReservationForReconciliation).toHaveBeenCalledWith(
       PaymentMethod.VNPAY,
       transaction.merchantTransactionId,
+    );
+  });
+
+  it('expires a pending appointment that never received a payment transaction', async () => {
+    repository.find.mockResolvedValueOnce([]);
+    appointmentRepository.find.mockResolvedValueOnce([
+      {
+        id: 'orphan-appointment',
+        status: AppointmentStatus.PENDING_PAYMENT,
+        reservationExpiresAt: new Date('2026-09-28T09:59:00.000Z'),
+      },
+    ]);
+
+    await expect(
+      service.reconcileExpired(new Date('2026-09-28T10:00:00.000Z')),
+    ).resolves.toBe(1);
+    expect(finalizer.expireOrphanAppointment).toHaveBeenCalledWith(
+      'orphan-appointment',
+      new Date('2026-09-28T10:00:00.000Z'),
     );
   });
 

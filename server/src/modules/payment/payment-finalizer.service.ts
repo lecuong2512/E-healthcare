@@ -26,9 +26,15 @@ export type PaymentFinalizeOutcome =
   | 'LATE_SUCCESS'
   | 'ALREADY_FINALIZED';
 
+interface ReservationRelease {
+  lockKey: string;
+  metadataKey: string;
+  reservationId: string;
+}
+
 interface FinalizeTransactionResult {
   outcome: PaymentFinalizeOutcome;
-  release?: { key: string; reservationId: string };
+  release?: ReservationRelease;
 }
 
 @Injectable()
@@ -45,15 +51,7 @@ export class PaymentFinalizerService {
       this.finalizeWithin(manager, result),
     );
     if (finalized.release) {
-      try {
-        await this.redis.releaseLockIfOwner(
-          finalized.release.key,
-          finalized.release.reservationId,
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn(`Payment committed but reservation cleanup failed: ${message}`);
-      }
+      await this.cleanupReservation(finalized.release, 'Payment committed');
     }
     return finalized.outcome;
   }
@@ -98,45 +96,90 @@ export class PaymentFinalizerService {
       }
 
       payment.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
-      appointment.status = AppointmentStatus.EXPIRED;
+      appointment.status = AppointmentStatus.CANCELLED;
       appointment.cancelledAt = new Date();
-      appointment.cancellationReason =
-        'Hết thời gian giữ chỗ; giao dịch cần được đối soát.';
+      appointment.cancellationReason = 'PAYMENT_TIMEOUT';
       if (schedule.status === SlotStatus.HOLDING) {
         schedule.status = SlotStatus.AVAILABLE;
       }
       await manager.save(payment);
       await manager.save(appointment);
       await manager.save(schedule);
-      return {
-        release: {
-          key: BookingService.formatSlotLockKey(
-            appointment.doctorId,
-            appointment.scheduleId,
-          ),
-          reservationId: payment.reservationId,
-        },
-      };
+      return { release: this.reservationRelease(appointment, payment.reservationId) };
     });
 
     if (finalized.release) {
-      try {
-        await this.redis.releaseLockIfOwner(
-          finalized.release.key,
-          finalized.release.reservationId,
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn(`Expired reservation cleanup failed: ${message}`);
-      }
+      await this.cleanupReservation(finalized.release, 'Expired reservation');
     }
+  }
+
+  async expireOrphanAppointment(
+    appointmentId: string,
+    now = new Date(),
+  ): Promise<boolean> {
+    const expired = await this.dataSource.transaction(async (manager) => {
+      const appointment = await manager
+        .getRepository(AppointmentEntity)
+        .createQueryBuilder('appointment')
+        .setLock('pessimistic_write')
+        .where('appointment.id = :id', { id: appointmentId })
+        .getOne();
+      if (
+        !appointment ||
+        appointment.status !== AppointmentStatus.PENDING_PAYMENT ||
+        !appointment.reservationExpiresAt ||
+        appointment.reservationExpiresAt > now
+      ) {
+        return { expired: false };
+      }
+
+      const activePaymentCount = await manager
+        .getRepository(PaymentTransactionEntity)
+        .createQueryBuilder('payment')
+        .where('payment.appointment_id = :appointmentId', { appointmentId })
+        .andWhere('payment.status IN (:...statuses)', {
+          statuses: [
+            PaymentTransactionStatus.PENDING,
+            PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+          ],
+        })
+        .getCount();
+      if (activePaymentCount > 0) return { expired: false };
+
+      const schedule = await manager
+        .getRepository(DoctorScheduleEntity)
+        .createQueryBuilder('schedule')
+        .setLock('pessimistic_write')
+        .where('schedule.id = :id', { id: appointment.scheduleId })
+        .getOneOrFail();
+
+      appointment.status = AppointmentStatus.CANCELLED;
+      appointment.paymentStatus = PaymentStatus.FAILED;
+      appointment.cancelledAt = now;
+      appointment.cancellationReason = 'PAYMENT_TIMEOUT';
+      if (schedule.status === SlotStatus.HOLDING) {
+        schedule.status = SlotStatus.AVAILABLE;
+      }
+      await manager.save(appointment);
+      await manager.save(schedule);
+      return {
+        expired: true,
+        release: appointment.reservationId
+          ? this.reservationRelease(appointment, appointment.reservationId)
+          : undefined,
+      };
+    });
+
+    if (expired.release) {
+      await this.cleanupReservation(expired.release, 'Orphan reservation');
+    }
+    return expired.expired;
   }
 
   private async finalizeWithin(
     manager: EntityManager,
     result: VerifiedPaymentResult,
   ): Promise<FinalizeTransactionResult> {
-    // Fixed lock order for IPN, retry, timeout and reconciliation paths.
     const payment = await manager
       .getRepository(PaymentTransactionEntity)
       .createQueryBuilder('payment')
@@ -164,7 +207,8 @@ export class PaymentFinalizerService {
     if (Number(payment.amountVnd) !== result.amountVnd) {
       throw new BadRequestException('Payment amount mismatch.');
     }
-    payment.providerTransactionId = result.providerTransactionId || payment.providerTransactionId;
+    payment.providerTransactionId =
+      result.providerTransactionId || payment.providerTransactionId;
     payment.responseCode = result.responseCode;
     payment.providerStatus = result.rawProviderStatus || null;
     payment.callbackReceivedAt = new Date();
@@ -247,7 +291,7 @@ export class PaymentFinalizerService {
       appointment.status = AppointmentStatus.CANCELLED;
       appointment.paymentStatus = PaymentStatus.FAILED;
       appointment.cancelledAt = new Date();
-      appointment.cancellationReason = 'Thanh toán trực tuyến thất bại.';
+      appointment.cancellationReason = 'ONLINE_PAYMENT_FAILED';
       schedule.status = SlotStatus.AVAILABLE;
     }
 
@@ -256,10 +300,37 @@ export class PaymentFinalizerService {
     await manager.save(schedule);
     return {
       outcome: result.state === 'SUCCESS' ? 'SUCCESS' : 'FAILED',
-      release: {
-        key: BookingService.formatSlotLockKey(appointment.doctorId, appointment.scheduleId),
-        reservationId: payment.reservationId,
-      },
+      release: this.reservationRelease(appointment, payment.reservationId),
     };
+  }
+
+  private reservationRelease(
+    appointment: AppointmentEntity,
+    reservationId: string,
+  ): ReservationRelease {
+    return {
+      lockKey: BookingService.formatSlotLockKey(
+        appointment.doctorId,
+        appointment.scheduleId,
+      ),
+      metadataKey: BookingService.formatReservationKey(reservationId),
+      reservationId,
+    };
+  }
+
+  private async cleanupReservation(
+    release: ReservationRelease,
+    context: string,
+  ): Promise<void> {
+    try {
+      await this.redis.releaseReservationIfOwner(
+        release.lockKey,
+        release.metadataKey,
+        release.reservationId,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`${context} cleanup failed: ${message}`);
+    }
   }
 }

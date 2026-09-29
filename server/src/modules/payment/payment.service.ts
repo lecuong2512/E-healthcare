@@ -24,7 +24,6 @@ import {
   MOMO_PROVIDER,
   VNPAY_PROVIDER,
 } from './constants/payment.constants';
-import { PaymentConfiguration } from './payment-config';
 import { PaymentFinalizerService, PaymentFinalizeOutcome } from './payment-finalizer.service';
 import { PaymentProvider } from './providers/payment-provider.interface';
 
@@ -32,7 +31,6 @@ import { PaymentProvider } from './providers/payment-provider.interface';
 export class PaymentService {
   constructor(
     private readonly dataSource: DataSource,
-    private readonly configuration: PaymentConfiguration,
     private readonly finalizer: PaymentFinalizerService,
     @Inject(VNPAY_PROVIDER) private readonly vnpay: PaymentProvider,
     @Inject(MOMO_PROVIDER) private readonly momo: PaymentProvider,
@@ -80,6 +78,12 @@ export class PaymentService {
       if (!appointment.reservationId) {
         throw new ConflictException('Lịch hẹn không có reservation hợp lệ.');
       }
+      if (
+        !appointment.reservationExpiresAt ||
+        appointment.reservationExpiresAt.getTime() <= Date.now()
+      ) {
+        throw new ConflictException('Reservation đã hết hạn thanh toán.');
+      }
       const amountVnd = Number(appointment.totalAmount);
       if (!Number.isSafeInteger(amountVnd) || amountVnd <= 0) {
         throw new BadRequestException('Số tiền lịch hẹn không phải integer VND hợp lệ.');
@@ -118,9 +122,7 @@ export class PaymentService {
           status: PaymentTransactionStatus.PENDING,
           responseCode: null,
           providerStatus: null,
-          expiresAt: new Date(
-            Date.now() + this.configuration.timeoutSeconds() * 1000,
-          ),
+          expiresAt: appointment.reservationExpiresAt,
           paidAt: null,
           callbackReceivedAt: null,
           signatureVerified: false,

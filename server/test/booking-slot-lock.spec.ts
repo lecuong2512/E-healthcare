@@ -60,13 +60,24 @@ class MockRedisClient {
 
   async eval(
     _script: string,
-    _numKeys: number,
-    key: string,
-    owner: string,
+    numKeys: number,
+    ...args: string[]
   ): Promise<number> {
-    const entry = this.store.get(key);
+    if (numKeys === 2 && args.length === 5) {
+      const [lockKey, metadataKey, owner, metadata, ttl] = args;
+      const existing = this.store.get(lockKey);
+      if (existing && existing.expiresAt > Date.now()) return 0;
+      const expiresAt = Date.now() + Number(ttl) * 1000;
+      this.store.set(lockKey, { value: owner, expiresAt });
+      this.store.set(metadataKey, { value: metadata, expiresAt });
+      return 1;
+    }
+    const [lockKey, metadataKeyOrOwner, ownerForReservation] = args;
+    const owner = numKeys === 2 ? ownerForReservation : metadataKeyOrOwner;
+    const entry = this.store.get(lockKey);
     if (!entry || entry.expiresAt <= Date.now() || entry.value !== owner) return 0;
-    this.store.delete(key);
+    this.store.delete(lockKey);
+    if (numKeys === 2) this.store.delete(metadataKeyOrOwner);
     return 1;
   }
 
@@ -104,15 +115,19 @@ describe('Secure distributed slot reservation', () => {
   let redis: RedisService;
   let service: BookingService;
   let queryRunner: Partial<QueryRunner>;
+  let slotStatus: SlotStatus;
 
   beforeEach(() => {
+    slotStatus = SlotStatus.AVAILABLE;
     redis = new RedisService(new MockRedisClient() as never);
     const slotRepository: Partial<Repository<DoctorScheduleEntity>> = {
-      findOne: jest.fn().mockResolvedValue({
-        id: slotId,
-        doctorId,
-        status: SlotStatus.AVAILABLE,
-      }),
+      findOne: jest.fn(async () =>
+        ({
+          id: slotId,
+          doctorId,
+          status: slotStatus,
+        }) as DoctorScheduleEntity,
+      ),
     };
     const scheduleQuery = {
       setLock: jest.fn().mockReturnThis(),
@@ -174,6 +189,34 @@ describe('Secure distributed slot reservation', () => {
     );
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter((result) => result.status === 'rejected')).toHaveLength(19);
+  });
+
+  it('rejects a reservation when the database slot is already holding', async () => {
+    slotStatus = SlotStatus.HOLDING;
+
+    await expect(service.reserveSlot({ doctorId, slotId }, patientA)).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+
+  it('prevents another patient from releasing or confirming a stolen reservation ID', async () => {
+    const reservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+    const dto = { doctorId, slotId, reservationId: reservation.data.reservationId };
+
+    await expect(service.releaseSlot(dto, patientB)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    await expect(
+      service.confirmBooking(
+        {
+          ...dto,
+          reasonForVisit: 'Unauthorized booking',
+          paymentMethod: PaymentMethod.VNPAY,
+        },
+        patientB,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect((await service.getSlotLockStatus(doctorId, slotId)).isLocked).toBe(true);
   });
 
   it('releases only the matching reservation owner', async () => {
@@ -259,6 +302,7 @@ describe('Secure distributed slot reservation', () => {
       AppointmentEntity,
       expect.objectContaining({
         reservationId: reservation.data.reservationId,
+        reservationExpiresAt: new Date(reservation.data.expiresAt),
         paymentStatus: PaymentStatus.PENDING,
       }),
     );

@@ -19,7 +19,7 @@ describe('PaymentFinalizerService', () => {
   let appointment: AppointmentEntity;
   let schedule: DoctorScheduleEntity;
   let manager: { getRepository: jest.Mock; save: jest.Mock };
-  let redis: jest.Mocked<Pick<RedisService, 'releaseLockIfOwner'>>;
+  let redis: jest.Mocked<Pick<RedisService, 'releaseReservationIfOwner'>>;
   let service: PaymentFinalizerService;
 
   const verified = (state: VerifiedPaymentResult['state']): VerifiedPaymentResult => ({
@@ -86,7 +86,7 @@ describe('PaymentFinalizerService', () => {
     const dataSource = {
       transaction: jest.fn((callback) => callback(manager as unknown as EntityManager)),
     } as unknown as DataSource;
-    redis = { releaseLockIfOwner: jest.fn().mockResolvedValue(true) };
+    redis = { releaseReservationIfOwner: jest.fn().mockResolvedValue(true) };
     service = new PaymentFinalizerService(dataSource, redis as unknown as RedisService);
   });
 
@@ -98,8 +98,9 @@ describe('PaymentFinalizerService', () => {
     expect(appointment.status).toBe(AppointmentStatus.CONFIRMED);
     expect(appointment.paymentStatus).toBe(PaymentStatus.PAID);
     expect(schedule.status).toBe(SlotStatus.BOOKED);
-    expect(redis.releaseLockIfOwner).toHaveBeenCalledWith(
+    expect(redis.releaseReservationIfOwner).toHaveBeenCalledWith(
       'lock:doctor:doctor-id:slot:schedule-id',
+      `reservation:${payment.reservationId}`,
       payment.reservationId,
     );
   });
@@ -111,11 +112,11 @@ describe('PaymentFinalizerService', () => {
     expect(appointment.status).toBe(AppointmentStatus.CANCELLED);
     expect(appointment.paymentStatus).toBe(PaymentStatus.FAILED);
     expect(schedule.status).toBe(SlotStatus.AVAILABLE);
-    expect(redis.releaseLockIfOwner).toHaveBeenCalled();
+    expect(redis.releaseReservationIfOwner).toHaveBeenCalled();
   });
 
   it('keeps the committed success when Redis cleanup fails', async () => {
-    redis.releaseLockIfOwner.mockRejectedValueOnce(new Error('Redis unavailable'));
+    redis.releaseReservationIfOwner.mockRejectedValueOnce(new Error('Redis unavailable'));
 
     await expect(service.finalize(verified('SUCCESS'))).resolves.toBe('SUCCESS');
 
@@ -129,7 +130,7 @@ describe('PaymentFinalizerService', () => {
     expect(payment.status).toBe(PaymentTransactionStatus.PENDING);
     expect(appointment.status).toBe(AppointmentStatus.PENDING_PAYMENT);
     expect(schedule.status).toBe(SlotStatus.HOLDING);
-    expect(redis.releaseLockIfOwner).not.toHaveBeenCalled();
+    expect(redis.releaseReservationIfOwner).not.toHaveBeenCalled();
   });
 
   it('routes unknown provider states to reconciliation', async () => {
@@ -137,7 +138,7 @@ describe('PaymentFinalizerService', () => {
       'RECONCILIATION_REQUIRED',
     );
     expect(payment.status).toBe(PaymentTransactionStatus.RECONCILIATION_REQUIRED);
-    expect(redis.releaseLockIfOwner).not.toHaveBeenCalled();
+    expect(redis.releaseReservationIfOwner).not.toHaveBeenCalled();
   });
 
   it('does not let an unknown query overwrite an already successful payment', async () => {
@@ -151,7 +152,7 @@ describe('PaymentFinalizerService', () => {
   it('is replay-safe for an already successful transaction', async () => {
     payment.status = PaymentTransactionStatus.SUCCESS;
     await expect(service.finalize(verified('SUCCESS'))).resolves.toBe('ALREADY_FINALIZED');
-    expect(redis.releaseLockIfOwner).not.toHaveBeenCalled();
+    expect(redis.releaseReservationIfOwner).not.toHaveBeenCalled();
   });
 
   it('marks success after timeout as late success without silently confirming', async () => {
@@ -161,7 +162,7 @@ describe('PaymentFinalizerService', () => {
     expect(payment.status).toBe(PaymentTransactionStatus.LATE_SUCCESS);
     expect(appointment.status).toBe(AppointmentStatus.CANCELLED);
     expect(appointment.paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
-    expect(redis.releaseLockIfOwner).not.toHaveBeenCalled();
+    expect(redis.releaseReservationIfOwner).not.toHaveBeenCalled();
   });
 
   it('expires the held slot into reconciliation without claiming payment failure', async () => {
@@ -171,11 +172,13 @@ describe('PaymentFinalizerService', () => {
     );
 
     expect(payment.status).toBe(PaymentTransactionStatus.RECONCILIATION_REQUIRED);
-    expect(appointment.status).toBe(AppointmentStatus.EXPIRED);
+    expect(appointment.status).toBe(AppointmentStatus.CANCELLED);
+    expect(appointment.cancellationReason).toBe('PAYMENT_TIMEOUT');
     expect(appointment.paymentStatus).toBe(PaymentStatus.PENDING);
     expect(schedule.status).toBe(SlotStatus.AVAILABLE);
-    expect(redis.releaseLockIfOwner).toHaveBeenCalledWith(
+    expect(redis.releaseReservationIfOwner).toHaveBeenCalledWith(
       'lock:doctor:doctor-id:slot:schedule-id',
+      `reservation:${payment.reservationId}`,
       payment.reservationId,
     );
   });
@@ -203,7 +206,7 @@ describe('PaymentFinalizerService', () => {
     await service.finalize(verified('SUCCESS'));
 
     expect(payment.status).toBe(PaymentTransactionStatus.LATE_SUCCESS);
-    expect(appointment.status).toBe(AppointmentStatus.EXPIRED);
+    expect(appointment.status).toBe(AppointmentStatus.CANCELLED);
     expect(appointment.paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
     expect(schedule.status).toBe(SlotStatus.AVAILABLE);
   });
@@ -213,6 +216,6 @@ describe('PaymentFinalizerService', () => {
       service.finalize({ ...verified('SUCCESS'), amountVnd: 1 }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(manager.save).not.toHaveBeenCalled();
-    expect(redis.releaseLockIfOwner).not.toHaveBeenCalled();
+    expect(redis.releaseReservationIfOwner).not.toHaveBeenCalled();
   });
 });

@@ -8,7 +8,6 @@ import {
 } from '@shared/enums';
 import { AppointmentEntity } from '../src/database/entities/appointment.entity';
 import { PaymentTransactionEntity } from '../src/database/entities/payment-trans.entity';
-import { PaymentConfiguration } from '../src/modules/payment/payment-config';
 import { PaymentFinalizerService } from '../src/modules/payment/payment-finalizer.service';
 import { PaymentService } from '../src/modules/payment/payment.service';
 import { PaymentProvider } from '../src/modules/payment/providers/payment-provider.interface';
@@ -31,6 +30,7 @@ describe('PaymentService initiation and status', () => {
       doctorId: 'doctor-id',
       scheduleId: 'schedule-id',
       reservationId: '95276349-390f-4ebc-b62b-5c96f60cf899',
+      reservationExpiresAt: new Date(Date.now() + 5 * 60_000),
       status: AppointmentStatus.PENDING_PAYMENT,
       paymentStatus: PaymentStatus.PENDING,
       paymentMethod: PaymentMethod.VNPAY,
@@ -83,7 +83,6 @@ describe('PaymentService initiation and status', () => {
     const momo = { ...vnpay } as jest.Mocked<PaymentProvider>;
     service = new PaymentService(
       dataSource,
-      { timeoutSeconds: () => 600 } as PaymentConfiguration,
       { finalize: jest.fn() } as unknown as PaymentFinalizerService,
       vnpay,
       momo,
@@ -107,6 +106,7 @@ describe('PaymentService initiation and status', () => {
         reservationId: appointment.reservationId,
         idempotencyKey,
         amountVnd: 300_000,
+        expiresAt: appointment.reservationExpiresAt,
         status: PaymentTransactionStatus.PENDING,
       }),
     );

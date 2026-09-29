@@ -24,6 +24,24 @@ export class RedisService implements OnApplicationShutdown {
     end
   `;
 
+  private static readonly ACQUIRE_RESERVATION_LUA = `
+    if redis.call("exists", KEYS[1]) == 1 then
+      return 0
+    end
+    redis.call("set", KEYS[1], ARGV[1], "EX", ARGV[3])
+    redis.call("set", KEYS[2], ARGV[2], "EX", ARGV[3])
+    return 1
+  `;
+
+  private static readonly RELEASE_RESERVATION_LUA = `
+    if redis.call("get", KEYS[1]) == ARGV[1] then
+      redis.call("del", KEYS[1])
+      redis.call("del", KEYS[2])
+      return 1
+    end
+    return 0
+  `;
+
   constructor(
     @Optional()
     @Inject(REDIS_CLIENT)
@@ -106,6 +124,40 @@ export class RedisService implements OnApplicationShutdown {
       1,
       key,
       owner,
+    );
+    return result === 1;
+  }
+
+  async acquireReservation(
+    lockKey: string,
+    metadataKey: string,
+    reservationId: string,
+    metadata: string,
+    ttlSeconds: number,
+  ): Promise<boolean> {
+    const result = await this.client.eval(
+      RedisService.ACQUIRE_RESERVATION_LUA,
+      2,
+      lockKey,
+      metadataKey,
+      reservationId,
+      metadata,
+      String(ttlSeconds),
+    );
+    return result === 1;
+  }
+
+  async releaseReservationIfOwner(
+    lockKey: string,
+    metadataKey: string,
+    reservationId: string,
+  ): Promise<boolean> {
+    const result = await this.client.eval(
+      RedisService.RELEASE_RESERVATION_LUA,
+      2,
+      lockKey,
+      metadataKey,
+      reservationId,
     );
     return result === 1;
   }

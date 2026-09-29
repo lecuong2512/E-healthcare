@@ -49,6 +49,7 @@ import { DoctorReviewEntity } from "./entities/doctor-review.entity";
 import { CreateDoctorReviews1790586000000 } from "./migrations/1790586000000-create-doctor-reviews";
 import { PaymentTransactionEntity } from "./entities/payment-trans.entity";
 import { CreatePaymentTransactions1790672400000 } from "./migrations/1790672400000-create-payment-transactions";
+import { AddReservationExpiry1790758800000 } from './migrations/1790758800000-add-reservation-expiry';
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -106,6 +107,7 @@ export function createDataSource(url: string): DataSource {
       AddAppointmentConsent1790151600000,
       CreateDoctorReviews1790586000000,
       CreatePaymentTransactions1790672400000,
+      AddReservationExpiry1790758800000,
     ],
   });
 }

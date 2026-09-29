@@ -1,130 +1,109 @@
 import {
-  Injectable,
+  BadRequestException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
-  BadRequestException,
-  NotFoundException,
+  Injectable,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
 import { randomUUID } from 'node:crypto';
-import { RedisService } from '../../common/redis/redis.service';
-import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
-import { AppointmentEntity } from '../../database/entities/appointment.entity';
-import { DoctorEntity } from '../../database/entities/doctor.entity';
-import { VoucherEntity } from '../../database/entities/voucher.entity';
+import { DataSource } from 'typeorm';
 import {
-  SlotStatus,
   AppointmentStatus,
-  PaymentStatus,
   PaymentMethod,
+  PaymentStatus,
+  SlotStatus,
 } from '@shared/enums';
 import {
-  ReserveSlotDto,
-  ReleaseSlotDto,
-  ConfirmBookingDto,
-} from './dto';
-import {
-  ReserveSlotResponse,
-  ReleaseSlotResponse,
   AppointmentResponse,
+  ReleaseSlotResponse,
+  ReserveSlotResponse,
 } from '@shared/interfaces';
+import { RedisService } from '../../common/redis/redis.service';
+import { AppointmentEntity } from '../../database/entities/appointment.entity';
+import { DoctorEntity } from '../../database/entities/doctor.entity';
+import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
+import { VoucherEntity } from '../../database/entities/voucher.entity';
+import { ConfirmBookingDto, ReleaseSlotDto, ReserveSlotDto } from './dto';
+
+interface ReservationMetadata {
+  reservationId: string;
+  patientId: string;
+  doctorId: string;
+  slotId: string;
+  expiresAt: string;
+}
 
 @Injectable()
 export class BookingService {
   private readonly logger = new Logger(BookingService.name);
-  public static readonly LOCK_TTL_SECONDS = 600; // 10 minutes according to Section 5.1
+  static readonly LOCK_TTL_SECONDS = 600;
 
   constructor(
     private readonly redisService: RedisService,
     private readonly dataSource: DataSource,
   ) {}
 
-  /**
-   * Format standard Redis lock key: lock:doctor:{doctorId}:slot:{slotId}
-   */
-  public static formatSlotLockKey(doctorId: string, slotId: string): string {
+  static formatSlotLockKey(doctorId: string, slotId: string): string {
     return `lock:doctor:${doctorId}:slot:${slotId}`;
   }
 
-  /**
-   * Reserve an appointment slot using distributed Redis locking (SETNX with TTL 600s).
-   * If slot is already locked by another user, immediately returns HTTP 409 Conflict.
-   */
+  static formatReservationKey(reservationId: string): string {
+    return `reservation:${reservationId}`;
+  }
+
   async reserveSlot(
     dto: ReserveSlotDto,
     authenticatedUserId: string,
   ): Promise<ReserveSlotResponse> {
-    const reservationId = randomUUID();
     if (!authenticatedUserId) {
       throw new BadRequestException('userId là bắt buộc để giữ chỗ.');
     }
-
-    // 1. Verify slot existence and availability in PostgreSQL (if DB initialized)
     if (this.dataSource.isInitialized) {
-      const slotRepo = this.dataSource.getRepository(DoctorScheduleEntity);
-      const slot = await slotRepo.findOne({
+      const slot = await this.dataSource.getRepository(DoctorScheduleEntity).findOne({
         where: { id: dto.slotId, doctorId: dto.doctorId },
       });
-
-      if (slot) {
-        if (slot.status === SlotStatus.BOOKED || slot.status === SlotStatus.OFF) {
-          throw new HttpException(
-            {
-              statusCode: HttpStatus.CONFLICT,
-              message: 'Khung giờ này đã có người đặt hoặc không còn khả dụng.',
-            },
-            HttpStatus.CONFLICT,
-          );
-        }
+      if (
+        slot &&
+        [SlotStatus.HOLDING, SlotStatus.BOOKED, SlotStatus.OFF].includes(slot.status)
+      ) {
+        throw new HttpException(
+          'Khung giờ đã được giữ, đã đặt hoặc không còn khả dụng.',
+          HttpStatus.CONFLICT,
+        );
       }
     }
 
-    // 2. Perform atomic Redis Distributed Lock (SETNX with EX 600s)
+    const reservationId = randomUUID();
+    const expiresAt = new Date(
+      Date.now() + BookingService.LOCK_TTL_SECONDS * 1000,
+    ).toISOString();
     const lockKey = BookingService.formatSlotLockKey(dto.doctorId, dto.slotId);
-    const acquired = await this.redisService.setNxEx(
-      lockKey,
+    const metadataKey = BookingService.formatReservationKey(reservationId);
+    const metadata: ReservationMetadata = {
       reservationId,
+      patientId: authenticatedUserId,
+      doctorId: dto.doctorId,
+      slotId: dto.slotId,
+      expiresAt,
+    };
+    const acquired = await this.redisService.acquireReservation(
+      lockKey,
+      metadataKey,
+      reservationId,
+      JSON.stringify(metadata),
       BookingService.LOCK_TTL_SECONDS,
     );
-
     if (!acquired) {
-      // Check if current user already holds this lock (idempotent re-entry)
-      const currentHolder = await this.redisService.get(lockKey);
-      if (currentHolder === reservationId) {
-        const remainingTtl = await this.redisService.ttl(lockKey);
-        const ttl = remainingTtl > 0 ? remainingTtl : BookingService.LOCK_TTL_SECONDS;
-        return {
-          success: true,
-          message: 'Bạn đã giữ chỗ khung giờ này.',
-          data: {
-            doctorId: dto.doctorId,
-            slotId: dto.slotId,
-            reservationId,
-            expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
-            ttlSeconds: ttl,
-          },
-        };
-      }
-
-      // Slot contention: Lock already held by another user
       this.logger.warn(
         `Slot contention detected for slot ${dto.slotId} of doctor ${dto.doctorId}`,
       );
       throw new HttpException(
-        {
-          statusCode: HttpStatus.CONFLICT,
-          message:
-            'Khung giờ này vừa được người khác chọn, vui lòng chọn khung giờ khác.',
-        },
+        'Khung giờ này vừa được người khác chọn, vui lòng chọn khung giờ khác.',
         HttpStatus.CONFLICT,
       );
     }
-
-    const expiresAt = new Date(
-      Date.now() + BookingService.LOCK_TTL_SECONDS * 1000,
-    ).toISOString();
-
     return {
       success: true,
       message: 'Giữ chỗ khung giờ thành công trong 10 phút.',
@@ -138,10 +117,6 @@ export class BookingService {
     };
   }
 
-  /**
-   * Release reserved slot.
-   * Only the user who acquired the lock can release it.
-   */
   async releaseSlot(
     dto: ReleaseSlotDto,
     authenticatedUserId: string,
@@ -149,31 +124,26 @@ export class BookingService {
     if (!authenticatedUserId) {
       throw new BadRequestException('userId là bắt buộc để hủy giữ chỗ.');
     }
-
-    const lockKey = BookingService.formatSlotLockKey(dto.doctorId, dto.slotId);
-    const released = await this.redisService.releaseLockIfOwner(
-      lockKey,
+    const reservation = await this.loadReservation(dto.reservationId);
+    if (!reservation) {
+      return { success: false, message: 'Reservation không tồn tại hoặc đã hết hạn.' };
+    }
+    this.assertReservationOwner(
+      reservation,
+      authenticatedUserId,
+      dto.doctorId,
+      dto.slotId,
+    );
+    const released = await this.redisService.releaseReservationIfOwner(
+      BookingService.formatSlotLockKey(dto.doctorId, dto.slotId),
+      BookingService.formatReservationKey(dto.reservationId),
       dto.reservationId,
     );
-
-    if (!released) {
-      return {
-        success: false,
-        message: 'Khóa không tồn tại hoặc bạn không phải người giữ chỗ.',
-      };
-    }
-
-    return {
-      success: true,
-      message: 'Giải phóng giữ chỗ thành công.',
-    };
+    return released
+      ? { success: true, message: 'Giải phóng giữ chỗ thành công.' }
+      : { success: false, message: 'Reservation không còn sở hữu khóa giữ chỗ.' };
   }
 
-  /**
-   * Confirm booking with Pay-at-Clinic (or after payment).
-   * Executes Database Transaction with SELECT ... FOR UPDATE on doctor_schedules,
-   * updates slot to BOOKED, creates CONFIRMED Appointment, and releases Redis lock.
-   */
   async confirmBooking(
     dto: ConfirmBookingDto,
     authenticatedUserId: string,
@@ -182,17 +152,23 @@ export class BookingService {
     if (!patientId) {
       throw new BadRequestException('patientId là bắt buộc để chốt lịch hẹn.');
     }
-
-    const lockKey = BookingService.formatSlotLockKey(dto.doctorId, dto.slotId);
-
-    // Verify Redis lock
-    const currentHolder = await this.redisService.get(lockKey);
-    if (currentHolder !== dto.reservationId) {
+    const reservation = await this.loadReservation(dto.reservationId);
+    if (!reservation) {
       throw new HttpException(
-        {
-          statusCode: HttpStatus.CONFLICT,
-          message: 'Khung giờ này đang được người khác giữ chỗ.',
-        },
+        'Reservation không tồn tại hoặc đã hết hạn.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    this.assertReservationOwner(
+      reservation,
+      patientId,
+      dto.doctorId,
+      dto.slotId,
+    );
+    const lockKey = BookingService.formatSlotLockKey(dto.doctorId, dto.slotId);
+    if ((await this.redisService.get(lockKey)) !== dto.reservationId) {
+      throw new HttpException(
+        'Reservation không còn sở hữu khóa giữ chỗ.',
         HttpStatus.CONFLICT,
       );
     }
@@ -200,9 +176,7 @@ export class BookingService {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction('READ COMMITTED');
-
     try {
-      // Pessimistic Write Lock on slot record in PostgreSQL
       const slot = await queryRunner.manager
         .getRepository(DoctorScheduleEntity)
         .createQueryBuilder('schedule')
@@ -212,21 +186,12 @@ export class BookingService {
           doctorId: dto.doctorId,
         })
         .getOne();
-
-      if (!slot) {
-        throw new NotFoundException('Không tìm thấy khung giờ khám.');
-      }
-
+      if (!slot) throw new NotFoundException('Không tìm thấy khung giờ khám.');
       if (
-        slot.status === SlotStatus.HOLDING ||
-        slot.status === SlotStatus.BOOKED ||
-        slot.status === SlotStatus.OFF
+        [SlotStatus.HOLDING, SlotStatus.BOOKED, SlotStatus.OFF].includes(slot.status)
       ) {
         throw new HttpException(
-          {
-            statusCode: HttpStatus.CONFLICT,
-            message: 'Khung giờ khám này đã được đặt hoặc không còn khả dụng.',
-          },
+          'Khung giờ khám đã được đặt hoặc không còn khả dụng.',
           HttpStatus.CONFLICT,
         );
       }
@@ -235,34 +200,41 @@ export class BookingService {
       slot.status = payAtClinic ? SlotStatus.BOOKED : SlotStatus.HOLDING;
       await queryRunner.manager.save(DoctorScheduleEntity, slot);
 
-      // Always price from the doctor record; never trust a browser-supplied amount.
-      const doctor = await queryRunner.manager
-        .getRepository(DoctorEntity)
-        .findOne({ where: { id: dto.doctorId } });
+      const doctor = await queryRunner.manager.getRepository(DoctorEntity).findOne({
+        where: { id: dto.doctorId },
+      });
       if (!doctor) throw new NotFoundException('Không tìm thấy bác sĩ.');
       let totalAmount = Number(doctor.consultationFee);
-
       let discountAmount = 0;
       let voucher: VoucherEntity | null = null;
       if (dto.voucherCode) {
-        voucher = await queryRunner.manager.getRepository(VoucherEntity).createQueryBuilder('voucher')
-          .setLock('pessimistic_write').where('voucher.code = :code AND voucher.user_id = :patientId', { code: dto.voucherCode.trim().toUpperCase(), patientId })
+        voucher = await queryRunner.manager
+          .getRepository(VoucherEntity)
+          .createQueryBuilder('voucher')
+          .setLock('pessimistic_write')
+          .where('voucher.code = :code AND voucher.user_id = :patientId', {
+            code: dto.voucherCode.trim().toUpperCase(),
+            patientId,
+          })
           .getOne();
-        if (!voucher || voucher.isUsed || voucher.expiresAt <= new Date()) throw new BadRequestException('Voucher không hợp lệ hoặc đã hết hạn.');
-        discountAmount = Math.round(Number(totalAmount) * Number(voucher.discountPercent)) / 100;
-        totalAmount = Math.max(0, Number(totalAmount) - discountAmount);
+        if (!voucher || voucher.isUsed || voucher.expiresAt <= new Date()) {
+          throw new BadRequestException('Voucher không hợp lệ hoặc đã hết hạn.');
+        }
+        discountAmount =
+          Math.round(totalAmount * Number(voucher.discountPercent)) / 100;
+        totalAmount = Math.max(0, totalAmount - discountAmount);
       }
 
-      // Generate unique appointment code: APT-YYMMDD-XXXX
-      const appointmentCode = this.generateAppointmentCode();
-
       const appointment = queryRunner.manager.create(AppointmentEntity, {
-        appointmentCode,
+        appointmentCode: this.generateAppointmentCode(),
         patientId,
         doctorId: dto.doctorId,
         scheduleId: dto.slotId,
         reservationId: dto.reservationId,
-        status: dto.paymentMethod === PaymentMethod.PAY_AT_CLINIC ? AppointmentStatus.CONFIRMED : AppointmentStatus.PENDING_PAYMENT,
+        reservationExpiresAt: new Date(reservation.expiresAt),
+        status: payAtClinic
+          ? AppointmentStatus.CONFIRMED
+          : AppointmentStatus.PENDING_PAYMENT,
         reasonForVisit: dto.reasonForVisit,
         paymentStatus: payAtClinic ? PaymentStatus.UNPAID : PaymentStatus.PENDING,
         paymentMethod: dto.paymentMethod,
@@ -276,23 +248,22 @@ export class BookingService {
         refundAmount: 0,
         refundPercent: 0,
       });
-
-      const saved = await queryRunner.manager.save(
-        AppointmentEntity,
-        appointment,
-      );
+      const saved = await queryRunner.manager.save(AppointmentEntity, appointment);
       if (voucher) {
-        voucher.isUsed = true; voucher.usedAt = new Date(); voucher.redeemedAppointmentId = saved.id;
+        voucher.isUsed = true;
+        voucher.usedAt = new Date();
+        voucher.redeemedAppointmentId = saved.id;
         await queryRunner.manager.save(VoucherEntity, voucher);
       }
-
       await queryRunner.commitTransaction();
 
-      // Online payment keeps the reservation lock until a verified terminal result.
       if (payAtClinic) {
-        await this.redisService.releaseLockIfOwner(lockKey, dto.reservationId);
+        await this.redisService.releaseReservationIfOwner(
+          lockKey,
+          BookingService.formatReservationKey(dto.reservationId),
+          dto.reservationId,
+        );
       }
-
       return {
         id: saved.id,
         appointmentCode: saved.appointmentCode,
@@ -317,9 +288,6 @@ export class BookingService {
     }
   }
 
-  /**
-   * Get current lock status for a doctor's slot.
-   */
   async getSlotLockStatus(
     doctorId: string,
     slotId: string,
@@ -327,18 +295,54 @@ export class BookingService {
     const lockKey = BookingService.formatSlotLockKey(doctorId, slotId);
     const holder = await this.redisService.get(lockKey);
     const ttl = await this.redisService.ttl(lockKey);
-    return {
-      isLocked: !!holder,
-      ttlSeconds: ttl > 0 ? ttl : 0,
-    };
+    return { isLocked: !!holder, ttlSeconds: ttl > 0 ? ttl : 0 };
+  }
+
+  private async loadReservation(
+    reservationId: string,
+  ): Promise<ReservationMetadata | null> {
+    const raw = await this.redisService.get(
+      BookingService.formatReservationKey(reservationId),
+    );
+    if (!raw) return null;
+    try {
+      const value = JSON.parse(raw) as ReservationMetadata;
+      return value.reservationId === reservationId &&
+        value.patientId &&
+        value.doctorId &&
+        value.slotId &&
+        value.expiresAt
+        ? value
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private assertReservationOwner(
+    reservation: ReservationMetadata,
+    patientId: string,
+    doctorId: string,
+    slotId: string,
+  ): void {
+    if (reservation.patientId !== patientId) {
+      throw new ForbiddenException('Reservation không thuộc bệnh nhân hiện tại.');
+    }
+    if (reservation.doctorId !== doctorId || reservation.slotId !== slotId) {
+      throw new HttpException('Reservation không khớp lịch khám.', HttpStatus.CONFLICT);
+    }
+    if (new Date(reservation.expiresAt).getTime() <= Date.now()) {
+      throw new HttpException('Reservation đã hết hạn.', HttpStatus.CONFLICT);
+    }
   }
 
   private generateAppointmentCode(): string {
     const now = new Date();
-    const yy = String(now.getFullYear()).slice(-2);
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const rand = Math.floor(1000 + Math.random() * 9000);
-    return `APT-${yy}${mm}${dd}-${rand}`;
+    const date = [
+      String(now.getFullYear()).slice(-2),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('');
+    return `APT-${date}-${Math.floor(1000 + Math.random() * 9000)}`;
   }
 }
