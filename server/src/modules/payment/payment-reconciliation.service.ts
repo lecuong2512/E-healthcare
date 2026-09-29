@@ -32,16 +32,23 @@ export class PaymentReconciliationService {
       const transactions = await this.dataSource
         .getRepository(PaymentTransactionEntity)
         .find({
-          where: {
-            status: PaymentTransactionStatus.PENDING,
-            expiresAt: LessThanOrEqual(now),
-          },
+          where: [
+            {
+              status: PaymentTransactionStatus.PENDING,
+              expiresAt: LessThanOrEqual(now),
+            },
+            {
+              status: PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+              reconciliationManualReview: false,
+              nextReconcileAt: LessThanOrEqual(now),
+            },
+          ],
           order: { expiresAt: 'ASC' },
           take: 50,
         });
       let processed = 0;
       for (const transaction of transactions) {
-        await this.reconcileOne(transaction);
+        await this.reconcileOne(transaction, now);
         processed += 1;
       }
       const orphanAppointments = await this.dataSource
@@ -65,7 +72,10 @@ export class PaymentReconciliationService {
     }
   }
 
-  private async reconcileOne(transaction: PaymentTransactionEntity): Promise<void> {
+  private async reconcileOne(
+    transaction: PaymentTransactionEntity,
+    now: Date,
+  ): Promise<void> {
     try {
       const result = await this.provider(transaction.provider).queryStatus(transaction);
       const outcome = await this.finalizer.finalize(result);
@@ -73,6 +83,12 @@ export class PaymentReconciliationService {
         await this.finalizer.expireReservationForReconciliation(
           transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
           transaction.merchantTransactionId,
+        );
+        await this.finalizer.scheduleReconciliationRetry(
+          transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
+          transaction.merchantTransactionId,
+          `Provider returned ${result.state}`,
+          now,
         );
       }
     } catch (error) {
@@ -83,6 +99,12 @@ export class PaymentReconciliationService {
       await this.finalizer.expireReservationForReconciliation(
         transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
         transaction.merchantTransactionId,
+      );
+      await this.finalizer.scheduleReconciliationRetry(
+        transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
+        transaction.merchantTransactionId,
+        message,
+        now,
       );
     }
   }

@@ -85,6 +85,18 @@ export class PaymentTransactionEntity {
   @Column({ name: 'source_validated', type: 'boolean', default: false })
   sourceValidated!: boolean;
 
+  @Column({ name: 'reconciliation_attempts', type: 'int', default: 0 })
+  reconciliationAttempts!: number;
+
+  @Column({ name: 'next_reconcile_at', type: 'timestamptz', nullable: true })
+  nextReconcileAt!: Date | null;
+
+  @Column({ name: 'last_reconcile_error', type: 'text', nullable: true })
+  lastReconcileError!: string | null;
+
+  @Column({ name: 'reconciliation_manual_review', type: 'boolean', default: false })
+  reconciliationManualReview!: boolean;
+
   @Column({ name: 'sanitized_provider_payload', type: 'jsonb', nullable: true })
   sanitizedProviderPayload!: Record<string, unknown> | null;
 

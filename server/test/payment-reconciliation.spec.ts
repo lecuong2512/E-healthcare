@@ -37,6 +37,7 @@ describe('PaymentReconciliationService', () => {
     finalize: jest.Mock;
     expireReservationForReconciliation: jest.Mock;
     expireOrphanAppointment: jest.Mock;
+    scheduleReconciliationRetry: jest.Mock;
   };
   let vnpay: jest.Mocked<Pick<PaymentProvider, 'queryStatus'>>;
   let momo: jest.Mocked<Pick<PaymentProvider, 'queryStatus'>>;
@@ -55,6 +56,7 @@ describe('PaymentReconciliationService', () => {
       finalize: jest.fn().mockResolvedValue('SUCCESS'),
       expireReservationForReconciliation: jest.fn().mockResolvedValue(undefined),
       expireOrphanAppointment: jest.fn().mockResolvedValue(true),
+      scheduleReconciliationRetry: jest.fn().mockResolvedValue(undefined),
     };
     vnpay = { queryStatus: jest.fn().mockResolvedValue(result) };
     momo = { queryStatus: jest.fn() };
@@ -83,6 +85,12 @@ describe('PaymentReconciliationService', () => {
       PaymentMethod.VNPAY,
       transaction.merchantTransactionId,
     );
+    expect(finalizer.scheduleReconciliationRetry).toHaveBeenCalledWith(
+      PaymentMethod.VNPAY,
+      transaction.merchantTransactionId,
+      'Provider returned PENDING',
+      expect.any(Date),
+    );
   });
 
   it('moves to reconciliation and releases the hold when provider query fails', async () => {
@@ -95,6 +103,32 @@ describe('PaymentReconciliationService', () => {
       PaymentMethod.VNPAY,
       transaction.merchantTransactionId,
     );
+    expect(finalizer.scheduleReconciliationRetry).toHaveBeenCalledWith(
+      PaymentMethod.VNPAY,
+      transaction.merchantTransactionId,
+      'gateway unavailable',
+      expect.any(Date),
+    );
+  });
+
+  it('retries a due reconciliation transaction and accepts a later success', async () => {
+    const retry = {
+      ...transaction,
+      status: PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+      reconciliationAttempts: 1,
+      nextReconcileAt: new Date('2026-09-28T09:59:00.000Z'),
+      reconciliationManualReview: false,
+    } as PaymentTransactionEntity;
+    repository.find.mockResolvedValueOnce([retry]);
+    finalizer.finalize.mockResolvedValueOnce('LATE_SUCCESS');
+
+    await expect(
+      service.reconcileExpired(new Date('2026-09-28T10:00:00.000Z')),
+    ).resolves.toBe(1);
+
+    expect(vnpay.queryStatus).toHaveBeenCalledWith(retry);
+    expect(finalizer.finalize).toHaveBeenCalledWith(result);
+    expect(finalizer.scheduleReconciliationRetry).not.toHaveBeenCalled();
   });
 
   it('expires a pending appointment that never received a payment transaction', async () => {

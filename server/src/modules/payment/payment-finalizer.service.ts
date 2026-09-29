@@ -42,6 +42,8 @@ interface FinalizeTransactionResult {
 @Injectable()
 export class PaymentFinalizerService {
   private readonly logger = new Logger(PaymentFinalizerService.name);
+  private static readonly MAX_RECONCILIATION_ATTEMPTS = 5;
+  private static readonly RECONCILIATION_BACKOFF_SECONDS = [120, 300, 900, 1800];
 
   constructor(
     private readonly dataSource: DataSource,
@@ -180,6 +182,48 @@ export class PaymentFinalizerService {
     return expired.expired;
   }
 
+  async scheduleReconciliationRetry(
+    provider: VerifiedPaymentResult['provider'],
+    merchantTransactionId: string,
+    reason: string,
+    now = new Date(),
+  ): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      const payment = await manager
+        .getRepository(PaymentTransactionEntity)
+        .createQueryBuilder('payment')
+        .setLock('pessimistic_write')
+        .where('payment.provider = :provider', { provider })
+        .andWhere('payment.merchant_transaction_id = :merchantTransactionId', {
+          merchantTransactionId,
+        })
+        .getOne();
+      if (!payment || payment.status === PaymentTransactionStatus.SUCCESS) return;
+
+      payment.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
+      payment.reconciliationAttempts = (payment.reconciliationAttempts || 0) + 1;
+      payment.lastReconcileError = reason.slice(0, 2_000);
+      if (
+        payment.reconciliationAttempts >=
+        PaymentFinalizerService.MAX_RECONCILIATION_ATTEMPTS
+      ) {
+        payment.reconciliationManualReview = true;
+        payment.nextReconcileAt = null;
+      } else {
+        const backoffIndex = Math.min(
+          payment.reconciliationAttempts - 1,
+          PaymentFinalizerService.RECONCILIATION_BACKOFF_SECONDS.length - 1,
+        );
+        payment.nextReconcileAt = new Date(
+          now.getTime() +
+            PaymentFinalizerService.RECONCILIATION_BACKOFF_SECONDS[backoffIndex] *
+              1_000,
+        );
+      }
+      await manager.save(payment);
+    });
+  }
+
   private async finalizeWithin(
     manager: EntityManager,
     result: VerifiedPaymentResult,
@@ -219,6 +263,11 @@ export class PaymentFinalizerService {
     payment.signatureVerified = result.signatureVerified;
     payment.sourceValidated = result.sourceValidated;
     payment.sanitizedProviderPayload = result.sanitizedPayload;
+    if (result.state === 'SUCCESS' || result.state === 'FINAL_FAILED') {
+      payment.nextReconcileAt = null;
+      payment.lastReconcileError = null;
+      payment.reconciliationManualReview = false;
+    }
 
     if (payment.status === PaymentTransactionStatus.SUCCESS) {
       await manager.save(payment);

@@ -53,6 +53,10 @@ describe('PaymentFinalizerService', () => {
       callbackReceivedAt: null,
       signatureVerified: false,
       sourceValidated: false,
+      reconciliationAttempts: 0,
+      nextReconcileAt: null,
+      lastReconcileError: null,
+      reconciliationManualReview: false,
       sanitizedProviderPayload: null,
       paidAt: null,
     } as PaymentTransactionEntity;
@@ -276,5 +280,22 @@ describe('PaymentFinalizerService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(manager.save).not.toHaveBeenCalled();
     expect(redis.releaseReservationIfOwner).not.toHaveBeenCalled();
+  });
+
+  it('stops automatic reconciliation after the bounded retry threshold', async () => {
+    payment.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
+    payment.reconciliationAttempts = 4;
+
+    await service.scheduleReconciliationRetry(
+      PaymentMethod.VNPAY,
+      payment.merchantTransactionId,
+      'gateway unavailable',
+      new Date('2026-09-28T10:00:00.000Z'),
+    );
+
+    expect(payment.reconciliationAttempts).toBe(5);
+    expect(payment.reconciliationManualReview).toBe(true);
+    expect(payment.nextReconcileAt).toBeNull();
+    expect(payment.lastReconcileError).toBe('gateway unavailable');
   });
 });

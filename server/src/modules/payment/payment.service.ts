@@ -127,6 +127,10 @@ export class PaymentService {
           callbackReceivedAt: null,
           signatureVerified: false,
           sourceValidated: false,
+          reconciliationAttempts: 0,
+          nextReconcileAt: null,
+          lastReconcileError: null,
+          reconciliationManualReview: false,
           sanitizedProviderPayload: null,
         }),
       );
