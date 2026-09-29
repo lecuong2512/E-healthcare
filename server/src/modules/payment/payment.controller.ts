@@ -19,12 +19,45 @@ import {
 } from '@shared/interfaces';
 import { Public, Roles } from '../../common/decorators/auth.decorators';
 import { AuthenticatedRequest } from '../../common/guards/authenticated-request';
-import { InitiatePaymentDto, ResolveRefundDto } from './dto';
+import { InitiatePaymentDto, ResolveReconciliationDto, ResolveRefundDto } from './dto';
 import { PaymentService } from './payment.service';
+import { PaymentReconciliationService } from './payment-reconciliation.service';
 
 @Controller('payments')
 export class PaymentController {
-  constructor(private readonly payments: PaymentService) {}
+  constructor(
+    private readonly payments: PaymentService,
+    private readonly reconciliation: PaymentReconciliationService,
+  ) {}
+
+  @Roles(Role.ADMIN)
+  @Get('reconciliation/manual-review')
+  manualReviewTransactions() {
+    return this.reconciliation.manualReviewTransactions();
+  }
+
+  @Roles(Role.ADMIN)
+  @Post(':transactionId/reconcile')
+  reconcile(
+    @Param('transactionId', new ParseUUIDPipe()) transactionId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.reconciliation.manualReconcile(transactionId, request.auth!.userId);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post(':transactionId/resolve-reconciliation')
+  resolveReconciliation(
+    @Param('transactionId', new ParseUUIDPipe()) transactionId: string,
+    @Body() dto: ResolveReconciliationDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.reconciliation.resolveManual(
+      transactionId,
+      request.auth!.userId,
+      dto.outcome,
+    );
+  }
 
   @Roles(Role.ADMIN)
   @Get('refunds/pending')

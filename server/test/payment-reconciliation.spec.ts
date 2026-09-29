@@ -32,7 +32,12 @@ describe('PaymentReconciliationService', () => {
     sanitizedPayload: {},
   };
 
-  let repository: { find: jest.Mock };
+  let repository: {
+    find: jest.Mock;
+    findOne: jest.Mock;
+    findOneByOrFail: jest.Mock;
+    update: jest.Mock;
+  };
   let appointmentRepository: { find: jest.Mock };
   let finalizer: {
     finalize: jest.Mock;
@@ -45,10 +50,15 @@ describe('PaymentReconciliationService', () => {
   let service: PaymentReconciliationService;
   let dataSource: DataSource;
   let lockRunner: { connect: jest.Mock; query: jest.Mock; release: jest.Mock };
-  let configuration: jest.Mocked<Pick<PaymentConfiguration, 'isEnabled'>>;
+  let configuration: jest.Mocked<Pick<PaymentConfiguration, 'isEnabled' | 'ensureEnabled'>>;
 
   beforeEach(() => {
-    repository = { find: jest.fn().mockResolvedValue([transaction]) };
+    repository = {
+      find: jest.fn().mockResolvedValue([transaction]),
+      findOne: jest.fn().mockResolvedValue(transaction),
+      findOneByOrFail: jest.fn().mockResolvedValue(transaction),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
     appointmentRepository = { find: jest.fn().mockResolvedValue([]) };
     lockRunner = {
       connect: jest.fn().mockResolvedValue(undefined),
@@ -73,7 +83,10 @@ describe('PaymentReconciliationService', () => {
     };
     vnpay = { queryStatus: jest.fn().mockResolvedValue(result) };
     momo = { queryStatus: jest.fn() };
-    configuration = { isEnabled: jest.fn().mockReturnValue(true) };
+    configuration = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      ensureEnabled: jest.fn(),
+    };
     service = new PaymentReconciliationService(
       dataSource,
       finalizer as unknown as PaymentFinalizerService,
@@ -186,6 +199,63 @@ describe('PaymentReconciliationService', () => {
 
     expect(dataSource.createQueryRunner).not.toHaveBeenCalled();
     expect(vnpay.queryStatus).not.toHaveBeenCalled();
+  });
+
+  it('lists only the safe manual-review projection', async () => {
+    repository.find.mockResolvedValueOnce([{
+      ...transaction,
+      appointmentId: 'appointment-id',
+      reconciliationAttempts: 5,
+      lastReconcileError: 'timeout',
+      createdAt: new Date('2026-09-28T09:00:00.000Z'),
+    }]);
+
+    const result = await service.manualReviewTransactions();
+
+    expect(result).toEqual([expect.objectContaining({
+      transactionId: 'payment-id',
+      appointmentId: 'appointment-id',
+      amountVnd: 300_000,
+      reconciliationAttempts: 5,
+    })]);
+    expect(result[0]).not.toHaveProperty('idempotencyKey');
+    expect(result[0]).not.toHaveProperty('sanitizedProviderPayload');
+  });
+
+  it('allows an administrator to re-query a manual-review transaction', async () => {
+    const manual = {
+      ...transaction,
+      status: PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+      reconciliationManualReview: true,
+    } as PaymentTransactionEntity;
+    repository.findOne.mockResolvedValueOnce(manual);
+    repository.findOneByOrFail.mockResolvedValueOnce(manual);
+
+    await service.manualReconcile('payment-id', 'admin-id');
+
+    expect(configuration.ensureEnabled).toHaveBeenCalled();
+    expect(vnpay.queryStatus).toHaveBeenCalledWith(manual);
+    expect(finalizer.finalize).toHaveBeenCalledWith(result);
+  });
+
+  it('marks a manual-review transaction failed without allowing arbitrary paid state', async () => {
+    const manual = {
+      ...transaction,
+      status: PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+      reconciliationManualReview: true,
+    } as PaymentTransactionEntity;
+    repository.findOne.mockResolvedValueOnce(manual);
+
+    await service.resolveManual('payment-id', 'admin-id', 'MARK_FAILED');
+
+    expect(finalizer.expireReservationForReconciliation).toHaveBeenCalled();
+    expect(repository.update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'payment-id', reconciliationManualReview: true }),
+      expect.objectContaining({
+        status: PaymentTransactionStatus.FAILED,
+        reconciliationManualReview: false,
+      }),
+    );
   });
 
   it('allows only one reconciliation leader across service instances', async () => {

@@ -17,6 +17,7 @@ import {
 import { configureApp } from '../src/configure-app';
 import { PaymentController } from '../src/modules/payment/payment.controller';
 import { PaymentService } from '../src/modules/payment/payment.service';
+import { PaymentReconciliationService } from '../src/modules/payment/payment-reconciliation.service';
 
 @Injectable()
 class PaymentRoleTestGuard implements CanActivate {
@@ -50,6 +51,7 @@ class PaymentRoleTestGuard implements CanActivate {
 describe('Payment HTTP authorization and DTO contract', () => {
   const appointmentId = '552f60d9-a1af-48c7-ad5e-06a707657847';
   const idempotencyKey = 'a752752f-190f-4307-b229-afb0b7ff609d';
+  const transactionId = '652f60d9-a1af-48c7-ad5e-06a707657847';
   let app: INestApplication;
   const payments = {
     initiate: jest.fn().mockResolvedValue({
@@ -66,6 +68,11 @@ describe('Payment HTTP authorization and DTO contract', () => {
     pendingRefunds: jest.fn().mockResolvedValue([]),
     resolveRefund: jest.fn().mockResolvedValue({ status: 'SUCCEEDED' }),
   };
+  const reconciliation = {
+    manualReviewTransactions: jest.fn().mockResolvedValue([]),
+    manualReconcile: jest.fn().mockResolvedValue({}),
+    resolveManual: jest.fn().mockResolvedValue({}),
+  };
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -73,6 +80,7 @@ describe('Payment HTTP authorization and DTO contract', () => {
       providers: [
         Reflector,
         { provide: PaymentService, useValue: payments },
+        { provide: PaymentReconciliationService, useValue: reconciliation },
         { provide: APP_GUARD, useClass: PaymentRoleTestGuard },
       ],
     }).compile();
@@ -154,5 +162,35 @@ describe('Payment HTTP authorization and DTO contract', () => {
       .get('/api/v1/payments/refunds/pending')
       .set('x-test-role', Role.ADMIN)
       .expect(200);
+  });
+
+  it('restricts reconciliation operations and validates controlled outcomes', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/payments/reconciliation/manual-review')
+      .set('x-test-role', Role.PATIENT)
+      .expect(403);
+    await request(app.getHttpServer())
+      .get('/api/v1/payments/reconciliation/manual-review')
+      .set('x-test-role', Role.ADMIN)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post(`/api/v1/payments/${transactionId}/reconcile`)
+      .set('x-test-role', Role.ADMIN)
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/api/v1/payments/${transactionId}/resolve-reconciliation`)
+      .set('x-test-role', Role.ADMIN)
+      .send({ outcome: 'MARK_PAID' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/api/v1/payments/${transactionId}/resolve-reconciliation`)
+      .set('x-test-role', Role.ADMIN)
+      .send({ outcome: 'MARK_FAILED' })
+      .expect(201);
+    expect(reconciliation.resolveManual).toHaveBeenCalledWith(
+      transactionId,
+      'patient-id',
+      'MARK_FAILED',
+    );
   });
 });
