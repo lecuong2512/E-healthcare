@@ -16,10 +16,12 @@
     "test": "npm run test --workspaces --if-present",
     "seed:admin-catalog-demo": "docker exec -i ehealth-postgres psql -v ON_ERROR_STOP=1 -U postgres -d ehealth_db < scripts/seed-admin-catalog-demo.sql"
   },
-  "dependencies": {},
   "overrides": {
     "@nestjs/platform-express": {
       "multer": "^2.3.0"
     }
+  },
+  "devDependencies": {
+    "@angular/compiler": "^18.2.14"
   }
 }
