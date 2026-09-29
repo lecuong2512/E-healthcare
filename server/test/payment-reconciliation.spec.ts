@@ -6,6 +6,7 @@ import {
 } from '@shared/enums';
 import { AppointmentEntity } from '../src/database/entities/appointment.entity';
 import { PaymentTransactionEntity } from '../src/database/entities/payment-trans.entity';
+import { PaymentReconciliationAuditEntity } from '../src/database/entities/payment-reconciliation-audit.entity';
 import { PaymentFinalizerService } from '../src/modules/payment/payment-finalizer.service';
 import { PaymentReconciliationService } from '../src/modules/payment/payment-reconciliation.service';
 import { PaymentConfiguration } from '../src/modules/payment/payment-config';
@@ -39,6 +40,9 @@ describe('PaymentReconciliationService', () => {
     update: jest.Mock;
   };
   let appointmentRepository: { find: jest.Mock };
+  let auditRepository: { create: jest.Mock; save: jest.Mock };
+  let lockedPayment: PaymentTransactionEntity;
+  let managerSave: jest.Mock;
   let finalizer: {
     finalize: jest.Mock;
     expireReservationForReconciliation: jest.Mock;
@@ -60,6 +64,12 @@ describe('PaymentReconciliationService', () => {
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     appointmentRepository = { find: jest.fn().mockResolvedValue([]) };
+    auditRepository = {
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => value),
+    };
+    lockedPayment = transaction;
+    managerSave = jest.fn(async (value) => value);
     lockRunner = {
       connect: jest.fn().mockResolvedValue(undefined),
       query: jest
@@ -71,9 +81,29 @@ describe('PaymentReconciliationService', () => {
     dataSource = {
       isInitialized: true,
       getRepository: jest.fn((entity) =>
-        entity === PaymentTransactionEntity ? repository : appointmentRepository,
+        entity === PaymentTransactionEntity
+          ? repository
+          : entity === PaymentReconciliationAuditEntity
+            ? auditRepository
+            : appointmentRepository,
       ),
       createQueryRunner: jest.fn(() => lockRunner),
+      transaction: jest.fn(async (callback) => callback({
+        getRepository: (entity: unknown) => {
+          if (entity === PaymentReconciliationAuditEntity) return auditRepository;
+          if (entity === PaymentTransactionEntity) {
+            return {
+              createQueryBuilder: () => ({
+                setLock: jest.fn().mockReturnThis(),
+                where: jest.fn().mockReturnThis(),
+                getOne: jest.fn().mockResolvedValue(lockedPayment),
+              }),
+            };
+          }
+          return appointmentRepository;
+        },
+        save: managerSave,
+      })),
     } as unknown as DataSource;
     finalizer = {
       finalize: jest.fn().mockResolvedValue('SUCCESS'),
@@ -254,6 +284,10 @@ describe('PaymentReconciliationService', () => {
     expect(configuration.ensureEnabled).toHaveBeenCalled();
     expect(vnpay.queryStatus).toHaveBeenCalledWith(manual);
     expect(finalizer.finalize).toHaveBeenCalledWith(result);
+    expect(auditRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'RETRY_PROVIDER_QUERY',
+      adminId: 'admin-id',
+    }));
   });
 
   it('marks a manual-review transaction failed without allowing arbitrary paid state', async () => {
@@ -262,18 +296,27 @@ describe('PaymentReconciliationService', () => {
       status: PaymentTransactionStatus.RECONCILIATION_REQUIRED,
       reconciliationManualReview: true,
     } as PaymentTransactionEntity;
+    lockedPayment = manual;
     repository.findOne.mockResolvedValueOnce(manual);
 
     await service.resolveManual('payment-id', 'admin-id', 'MARK_FAILED');
 
     expect(finalizer.expireReservationForReconciliation).toHaveBeenCalled();
-    expect(repository.update).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'payment-id', reconciliationManualReview: true }),
-      expect.objectContaining({
-        status: PaymentTransactionStatus.FAILED,
-        reconciliationManualReview: false,
-      }),
-    );
+    expect(lockedPayment.status).toBe(PaymentTransactionStatus.FAILED);
+    expect(lockedPayment.reconciliationManualReview).toBe(false);
+    expect(managerSave).toHaveBeenCalledWith(lockedPayment);
+    expect(auditRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'MARK_FAILED',
+      previousStatus: PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+      newStatus: PaymentTransactionStatus.FAILED,
+    }));
+  });
+
+  it('requires a durable reason before marking a refund as required', async () => {
+    await expect(
+      service.resolveManual('payment-id', 'admin-id', 'MARK_REFUND_REQUIRED'),
+    ).rejects.toThrow('A reason is required');
+    expect(repository.findOne).not.toHaveBeenCalled();
   });
 
   it('allows only one reconciliation leader across service instances', async () => {

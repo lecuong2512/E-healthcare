@@ -185,12 +185,29 @@ describe('Payment HTTP authorization and DTO contract', () => {
     await request(app.getHttpServer())
       .post(`/api/v1/payments/${transactionId}/resolve-reconciliation`)
       .set('x-test-role', Role.ADMIN)
+      .send({ outcome: 'MARK_REFUND_REQUIRED' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/api/v1/payments/${transactionId}/resolve-reconciliation`)
+      .set('x-test-role', Role.ADMIN)
+      .send({ outcome: 'MARK_REFUND_REQUIRED', note: 'Provider captured after timeout' })
+      .expect(201);
+    expect(reconciliation.resolveManual).toHaveBeenCalledWith(
+      transactionId,
+      'patient-id',
+      'MARK_REFUND_REQUIRED',
+      'Provider captured after timeout',
+    );
+    await request(app.getHttpServer())
+      .post(`/api/v1/payments/${transactionId}/resolve-reconciliation`)
+      .set('x-test-role', Role.ADMIN)
       .send({ outcome: 'MARK_FAILED' })
       .expect(201);
     expect(reconciliation.resolveManual).toHaveBeenCalledWith(
       transactionId,
       'patient-id',
       'MARK_FAILED',
+      undefined,
     );
   });
 });

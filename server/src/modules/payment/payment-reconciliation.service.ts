@@ -1,4 +1,11 @@
-import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import {
   AppointmentStatus,
@@ -6,9 +13,13 @@ import {
   PaymentStatus,
   PaymentTransactionStatus,
 } from '@shared/enums';
-import { DataSource, LessThanOrEqual } from 'typeorm';
+import { DataSource, LessThanOrEqual, Repository } from 'typeorm';
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
 import { PaymentTransactionEntity } from '../../database/entities/payment-trans.entity';
+import {
+  PaymentReconciliationAuditAction,
+  PaymentReconciliationAuditEntity,
+} from '../../database/entities/payment-reconciliation-audit.entity';
 import { RefundRequestEntity } from '../../database/entities/refund-request.entity';
 import { MOMO_PROVIDER, VNPAY_PROVIDER } from './constants/payment.constants';
 import { PaymentFinalizerService } from './payment-finalizer.service';
@@ -124,23 +135,34 @@ export class PaymentReconciliationService {
     }));
   }
 
-  async manualReconcile(transactionId: string, adminId: string) {
+  async manualReconcile(transactionId: string, adminId: string, note?: string) {
     this.configuration.ensureEnabled();
     const transaction = await this.manualTransaction(transactionId);
-    this.audit(adminId, transactionId, 'RETRY_PROVIDER_QUERY');
     await this.reconcileOne(transaction, new Date());
-    return this.dataSource.getRepository(PaymentTransactionEntity).findOneByOrFail({
+    const resolved = await this.dataSource.getRepository(PaymentTransactionEntity).findOneByOrFail({
       id: transactionId,
     });
+    await this.persistAudit(
+      this.dataSource.getRepository(PaymentReconciliationAuditEntity),
+      transactionId,
+      adminId,
+      'RETRY_PROVIDER_QUERY',
+      this.resolutionReason('RETRY_PROVIDER_QUERY', note),
+      transaction.status,
+      resolved.status,
+    );
+    return resolved;
   }
 
   async resolveManual(
     transactionId: string,
     adminId: string,
     outcome: ReconciliationResolution,
+    note?: string,
   ) {
+    const reason = this.resolutionReason(outcome, note);
     if (outcome === 'RETRY_PROVIDER_QUERY') {
-      return this.manualReconcile(transactionId, adminId);
+      return this.manualReconcile(transactionId, adminId, reason);
     }
     const snapshot = await this.manualTransaction(transactionId);
     if (outcome === 'MARK_FAILED') {
@@ -148,23 +170,33 @@ export class PaymentReconciliationService {
         snapshot.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
         snapshot.merchantTransactionId,
       );
-      const result = await this.dataSource.getRepository(PaymentTransactionEntity).update(
-        {
-          id: transactionId,
-          status: PaymentTransactionStatus.RECONCILIATION_REQUIRED,
-          reconciliationManualReview: true,
-        },
-        {
-          status: PaymentTransactionStatus.FAILED,
-          reconciliationManualReview: false,
-          nextReconcileAt: null,
-          lastReconcileError: 'Manually marked failed by an administrator.',
-        },
-      );
-      if (result.affected !== 1) throw new ConflictException('Transaction state changed.');
-      this.audit(adminId, transactionId, outcome);
-      return this.dataSource.getRepository(PaymentTransactionEntity).findOneByOrFail({
-        id: transactionId,
+      return this.dataSource.transaction(async (manager) => {
+        const transaction = await manager.getRepository(PaymentTransactionEntity)
+          .createQueryBuilder('payment')
+          .setLock('pessimistic_write')
+          .where('payment.id = :transactionId', { transactionId })
+          .getOne();
+        if (
+          !transaction ||
+          transaction.status !== PaymentTransactionStatus.RECONCILIATION_REQUIRED ||
+          !transaction.reconciliationManualReview
+        ) throw new ConflictException('Transaction state changed.');
+        const previousStatus = transaction.status;
+        transaction.status = PaymentTransactionStatus.FAILED;
+        transaction.reconciliationManualReview = false;
+        transaction.nextReconcileAt = null;
+        transaction.lastReconcileError = reason;
+        await manager.save(transaction);
+        await this.persistAudit(
+          manager.getRepository(PaymentReconciliationAuditEntity),
+          transactionId,
+          adminId,
+          outcome,
+          reason,
+          previousStatus,
+          transaction.status,
+        );
+        return transaction;
       });
     }
 
@@ -188,27 +220,36 @@ export class PaymentReconciliationService {
       const existing = await repository.findOne({
         where: { paymentTransactionId: transaction.id },
       });
-      if (existing) return existing;
+      const previousStatus = transaction.status;
       transaction.status = PaymentTransactionStatus.LATE_SUCCESS;
       transaction.reconciliationManualReview = false;
       transaction.nextReconcileAt = null;
-      transaction.lastReconcileError = 'Administrator determined that a refund is required.';
+      transaction.lastReconcileError = reason;
       appointment.paymentStatus = PaymentStatus.REFUND_PENDING;
       await manager.save([transaction, appointment]);
-      return manager.save(repository.create({
-        appointmentId: appointment.id,
-        paymentTransactionId: transaction.id,
-        provider: transaction.provider,
-        amount: Number(transaction.amountVnd),
-        status: 'PENDING',
-        attempts: 0,
-        failureReason: null,
-        processedAt: null,
-        providerRefundId: null,
-        processedBy: null,
-      }));
+      const refund = existing ?? await manager.save(repository.create({
+          appointmentId: appointment.id,
+          paymentTransactionId: transaction.id,
+          provider: transaction.provider,
+          amount: Number(transaction.amountVnd),
+          status: 'PENDING',
+          attempts: 0,
+          failureReason: null,
+          processedAt: null,
+          providerRefundId: null,
+          processedBy: null,
+        }));
+      await this.persistAudit(
+        manager.getRepository(PaymentReconciliationAuditEntity),
+        transactionId,
+        adminId,
+        outcome,
+        reason,
+        previousStatus,
+        transaction.status,
+      );
+      return refund;
     });
-    this.audit(adminId, transactionId, outcome);
     return refund;
   }
 
@@ -224,12 +265,44 @@ export class PaymentReconciliationService {
     return transaction;
   }
 
-  private audit(adminId: string, transactionId: string, action: string): void {
+  private resolutionReason(outcome: ReconciliationResolution, note?: string): string {
+    const trimmed = note?.trim();
+    if (outcome === 'MARK_REFUND_REQUIRED' && !trimmed) {
+      throw new BadRequestException('A reason is required when marking a refund as required.');
+    }
+    if (trimmed && trimmed.length > 2_000) {
+      throw new BadRequestException('Reconciliation reason must not exceed 2000 characters.');
+    }
+    if (trimmed) return trimmed;
+    return outcome === 'MARK_FAILED'
+      ? 'Administrator marked the transaction as failed.'
+      : 'Administrator requested a provider status retry.';
+  }
+
+  private async persistAudit(
+    repository: Repository<PaymentReconciliationAuditEntity>,
+    transactionId: string,
+    adminId: string,
+    action: PaymentReconciliationAuditAction,
+    reason: string,
+    previousStatus: PaymentTransactionStatus,
+    newStatus: PaymentTransactionStatus,
+  ): Promise<void> {
+    await repository.save(repository.create({
+      paymentTransactionId: transactionId,
+      adminId,
+      action,
+      reason,
+      previousStatus,
+      newStatus,
+    }));
     this.logger.log(JSON.stringify({
       event: 'payment.reconciliation.manual',
       adminId,
       transactionId,
       action,
+      previousStatus,
+      newStatus,
     }));
   }
 

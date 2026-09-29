@@ -56,6 +56,7 @@ export class PaymentController {
       transactionId,
       request.auth!.userId,
       dto.outcome,
+      dto.note,
     );
   }
 
