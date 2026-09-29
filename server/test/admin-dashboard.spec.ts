@@ -4,9 +4,9 @@ import { ReportApprovalEntity } from '../src/database/entities/report-approval.e
 
 describe('AdminDashboardService', () => {
   it('maps aggregated appointment metrics to dashboard KPIs', async () => {
-    const dataSource = { query: jest.fn().mockResolvedValueOnce([{ visits: '12', revenue: '4800000', completed: '9', cancelled: '2', noShows: '1' }]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([]) } as unknown as DataSource;
+    const dataSource = { query: jest.fn().mockResolvedValueOnce([{ visits: '12', revenue: '4800000', completed: '9', cancelled: '2', noShows: '1' }]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ day: '2026-09-29', visits: '3', revenue: '1200000' }]).mockResolvedValueOnce([]) } as unknown as DataSource;
     const service = new AdminDashboardService(dataSource);
-    await expect(service.overview(7)).resolves.toMatchObject({ visits: 12, revenue: 4800000, completionRate: 75, cancellationRate: 16.67, noShowRate: 8.33, paymentBreakdown: [], trend: [] });
+    await expect(service.overview(7)).resolves.toMatchObject({ visits: 12, revenue: 4800000, completionRate: 75, cancellationRate: 16.67, noShowRate: 8.33, paymentBreakdown: [], trend: [{ day: '2026-09-29', visits: 3, revenue: 1200000 }] });
   });
   it('stores the administrator confirmation before a report is issued', async () => {
     const repository = { create: jest.fn(value => value), save: jest.fn(value => Promise.resolve(value)) };
