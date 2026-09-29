@@ -100,11 +100,11 @@ describe('VNPAY 2.1 sandbox provider', () => {
     ['06', 'UNKNOWN'],
     ['07', 'UNKNOWN'],
     ['08', 'UNKNOWN'],
-    ['09', 'FINAL_FAILED'],
-    ['10', 'FINAL_FAILED'],
-    ['11', 'FINAL_FAILED'],
-    ['12', 'FINAL_FAILED'],
-    ['20', 'FINAL_FAILED'],
+    ['09', 'UNKNOWN'],
+    ['10', 'UNKNOWN'],
+    ['11', 'UNKNOWN'],
+    ['12', 'UNKNOWN'],
+    ['20', 'UNKNOWN'],
   ])('maps VNPAY transaction status %s to %s', async (transactionStatus, state) => {
     const payload: Record<string, string> = {
       vnp_TmnCode: config.tmnCode,
@@ -152,6 +152,9 @@ describe('VNPAY 2.1 sandbox provider', () => {
     ['vnp_TxnRef', 'ANOTHER-ORDER'],
     ['vnp_TmnCode', 'ATTACKER'],
     ['vnp_Amount', '10000'],
+    ['vnp_TransactionType', '02'],
+    ['vnp_TransactionType', '03'],
+    ['vnp_TransactionType', ''],
   ])('rejects a signed query response with mismatched %s', async (field, value) => {
     const response: Record<string, string> = {
       vnp_ResponseId: 'response-1',

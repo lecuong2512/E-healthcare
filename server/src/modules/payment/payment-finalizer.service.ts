@@ -255,8 +255,23 @@ export class PaymentFinalizerService {
     if (Number(payment.amountVnd) !== result.amountVnd) {
       throw new BadRequestException('Payment amount mismatch.');
     }
-    payment.providerTransactionId =
-      result.providerTransactionId || payment.providerTransactionId;
+    if (
+      result.provider === 'MOMO' &&
+      result.requestId !== undefined &&
+      result.requestId !== payment.requestId
+    ) {
+      throw new BadRequestException('MoMo requestId mismatch.');
+    }
+    if (
+      payment.providerTransactionId &&
+      result.providerTransactionId &&
+      payment.providerTransactionId !== result.providerTransactionId
+    ) {
+      throw new BadRequestException('Provider transaction ID mismatch.');
+    }
+    if (!payment.providerTransactionId && result.providerTransactionId) {
+      payment.providerTransactionId = result.providerTransactionId;
+    }
     payment.responseCode = result.responseCode;
     payment.providerStatus = result.rawProviderStatus || null;
     payment.callbackReceivedAt = new Date();

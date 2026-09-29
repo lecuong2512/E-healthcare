@@ -10,6 +10,7 @@ export interface VerifiedPaymentResult {
   provider: PaymentMethod.VNPAY | PaymentMethod.MOMO;
   merchantTransactionId: string;
   providerTransactionId?: string;
+  requestId?: string;
   amountVnd: number;
   state: VerifiedPaymentState;
   responseCode: string;

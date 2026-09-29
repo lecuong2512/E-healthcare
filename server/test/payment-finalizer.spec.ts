@@ -285,6 +285,33 @@ describe('PaymentFinalizerService', () => {
     expect(redis.releaseReservationIfOwner).not.toHaveBeenCalled();
   });
 
+  it('rejects a signed MoMo callback with a mismatched request ID', async () => {
+    payment.provider = PaymentMethod.MOMO;
+    payment.requestId = 'original-request';
+
+    await expect(
+      service.finalize({
+        ...verified('SUCCESS'),
+        provider: PaymentMethod.MOMO,
+        requestId: 'another-request',
+      }),
+    ).rejects.toThrow('MoMo requestId mismatch.');
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  it('keeps provider transaction identity immutable across replays', async () => {
+    payment.providerTransactionId = 'VNP-ORIGINAL';
+
+    await expect(
+      service.finalize({
+        ...verified('SUCCESS'),
+        providerTransactionId: 'VNP-CONFLICT',
+      }),
+    ).rejects.toThrow('Provider transaction ID mismatch.');
+    expect(payment.providerTransactionId).toBe('VNP-ORIGINAL');
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
   it('stops automatic reconciliation after the bounded retry threshold', async () => {
     payment.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
     payment.reconciliationAttempts = 4;

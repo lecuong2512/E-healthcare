@@ -82,7 +82,10 @@ export class MomoProvider implements PaymentProvider {
     if (result.partnerCode !== this.config.partnerCode) {
       throw new BadRequestException('Invalid MoMo partner code.');
     }
-    return this.normalize(result, true, true);
+    if (!result.requestId) {
+      throw new BadRequestException('Missing MoMo request ID.');
+    }
+    return this.normalize(result, true, true, true);
   }
 
   async queryStatus(
@@ -126,6 +129,7 @@ export class MomoProvider implements PaymentProvider {
       },
       false,
       true,
+      false,
     );
   }
 
@@ -152,6 +156,7 @@ export class MomoProvider implements PaymentProvider {
     payload: MomoPayload,
     signatureVerified: boolean,
     sourceValidated: boolean,
+    includeRequestId: boolean,
   ): VerifiedPaymentResult {
     const resultCode = Number(payload.resultCode);
     const amountVnd = Number(payload.amount);
@@ -165,6 +170,7 @@ export class MomoProvider implements PaymentProvider {
       merchantTransactionId: orderId,
       providerTransactionId:
         payload.transId === undefined ? undefined : String(payload.transId),
+      requestId: includeRequestId ? String(payload.requestId) : undefined,
       amountVnd,
       state: this.mapState(resultCode),
       responseCode: String(resultCode),
@@ -178,7 +184,7 @@ export class MomoProvider implements PaymentProvider {
   private mapState(resultCode: number): VerifiedPaymentState {
     if (resultCode === 0 || resultCode === 9000) return 'SUCCESS';
     if ([1000, 7000, 7002].includes(resultCode)) return 'PENDING';
-    if ([10, 11, 12, 13, 20, 21, 22, 41, 45, 47].includes(resultCode)) {
+    if ([10, 11, 12, 13, 20, 21, 22, 40, 41, 42, 43, 45, 47].includes(resultCode)) {
       return 'UNKNOWN';
     }
     return 'FINAL_FAILED';

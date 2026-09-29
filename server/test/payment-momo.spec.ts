@@ -110,6 +110,9 @@ describe('MoMo sandbox provider', () => {
     [7000, 'PENDING'],
     [7002, 'PENDING'],
     [10, 'UNKNOWN'],
+    [40, 'UNKNOWN'],
+    [42, 'UNKNOWN'],
+    [43, 'UNKNOWN'],
     [1006, 'FINAL_FAILED'],
   ])('maps MoMo result code %s to %s', async (resultCode, state) => {
     const payload: Record<string, unknown> = {
@@ -130,6 +133,7 @@ describe('MoMo sandbox provider', () => {
 
     await expect(new MomoProvider(config).verifyCallback(payload)).resolves.toMatchObject({
       merchantTransactionId: 'PAY202609280001',
+      requestId: 'request-1',
       amountVnd: 300_000,
       state,
       signatureVerified: true,
@@ -185,5 +189,20 @@ describe('MoMo sandbox provider', () => {
         expiresAt: new Date(),
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects a signed IPN without a request ID', async () => {
+    const payload: Record<string, unknown> = {
+      partnerCode: config.partnerCode,
+      orderId: 'PAY1',
+      amount: 300_000,
+      resultCode: 0,
+      extraData: '',
+    };
+    payload.signature = signatures.sign(canonicalizer.ipn(payload, config.accessKey));
+
+    await expect(new MomoProvider(config).verifyCallback(payload)).rejects.toThrow(
+      'Missing MoMo request ID.',
+    );
   });
 });

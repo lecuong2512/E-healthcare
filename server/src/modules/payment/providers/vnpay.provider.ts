@@ -76,7 +76,7 @@ export class VnpayProvider implements PaymentProvider {
       merchantTransactionId: params.vnp_TxnRef,
       providerTransactionId: params.vnp_TransactionNo || undefined,
       amountVnd,
-      state: this.mapIpnState(responseCode, transactionStatus),
+      state: this.mapPaymentIpnState(responseCode, transactionStatus),
       responseCode,
       rawProviderStatus: transactionStatus,
       signatureVerified: true,
@@ -138,13 +138,19 @@ export class VnpayProvider implements PaymentProvider {
     }
     const responseCode = result.vnp_ResponseCode || '99';
     const providerStatus = result.vnp_TransactionStatus || '';
+    const transactionType = result.vnp_TransactionType || '';
+    if (transactionType !== '01') {
+      throw new BadGatewayException(
+        `Unexpected VNPAY transaction type: ${transactionType || 'missing'}`,
+      );
+    }
     const amountVnd = this.parseProviderAmount(result.vnp_Amount);
     return {
       provider: PaymentMethod.VNPAY,
       merchantTransactionId: result.vnp_TxnRef,
       providerTransactionId: result.vnp_TransactionNo || undefined,
       amountVnd,
-      state: this.mapQueryState(responseCode, providerStatus),
+      state: this.mapPaymentQueryState(responseCode, providerStatus),
       responseCode,
       rawProviderStatus: providerStatus,
       signatureVerified: true,
@@ -191,32 +197,36 @@ export class VnpayProvider implements PaymentProvider {
     return scaled / 100;
   }
 
-  private mapIpnState(
+  private mapPaymentIpnState(
     responseCode: string,
     transactionStatus: string,
   ): VerifiedPaymentResult['state'] {
     if (responseCode === '00' && transactionStatus === '00') return 'SUCCESS';
-    return this.mapTransactionStatus(transactionStatus);
+    switch (transactionStatus) {
+      case '01':
+        return 'PENDING';
+      case '02':
+        return 'FINAL_FAILED';
+      default:
+        return 'UNKNOWN';
+    }
   }
 
-  private mapQueryState(
+  private mapPaymentQueryState(
     responseCode: string,
     transactionStatus: string,
   ): VerifiedPaymentResult['state'] {
     if (responseCode !== '00') return 'UNKNOWN';
-    if (transactionStatus === '00') return 'SUCCESS';
-    return this.mapTransactionStatus(transactionStatus);
-  }
-
-  private mapTransactionStatus(
-    transactionStatus: string,
-  ): VerifiedPaymentResult['state'] {
-    if (transactionStatus === '01') return 'PENDING';
-    if (['02', '09', '10', '11', '12', '20'].includes(transactionStatus)) {
-      return 'FINAL_FAILED';
+    switch (transactionStatus) {
+      case '00':
+        return 'SUCCESS';
+      case '01':
+        return 'PENDING';
+      case '02':
+        return 'FINAL_FAILED';
+      default:
+        return 'UNKNOWN';
     }
-    if (['04', '05', '06', '07', '08'].includes(transactionStatus)) return 'UNKNOWN';
-    return 'UNKNOWN';
   }
 
   private assertAmount(amountVnd: number): void {
@@ -254,6 +264,7 @@ export class VnpayProvider implements PaymentProvider {
       'vnp_TransactionNo',
       'vnp_ResponseCode',
       'vnp_TransactionStatus',
+      'vnp_TransactionType',
       'vnp_Amount',
       'vnp_BankCode',
       'vnp_PayDate',
