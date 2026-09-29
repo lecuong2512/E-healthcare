@@ -10,9 +10,13 @@ import { createDataSource } from '../src/database/database-options';
 import { PaymentTransactionEntity } from '../src/database/entities/payment-trans.entity';
 import { AppointmentEntity } from '../src/database/entities/appointment.entity';
 import { RefundRequestEntity } from '../src/database/entities/refund-request.entity';
+import { DoctorScheduleEntity } from '../src/database/entities/doctor-schedule.entity';
+import { PaymentReconciliationAuditEntity } from '../src/database/entities/payment-reconciliation-audit.entity';
 import { RedisService } from '../src/common/redis/redis.service';
+import { BookingService } from '../src/modules/booking/booking.service';
 import { PaymentConfiguration } from '../src/modules/payment/payment-config';
 import { PaymentFinalizerService } from '../src/modules/payment/payment-finalizer.service';
+import { PaymentReconciliationService } from '../src/modules/payment/payment-reconciliation.service';
 import { PaymentService } from '../src/modules/payment/payment.service';
 import { PaymentProviderError, PaymentProviderErrorKind } from '../src/modules/payment/providers/payment-provider.error';
 import { PaymentProvider } from '../src/modules/payment/providers/payment-provider.interface';
@@ -80,6 +84,19 @@ describe('Payment invariants on PostgreSQL and Redis', () => {
       database,
       finalizer,
       configuration as PaymentConfiguration,
+      provider,
+      provider,
+    );
+  }
+
+  function createReconciliationService(): PaymentReconciliationService {
+    return new PaymentReconciliationService(
+      database,
+      finalizer,
+      {
+        isEnabled: () => true,
+        ensureEnabled: () => undefined,
+      } as PaymentConfiguration,
       provider,
       provider,
     );
@@ -383,5 +400,211 @@ describe('Payment invariants on PostgreSQL and Redis', () => {
     });
     expect(expired.status).toBe(AppointmentStatus.CANCELLED);
     expect(expired.paymentStatus).toBe(PaymentStatus.FAILED);
+  });
+
+  it('keeps the appointment, slot, and payment active during pre-expiry reconciliation', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(
+      appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1',
+    );
+    const paymentRepository = database.getRepository(PaymentTransactionEntity);
+    const transaction = await paymentRepository.findOneByOrFail({ appointmentId });
+    transaction.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
+    transaction.nextReconcileAt = new Date('2026-09-29T00:00:00.000Z');
+    await paymentRepository.save(transaction);
+    provider.queryStatus.mockResolvedValueOnce(verified(transaction, 'PENDING'));
+
+    await createReconciliationService().reconcileExpired(new Date('2026-09-29T00:01:00.000Z'));
+
+    const unchangedAppointment = await database.getRepository(AppointmentEntity)
+      .findOneByOrFail({ id: appointmentId });
+    const unchangedSchedule = await database.getRepository(DoctorScheduleEntity)
+      .findOneByOrFail({ id: unchangedAppointment.scheduleId });
+    const unchangedPayment = await paymentRepository.findOneByOrFail({ id: transaction.id });
+    expect(unchangedAppointment.status).toBe(AppointmentStatus.PENDING_PAYMENT);
+    expect(unchangedSchedule.status).toBe(SlotStatus.HOLDING);
+    expect(unchangedPayment.status).toBe(PaymentTransactionStatus.RECONCILIATION_REQUIRED);
+  });
+
+  it.each([
+    PaymentTransactionStatus.FAILED,
+    PaymentTransactionStatus.LATE_SUCCESS,
+    PaymentTransactionStatus.SUPERSEDED,
+  ])('does not revive terminal payment state %s during a scheduled retry', async (status) => {
+    const appointmentId = await appointment();
+    await service.initiate(
+      appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1',
+    );
+    const repository = database.getRepository(PaymentTransactionEntity);
+    const transaction = await repository.findOneByOrFail({ appointmentId });
+    transaction.status = status;
+    await repository.save(transaction);
+
+    await finalizer.scheduleReconciliationRetry(
+      PaymentMethod.VNPAY,
+      transaction.merchantTransactionId,
+      'stale provider query',
+    );
+
+    const unchanged = await repository.findOneByOrFail({ id: transaction.id });
+    expect(unchanged.status).toBe(status);
+    expect(unchanged.reconciliationAttempts).toBe(0);
+  });
+
+  it('converges concurrent callback and reconciliation success to one paid state', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(
+      appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1',
+    );
+    const repository = database.getRepository(PaymentTransactionEntity);
+    const transaction = await repository.findOneByOrFail({ appointmentId });
+    transaction.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
+    transaction.nextReconcileAt = new Date('2026-09-29T00:00:00.000Z');
+    await repository.save(transaction);
+    const success = verified(transaction, 'SUCCESS');
+    provider.queryStatus.mockResolvedValueOnce(success);
+
+    await Promise.all([
+      createReconciliationService().reconcileExpired(new Date('2026-09-29T00:01:00.000Z')),
+      finalizer.finalize(success),
+    ]);
+
+    const paid = await database.getRepository(AppointmentEntity).findOneByOrFail({
+      id: appointmentId,
+    });
+    const persisted = await repository.findOneByOrFail({ id: transaction.id });
+    expect(paid.status).toBe(AppointmentStatus.CONFIRMED);
+    expect(paid.paymentStatus).toBe(PaymentStatus.PAID);
+    expect(persisted.status).toBe(PaymentTransactionStatus.SUCCESS);
+    expect(await database.getRepository(RefundRequestEntity).countBy({
+      paymentTransactionId: transaction.id,
+    })).toBe(0);
+  });
+
+  it('removes real Redis reservation keys only for the reservation owner', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(
+      appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1',
+    );
+    const booked = await database.getRepository(AppointmentEntity).findOneByOrFail({
+      id: appointmentId,
+    });
+    const transaction = await database.getRepository(PaymentTransactionEntity)
+      .findOneByOrFail({ appointmentId });
+    const lockKey = BookingService.formatSlotLockKey(doctorId, booked.scheduleId);
+    const metadataKey = BookingService.formatReservationKey(transaction.reservationId);
+    await redis.set(lockKey, transaction.reservationId, 'EX', 60);
+    await redis.set(metadataKey, JSON.stringify({ reservationId: transaction.reservationId }), 'EX', 60);
+
+    await finalizer.finalize(verified(transaction, 'SUCCESS'));
+
+    await expect(redis.get(lockKey)).resolves.toBeNull();
+    await expect(redis.get(metadataKey)).resolves.toBeNull();
+  });
+
+  it('keeps the committed database state when Redis cleanup fails', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(
+      appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1',
+    );
+    const transaction = await database.getRepository(PaymentTransactionEntity)
+      .findOneByOrFail({ appointmentId });
+    const cleanupFailure = {
+      releaseReservationIfOwner: jest.fn().mockRejectedValue(new Error('Redis unavailable')),
+    } as unknown as RedisService;
+    const isolatedFinalizer = new PaymentFinalizerService(database, cleanupFailure);
+
+    await expect(isolatedFinalizer.finalize(verified(transaction, 'SUCCESS')))
+      .resolves.toBe('SUCCESS');
+
+    const paid = await database.getRepository(AppointmentEntity).findOneByOrFail({
+      id: appointmentId,
+    });
+    expect(paid.status).toBe(AppointmentStatus.CONFIRMED);
+    expect(paid.paymentStatus).toBe(PaymentStatus.PAID);
+  });
+
+  it('rejects a callback whose provider transaction ID changes', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(
+      appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1',
+    );
+    const repository = database.getRepository(PaymentTransactionEntity);
+    const transaction = await repository.findOneByOrFail({ appointmentId });
+    transaction.providerTransactionId = 'ORIGINAL-PROVIDER-ID';
+    await repository.save(transaction);
+
+    await expect(finalizer.finalize(
+      verified(transaction, 'SUCCESS', 'DIFFERENT-PROVIDER-ID'),
+    )).rejects.toBeInstanceOf(BadRequestException);
+    expect((await repository.findOneByOrFail({ id: transaction.id })).status)
+      .toBe(PaymentTransactionStatus.PENDING);
+  });
+
+  it('persists manual refund reconciliation state and its administrator audit', async () => {
+    const adminId = await user('Payment Administrator');
+    const appointmentId = await appointment();
+    await service.initiate(
+      appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1',
+    );
+    const repository = database.getRepository(PaymentTransactionEntity);
+    const transaction = await repository.findOneByOrFail({ appointmentId });
+    transaction.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
+    transaction.reconciliationManualReview = true;
+    await repository.save(transaction);
+
+    await createReconciliationService().resolveManual(
+      transaction.id,
+      adminId,
+      'MARK_REFUND_REQUIRED',
+      'Provider confirmed a late capture during manual review.',
+    );
+
+    const resolved = await repository.findOneByOrFail({ id: transaction.id });
+    const resolvedAppointment = await database.getRepository(AppointmentEntity)
+      .findOneByOrFail({ id: appointmentId });
+    const audit = await database.getRepository(PaymentReconciliationAuditEntity)
+      .findOneByOrFail({ paymentTransactionId: transaction.id });
+    expect(resolved.status).toBe(PaymentTransactionStatus.LATE_SUCCESS);
+    expect(resolvedAppointment.paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
+    expect(audit).toMatchObject({
+      adminId,
+      action: 'MARK_REFUND_REQUIRED',
+      reason: 'Provider confirmed a late capture during manual review.',
+      previousStatus: PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+      newStatus: PaymentTransactionStatus.LATE_SUCCESS,
+    });
+    expect(await database.getRepository(RefundRequestEntity).countBy({
+      paymentTransactionId: transaction.id,
+    })).toBe(1);
+  });
+
+  it('confirms a payment that succeeds after safe pre-expiry reconciliation', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(
+      appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1',
+    );
+    const repository = database.getRepository(PaymentTransactionEntity);
+    const transaction = await repository.findOneByOrFail({ appointmentId });
+    transaction.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
+    transaction.nextReconcileAt = new Date('2026-09-29T00:00:00.000Z');
+    await repository.save(transaction);
+    provider.queryStatus.mockResolvedValueOnce(verified(transaction, 'PENDING'));
+    const reconciliation = createReconciliationService();
+    await reconciliation.reconcileExpired(new Date('2026-09-29T00:01:00.000Z'));
+    const pending = await repository.findOneByOrFail({ id: transaction.id });
+    pending.nextReconcileAt = new Date('2026-09-29T00:01:30.000Z');
+    await repository.save(pending);
+    provider.queryStatus.mockResolvedValueOnce(verified(pending, 'SUCCESS'));
+
+    await reconciliation.reconcileExpired(new Date('2026-09-29T00:02:00.000Z'));
+
+    const paid = await database.getRepository(AppointmentEntity).findOneByOrFail({
+      id: appointmentId,
+    });
+    expect(paid.status).toBe(AppointmentStatus.CONFIRMED);
+    expect(paid.paymentStatus).toBe(PaymentStatus.PAID);
+    expect((await repository.findOneByOrFail({ id: transaction.id })).status)
+      .toBe(PaymentTransactionStatus.SUCCESS);
   });
 });
