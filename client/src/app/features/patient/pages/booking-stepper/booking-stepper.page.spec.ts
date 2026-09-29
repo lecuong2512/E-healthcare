@@ -1,7 +1,12 @@
 import { ComponentFixture, TestBed, discardPeriodicTasks, fakeAsync, tick } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ActivatedRoute, Router } from '@angular/router';
-import { AppointmentStatus, PaymentMethod, PaymentStatus } from '@shared/enums';
+import {
+  AppointmentStatus,
+  PaymentMethod,
+  PaymentStatus,
+  PaymentTransactionStatus,
+} from '@shared/enums';
 import { of, throwError } from 'rxjs';
 import { PatientBookingApiService, PatientDoctorDetail } from '../../data-access/patient-booking-api.service';
 import { PaymentRedirectService } from '../../data-access/payment-redirect.service';
@@ -40,7 +45,7 @@ describe('BookingStepperPage payment flow', () => {
   beforeEach(async () => {
     api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', [
       'searchDoctors', 'getDoctor', 'reserveSlot', 'releaseSlot', 'confirmBooking', 'initiatePayment',
-      'getVouchers', 'validateVoucher',
+      'getPaymentStatus', 'getVouchers', 'validateVoucher',
     ]);
     api.searchDoctors.and.returnValue(of({
       data: [doctor],
@@ -73,6 +78,15 @@ describe('BookingStepperPage payment flow', () => {
       merchantTransactionId: 'PAY01',
       paymentUrl: 'https://test-payment.momo.vn/pay',
       expiresAt: new Date().toISOString(),
+    }));
+    api.getPaymentStatus.and.returnValue(of({
+      appointmentId,
+      appointmentStatus: AppointmentStatus.PENDING_PAYMENT,
+      paymentStatus: PaymentStatus.PENDING,
+      provider: PaymentMethod.VNPAY,
+      transactionStatus: PaymentTransactionStatus.PENDING,
+      expiresAt: new Date().toISOString(),
+      paidAt: null,
     }));
     router = jasmine.createSpyObj<Router>('Router', ['navigate']);
     redirect = jasmine.createSpyObj<PaymentRedirectService>('PaymentRedirectService', ['redirect']);
@@ -215,6 +229,8 @@ describe('BookingStepperPage payment flow', () => {
     component = fixture.componentInstance;
     fixture.detectChanges();
 
+    expect(component.step()).toBe(4);
+    expect(api.getPaymentStatus).toHaveBeenCalledWith(appointmentId);
     component.retryPendingPayment();
 
     expect(api.confirmBooking).not.toHaveBeenCalled();
@@ -223,6 +239,70 @@ describe('BookingStepperPage payment flow', () => {
       PaymentMethod.VNPAY,
       idempotencyKey,
     );
+  });
+
+  [
+    PaymentTransactionStatus.SUCCESS,
+    PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+    PaymentTransactionStatus.LATE_SUCCESS,
+  ].forEach((transactionStatus) => {
+    it(`routes a recovered ${transactionStatus} payment to its result`, () => {
+      sessionStorage.setItem('pendingPaymentContext', JSON.stringify({
+        appointmentId,
+        provider: PaymentMethod.VNPAY,
+        idempotencyKey: '55555555-5555-4555-8555-555555555555',
+      }));
+      api.getPaymentStatus.and.returnValue(of({
+        appointmentId,
+        appointmentStatus: AppointmentStatus.PENDING_PAYMENT,
+        paymentStatus: PaymentStatus.PENDING,
+        provider: PaymentMethod.VNPAY,
+        transactionStatus,
+        expiresAt: new Date().toISOString(),
+        paidAt: null,
+      }));
+
+      fixture.destroy();
+      fixture = TestBed.createComponent(BookingStepperPage);
+      component = fixture.componentInstance;
+      fixture.detectChanges();
+
+      expect(api.initiatePayment).not.toHaveBeenCalled();
+      expect(router.navigate).toHaveBeenCalledWith(['/patient/payment-result'], {
+        queryParams: { appointmentId },
+      });
+    });
+  });
+
+  it('clears a recovered terminal payment before routing to its result', () => {
+    sessionStorage.setItem('pendingPaymentContext', JSON.stringify({
+      appointmentId,
+      provider: PaymentMethod.VNPAY,
+      idempotencyKey: '55555555-5555-4555-8555-555555555555',
+    }));
+    sessionStorage.setItem('pendingPaymentAppointmentId', appointmentId);
+    api.getPaymentStatus.and.returnValue(of({
+      appointmentId,
+      appointmentStatus: AppointmentStatus.CANCELLED,
+      paymentStatus: PaymentStatus.FAILED,
+      provider: PaymentMethod.VNPAY,
+      transactionStatus: PaymentTransactionStatus.FAILED,
+      expiresAt: new Date().toISOString(),
+      paidAt: null,
+    }));
+
+    fixture.destroy();
+    fixture = TestBed.createComponent(BookingStepperPage);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    expect(component.pendingPaymentContext()).toBeNull();
+    expect(sessionStorage.getItem('pendingPaymentContext')).toBeNull();
+    expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBeNull();
+    expect(api.initiatePayment).not.toHaveBeenCalled();
+    expect(router.navigate).toHaveBeenCalledWith(['/patient/payment-result'], {
+      queryParams: { appointmentId },
+    });
   });
 
   it('requires consent before creating the appointment', () => {

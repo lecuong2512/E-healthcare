@@ -3,7 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { PaymentMethod } from '@shared/enums';
+import { AppointmentStatus, PaymentMethod, PaymentStatus, PaymentTransactionStatus } from '@shared/enums';
 import { NzAlertModule } from 'ng-zorro-antd/alert';
 import { catchError, finalize, of, switchMap } from 'rxjs';
 
@@ -146,6 +146,12 @@ export class BookingStepperPage implements OnDestroy {
       )),
       error: () => this.vouchers.set([]),
     });
+    const pendingPayment = this.pendingPaymentContext();
+    if (pendingPayment) {
+      this.bookingCommitted = true;
+      this.step.set(4);
+      this.checkPendingPayment(pendingPayment, false);
+    }
     if (doctorId) this.loadDoctor(doctorId);
   }
 
@@ -297,7 +303,7 @@ export class BookingStepperPage implements OnDestroy {
 
   retryPendingPayment(): void {
     const context = this.pendingPaymentContext();
-    if (context) this.initiateOnlinePayment(context);
+    if (context) this.checkPendingPayment(context, true);
   }
 
   goToStep(step: number): void { this.step.set(step); }
@@ -383,6 +389,51 @@ export class BookingStepperPage implements OnDestroy {
     this.api.releaseSlot({ doctorId, slotId, reservationId }).subscribe({ error: () => undefined });
   }
 
+  private checkPendingPayment(
+    context: PendingPaymentContext,
+    initiateWhenPending: boolean,
+  ): void {
+    if (this.loading()) return;
+    this.loading.set(true);
+    this.api.getPaymentStatus(context.appointmentId)
+      .pipe(finalize(() => this.loading.set(false)))
+      .subscribe({
+        next: (status) => {
+          const needsResultPage =
+            status.transactionStatus === PaymentTransactionStatus.SUCCESS ||
+            status.transactionStatus === PaymentTransactionStatus.RECONCILIATION_REQUIRED ||
+            status.transactionStatus === PaymentTransactionStatus.LATE_SUCCESS ||
+            status.paymentStatus === PaymentStatus.REFUND_PENDING;
+          if (needsResultPage) {
+            this.navigateToPaymentResult(context.appointmentId);
+            return;
+          }
+          const terminalFailure =
+            [PaymentTransactionStatus.FAILED, PaymentTransactionStatus.TIMEOUT].includes(
+              status.transactionStatus as PaymentTransactionStatus,
+            ) ||
+            [AppointmentStatus.CANCELLED, AppointmentStatus.EXPIRED].includes(
+              status.appointmentStatus,
+            );
+          if (terminalFailure) {
+            this.clearPendingPaymentContext();
+            this.navigateToPaymentResult(context.appointmentId);
+            return;
+          }
+          if (
+            initiateWhenPending &&
+            status.appointmentStatus === AppointmentStatus.PENDING_PAYMENT &&
+            (status.transactionStatus === PaymentTransactionStatus.PENDING ||
+              status.transactionStatus === null)
+          ) {
+            this.loading.set(false);
+            this.initiateOnlinePayment(context);
+          }
+        },
+        error: (error) => this.errorMessage.set(this.errorText(error)),
+      });
+  }
+
   private initiateOnlinePayment(context: PendingPaymentContext): void {
     if (this.loading()) return;
     this.loading.set(true);
@@ -400,7 +451,11 @@ export class BookingStepperPage implements OnDestroy {
           this.errorMessage.set('Cổng thanh toán trả về địa chỉ không an toàn.');
         }
       },
-      error: (error) => this.errorMessage.set(this.errorText(error)),
+      error: (error) => {
+        this.errorMessage.set(this.errorText(error));
+        this.loading.set(false);
+        this.checkPendingPayment(context, false);
+      },
     });
   }
 
@@ -425,6 +480,19 @@ export class BookingStepperPage implements OnDestroy {
       sessionStorage.removeItem(PENDING_PAYMENT_CONTEXT_KEY);
       return null;
     }
+  }
+
+  private clearPendingPaymentContext(): void {
+    this.pendingPaymentContext.set(null);
+    this.idempotencyKey = null;
+    sessionStorage.removeItem(PENDING_PAYMENT_CONTEXT_KEY);
+    sessionStorage.removeItem('pendingPaymentAppointmentId');
+  }
+
+  private navigateToPaymentResult(appointmentId: string): void {
+    void this.router.navigate(['/patient/payment-result'], {
+      queryParams: { appointmentId },
+    });
   }
 
   private errorText(error: unknown): string {
