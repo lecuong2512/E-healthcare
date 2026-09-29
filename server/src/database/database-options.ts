@@ -48,6 +48,8 @@ import { AddAppointmentConsent1790151600000 } from "./migrations/1790151600000-a
 import { AddAdminCatalogStaffReporting1790240000000 } from './migrations/1790240000000-add-admin-catalog-staff-reporting';
 import { AddSpecialtyHeadDoctor1790320000000 } from './migrations/1790320000000-add-specialty-head-doctor';
 import { Icd10CatalogEntity, MedicalServiceEntity, MedicineEntity } from './entities/admin-catalog.entity';
+import { DoctorReviewEntity } from "./entities/doctor-review.entity";
+import { CreateDoctorReviews1790586000000 } from "./migrations/1790586000000-create-doctor-reviews";
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -80,6 +82,7 @@ export function createDataSource(url: string): DataSource {
       MedicalServiceEntity,
       Icd10CatalogEntity,
       EmrAddendumEntity,
+      DoctorReviewEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -106,6 +109,7 @@ export function createDataSource(url: string): DataSource {
       AddAppointmentConsent1790151600000,
       AddAdminCatalogStaffReporting1790240000000,
       AddSpecialtyHeadDoctor1790320000000,
+      CreateDoctorReviews1790586000000,
     ],
   });
 }
