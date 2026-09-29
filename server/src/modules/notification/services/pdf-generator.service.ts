@@ -24,13 +24,16 @@ export class PdfGeneratorService {
       throw new ServiceUnavailableException('Prescription verification URL must use HTTPS.');
     }
 
+    // Sinh mã QR xác thực để in ở footer (SRS-PAT-04 & SRS rà soát điểm 8)
     const qrBuffer = await qrToBuffer(payload.verificationUrl, {
-      width: 112,
+      width: 80,
       margin: 1,
       errorCorrectionLevel: 'M',
     });
 
     return new Promise((resolve, reject) => {
+      // Footer cao 130pt để chứa: đường kẻ, QR + seal + hash + câu xác thực
+      const FOOTER_HEIGHT = 130;
       const doc = new PDFDocument({ size: 'A4', margin: 42, bufferPages: true });
       const buffers: Buffer[] = [];
       doc.on('data', (chunk: Buffer) => buffers.push(chunk));
@@ -41,9 +44,12 @@ export class PdfGeneratorService {
       const pageWidth = doc.page.width;
       const margin = 42;
       const contentWidth = pageWidth - margin * 2;
+
+      // Kiểm tra không gian trước khi thêm nội dung — dành chỗ cho footer
       const ensureSpace = (height: number): void => {
-        if (doc.y + height > doc.page.height - margin - 95) doc.addPage();
+        if (doc.y + height > doc.page.height - margin - FOOTER_HEIGHT) doc.addPage();
       };
+
       const label = (title: string, value: string | null | undefined): void => {
         if (!value) return;
         ensureSpace(42);
@@ -56,15 +62,12 @@ export class PdfGeneratorService {
         doc.moveDown(0.7);
       };
 
+      // ── HEADER: Tiêu đề trang (không có QR ở đây) ──────────────────────────
       doc.fontSize(20).fillColor('#155e75').text('E-Healthcare Portal', margin, margin);
-      doc.fontSize(10).fillColor('#557080').text('ĐƠN THUỐC ĐIỆN TỬ', margin, doc.y + 5);
-      doc.image(qrBuffer, pageWidth - margin - 84, margin, { width: 84, height: 84 });
-      doc.fontSize(8).text('QR đối chiếu đơn thuốc', pageWidth - margin - 104, margin + 88, {
-        width: 104,
-        align: 'center',
-      });
-      doc.moveDown(1.5);
+      doc.fontSize(10).fillColor('#557080').text('ĐƠN THUỐC ĐIỆN TỬ', margin, doc.y + 4);
+      doc.moveDown(0.8);
 
+      // ── NỘI DUNG CHÍNH ──────────────────────────────────────────────────────
       label('Mã đơn thuốc', payload.prescriptionCode);
       label('Mã lịch hẹn', payload.appointmentCode);
       label(
@@ -116,24 +119,75 @@ export class PdfGeneratorService {
           : undefined,
       );
 
+      // ── FOOTER: Mã QR + SHA-256 + Câu xác thực + Con dấu điện tử ───────────
+      // In footer trên mọi trang theo SRS rà soát điểm 8:
+      // "In chuỗi mã băm và Mã QR xác thực ở góc dưới cùng của tệp PDF"
       const pageRange = doc.bufferedPageRange();
       for (let pageIndex = pageRange.start; pageIndex < pageRange.start + pageRange.count; pageIndex++) {
         doc.switchToPage(pageIndex);
-        const footerY = doc.page.height - margin - 82;
-        doc.moveTo(margin, footerY - 10).lineTo(pageWidth - margin, footerY - 10)
-          .strokeColor('#cbd5e1').stroke();
-        doc.fontSize(7).fillColor('#475569').text(
-          `SHA-256: ${payload.verificationHash}`,
-          margin,
-          footerY,
-          { width: contentWidth, align: 'center' },
-        );
-        doc.fontSize(8).fillColor('#152b3c').text(
-          PRESCRIPTION_PDF_VERIFICATION_FOOTER,
-          margin,
-          footerY + 18,
-          { width: contentWidth, align: 'center' },
-        );
+
+        const pageH = doc.page.height;
+        // Đường kẻ phân cách footer
+        const separatorY = pageH - margin - FOOTER_HEIGHT + 8;
+        doc.moveTo(margin, separatorY).lineTo(pageWidth - margin, separatorY)
+          .strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+
+        // ── Mã QR ở góc dưới bên trái footer ──────────────────────────────
+        const qrSize = 72;
+        const qrX = margin;
+        const qrY = separatorY + 10;
+        doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+
+        // ── Con dấu điện tử phòng khám (vector bằng PDFKit) ────────────────
+        // Vẽ con dấu tròn kép màu xanh navy với chữ "ĐÃ XÁC THỰC"
+        const sealCx = pageWidth - margin - 42;  // tâm con dấu
+        const sealCy = qrY + qrSize / 2;
+        const sealR  = 36;
+
+        // Vòng ngoài
+        doc.circle(sealCx, sealCy, sealR)
+          .fillAndStroke('#155e75', '#155e75');
+        // Vòng trắng bên trong
+        doc.circle(sealCx, sealCy, sealR - 4)
+          .fillAndStroke('#ffffff', '#155e75');
+        // Chữ "E-HEALTHCARE" vòng trên (mô phỏng chữ cong bằng text thẳng canh giữa)
+        doc.font(fontPath).fontSize(5).fillColor('#155e75')
+          .text('E-HEALTHCARE PORTAL', sealCx - 28, sealCy - 15, { width: 56, align: 'center' });
+        // Biểu tượng dấu tích ở giữa con dấu
+        doc.font(fontPath).fontSize(14).fillColor('#155e75')
+          .text('✓', sealCx - 8, sealCy - 9, { width: 16, align: 'center' });
+        // Chữ "ĐÃ XÁC THỰC" vòng dưới
+        doc.font(fontPath).fontSize(4.5).fillColor('#155e75')
+          .text('CHỮ KÝ ĐIỆN TỬ', sealCx - 24, sealCy + 6, { width: 48, align: 'center' });
+        // Năm ở đáy con dấu
+        doc.font(fontPath).fontSize(4).fillColor('#155e75')
+          .text(new Date(payload.createdAt).getFullYear().toString(), sealCx - 12, sealCy + 16, { width: 24, align: 'center' });
+
+        // ── Vùng text giữa: SHA-256 hash + câu xác thực SRS ─────────────────
+        const textX   = qrX + qrSize + 10;
+        const textW   = pageWidth - margin - qrSize - 10 - margin - qrSize - 14;
+        const hashY   = separatorY + 12;
+
+        doc.font(fontPath).fontSize(7).fillColor('#475569')
+          .text(`SHA-256: ${payload.verificationHash}`, textX, hashY, {
+            width: textW,
+            lineGap: 1,
+          });
+        doc.font(fontPath).fontSize(7.5).fillColor('#152b3c')
+          .text(
+            PRESCRIPTION_PDF_VERIFICATION_FOOTER,
+            textX,
+            hashY + 22,
+            { width: textW, lineGap: 2 },
+          );
+        // Chú thích nhỏ về tính hợp lệ pháp lý
+        doc.font(fontPath).fontSize(6).fillColor('#94a3b8')
+          .text(
+            'Đơn thuốc có giá trị pháp lý theo Thông tư 52/2017/TT-BYT và TT 46/2018/TT-BYT.',
+            textX,
+            hashY + 40,
+            { width: textW },
+          );
       }
 
       doc.end();

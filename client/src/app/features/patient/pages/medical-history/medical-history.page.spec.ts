@@ -152,7 +152,89 @@ describe('MedicalHistoryPage', () => {
     expect(text).toContain('10/10/2026');
     expect(text).toContain('Thuốc A');
     expect(text).toContain('Uống sau ăn.');
-    expect(text).toContain('Tải bản PDF chưa khả dụng');
+    // SRS-PAT-04: Kiểm tra nút tải PDF hiển thị khi có đơn thuốc
+    const pdfBtn = fixture.nativeElement.querySelector('#btn-download-prescription-pdf') as HTMLButtonElement | null;
+    expect(pdfBtn).toBeTruthy();
+    expect(pdfBtn?.textContent?.trim()).toContain('Tải đơn thuốc PDF');
+    expect(pdfBtn?.disabled).toBeFalse();
+  });
+
+  it('SRS-PAT-04: triggers PDF download and handles API error gracefully', () => {
+    const appointment = { id: 'apt-pdf-01', status: 'COMPLETED' };
+    component.showDetails(appointment);
+    httpMock.expectOne('/api/v1/clinical/medical-records/appointment/apt-pdf-01').flush({
+      id: 'record-pdf-1',
+      appointmentId: 'apt-pdf-01',
+      patientId: 'patient-1',
+      doctorId: 'doctor-1',
+      vitalSigns: { bloodPressure: '', pulse: 0, temperature: 0, respiratoryRate: 0, weight: 0, height: 0, bmi: 0 },
+      clinicalNotes: 'Viêm xoang',
+      icd10PrimaryCode: 'J32.9',
+      icd10SecondaryCodes: null,
+      doctorAdvice: null,
+      followUpDate: null,
+      isLocked: true,
+      lockedAt: null,
+      completedAt: '2026-09-25T08:00:00Z',
+      prescription: { id: 'prx-1', medicalRecordId: 'record-pdf-1', prescriptionCode: 'RX-PDF-01', createdAt: '2026-09-25T08:00:00Z', items: [] },
+    });
+    fixture.detectChanges();
+
+    // Mock createObjectURL
+    const mockUrl = 'blob:mock-url';
+    spyOn(URL, 'createObjectURL').and.returnValue(mockUrl);
+    spyOn(URL, 'revokeObjectURL').and.stub();
+    const anchorSpy = jasmine.createSpyObj<HTMLAnchorElement>('a', ['click']);
+    spyOn(document, 'createElement').and.returnValue(anchorSpy as unknown as HTMLElement);
+
+    // Click nút tải PDF
+    const pdfBtn = fixture.nativeElement.querySelector('#btn-download-prescription-pdf') as HTMLButtonElement;
+    expect(pdfBtn).toBeTruthy();
+    pdfBtn.click();
+    expect(component.pdfDownloading()).toBeTrue();
+
+    const pdfReq = httpMock.expectOne('/api/v1/clinical/appointments/apt-pdf-01/prescription.pdf');
+    expect(pdfReq.request.method).toBe('GET');
+    expect(pdfReq.request.headers.get('Authorization')).toBe('Bearer patient-session-token');
+    pdfReq.flush(new Blob(['%PDF-test'], { type: 'application/pdf' }));
+
+    expect(component.pdfDownloading()).toBeFalse();
+    expect(component.pdfError()).toBe('');
+    expect(anchorSpy.click).toHaveBeenCalled();
+    expect(anchorSpy.download).toContain('RX-PDF-01');
+  });
+
+  it('SRS-PAT-04: shows PDF error when prescription API returns an error', () => {
+    const appointment = { id: 'apt-pdf-02', status: 'COMPLETED' };
+    component.showDetails(appointment);
+    httpMock.expectOne('/api/v1/clinical/medical-records/appointment/apt-pdf-02').flush({
+      id: 'record-pdf-2',
+      appointmentId: 'apt-pdf-02',
+      patientId: 'patient-1',
+      doctorId: 'doctor-1',
+      vitalSigns: { bloodPressure: '', pulse: 0, temperature: 0, respiratoryRate: 0, weight: 0, height: 0, bmi: 0 },
+      clinicalNotes: 'Xét nghiệm máu',
+      icd10PrimaryCode: 'R79.9',
+      icd10SecondaryCodes: null,
+      doctorAdvice: null,
+      followUpDate: null,
+      isLocked: true,
+      lockedAt: null,
+      completedAt: '2026-09-25T09:00:00Z',
+      prescription: { id: 'prx-2', medicalRecordId: 'record-pdf-2', prescriptionCode: 'RX-ERR-01', createdAt: '2026-09-25T09:00:00Z', items: [] },
+    });
+    fixture.detectChanges();
+
+    component.downloadPrescriptionPdf({ id: 'apt-pdf-02', status: 'COMPLETED' });
+    expect(component.pdfDownloading()).toBeTrue();
+
+    const pdfReq = httpMock.expectOne('/api/v1/clinical/appointments/apt-pdf-02/prescription.pdf');
+    pdfReq.flush({ message: 'Font PDF chưa cấu hình' }, { status: 503, statusText: 'Service Unavailable' });
+
+    expect(component.pdfDownloading()).toBeFalse();
+    expect(component.pdfError()).toContain('Font PDF chưa cấu hình');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Font PDF chưa cấu hình');
   });
 
   it('shows permission or missing-record errors and allows retry', () => {

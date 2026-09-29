@@ -117,6 +117,8 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   readonly detailRecord = signal<MedicalRecordDetailResponse | null>(null);
   readonly detailLoading = signal(false);
   readonly detailError = signal('');
+  readonly pdfDownloading = signal(false);
+  readonly pdfError = signal('');
 
   readonly toast = signal('');
   readonly toastType = signal<'success' | 'error'>('success');
@@ -482,6 +484,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
     this.detailRecord.set(null);
     this.detailError.set('');
     this.detailLoading.set(true);
+    this.pdfError.set('');
 
     this.clinical
       .getMedicalRecordByAppointment(a.id)
@@ -495,5 +498,38 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
           this.detailLoading.set(false);
         },
       });
+  }
+
+  /**
+   * SRS-PAT-04: Tải tệp PDF đơn thuốc điện tử có gắn mã băm SHA-256 và mã QR xác thực.
+   * Backend kiểm tra JWT Role PATIENT và sở hữu appointment trước khi trả PDF.
+   */
+  downloadPrescriptionPdf(a: Appointment): void {
+    if (this.pdfDownloading()) return;
+    this.pdfDownloading.set(true);
+    this.pdfError.set('');
+
+    const prescriptionCode = this.detailRecord()?.prescription?.prescriptionCode;
+    const filename = prescriptionCode
+      ? `don-thuoc-${prescriptionCode.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`
+      : `don-thuoc-${a.appointmentCode ?? a.id}.pdf`;
+
+    this.clinical.downloadPrescriptionPdf(a.id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename;
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        this.pdfDownloading.set(false);
+      },
+      error: (e) => {
+        this.pdfDownloading.set(false);
+        this.pdfError.set(
+          this.apiError(e, 'Không thể tải đơn thuốc PDF. Vui lòng thử lại sau.')
+        );
+      },
+    });
   }
 }

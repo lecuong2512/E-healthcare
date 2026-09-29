@@ -308,7 +308,39 @@
           }
         </section>
 
-        <p class="mt-5 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">Tải bản PDF chưa khả dụng cho hồ sơ này.</p>
+        <div class="mt-5 rounded-xl border border-sky-100 bg-sky-50 p-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p class="font-semibold text-sky-800">Đơn thuốc điện tử (PDF)</p>
+              <p class="mt-0.5 text-xs text-sky-600">
+                Tệp PDF có gắn mã băm SHA-256 &amp; mã QR xác thực nguồn gốc
+              </p>
+            </div>
+            @if (detailRecord()?.prescription) {
+              <button
+                id="btn-download-prescription-pdf"
+                (click)="downloadPrescriptionPdf(detail()!)"
+                [disabled]="pdfDownloading()"
+                class="flex items-center gap-2 rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                @if (pdfDownloading()) {
+                  <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                  Đang tạo PDF…
+                } @else {
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 3v12" />
+                  </svg>
+                  Tải đơn thuốc PDF
+                }
+              </button>
+            } @else {
+              <span class="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-500">Chưa có đơn thuốc</span>
+            }
+          </div>
+          @if (pdfError()) {
+            <p class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">{{ pdfError() }}</p>
+          }
+        </div>
       }
     </section>
   </div>
