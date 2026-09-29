@@ -43,6 +43,21 @@ export interface PatientDoctorSearchResponse {
   pagination: { page: number; limit: number; total: number; totalPages: number };
 }
 
+export interface PatientVoucher {
+  id: string;
+  code: string;
+  discountPercent: number;
+  isUsed: boolean;
+  expiresAt: string;
+}
+
+export interface VoucherValidationResponse {
+  code: string;
+  discountPercent: number;
+  discountAmount: number;
+  finalAmount: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PatientBookingApiService {
   private readonly http = inject(HttpClient);
@@ -91,5 +106,15 @@ export class PatientBookingApiService {
     return this.http.get<PaymentStatusResponse>(
       `${this.api}/payments/${encodeURIComponent(appointmentId)}/status`,
     );
+  }
+
+  getVouchers(): Observable<PatientVoucher[]> {
+    return this.http.get<PatientVoucher[]>(`${this.api}/appointments/me/vouchers`);
+  }
+
+  validateVoucher(code: string, totalAmount: number): Observable<VoucherValidationResponse> {
+    return this.http.get<VoucherValidationResponse>(`${this.api}/appointments/vouchers/validate`, {
+      params: { code, totalAmount },
+    });
   }
 }

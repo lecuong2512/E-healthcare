@@ -628,7 +628,7 @@
           </div>
 
           <div class="flex flex-wrap gap-2">
-            @for (voucher of vouchers; track voucher.code) {
+            @for (voucher of vouchers(); track voucher.code) {
               <button
                 type="button"
                 (click)="selectVoucher(voucher.code)"
@@ -640,7 +640,7 @@
                 [class.text-slate-600]="appliedVoucher()?.code !== voucher.code"
               >
                 <span class="font-bold">{{ voucher.code }}</span>
-                <span class="ml-1">· {{ voucher.label }}</span>
+                <span class="ml-1">· Giảm {{ voucher.discountPercent }}%</span>
               </button>
             }
           </div>

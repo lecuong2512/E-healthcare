@@ -118,7 +118,7 @@ export class PaymentResultPage {
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((status) => {
       this.status.set(status);
-      if (this.toState(status) !== 'loading') {
+      if (['success', 'error'].includes(this.toState(status))) {
         sessionStorage.removeItem('pendingPaymentAppointmentId');
       }
     });

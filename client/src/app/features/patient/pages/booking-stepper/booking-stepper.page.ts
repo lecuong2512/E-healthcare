@@ -8,7 +8,7 @@ import { NzAlertModule } from 'ng-zorro-antd/alert';
 import { catchError, finalize, of, switchMap } from 'rxjs';
 
 import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
-import { PatientBookingApiService, PatientDoctorDetail, PatientDoctorSchedule, PatientDoctorSummary } from '../../data-access/patient-booking-api.service';
+import { PatientBookingApiService, PatientDoctorDetail, PatientDoctorSchedule, PatientDoctorSummary, PatientVoucher } from '../../data-access/patient-booking-api.service';
 import { PaymentRedirectService } from '../../data-access/payment-redirect.service';
 
 const TOTAL_SECONDS = 10 * 60;
@@ -98,10 +98,7 @@ export class BookingStepperPage implements OnDestroy {
   readonly voucherCode = signal('');
   readonly appliedVoucher = signal<{ code: string; discount: number } | null>(null);
   readonly voucherMessage = signal<string | null>(null);
-  readonly vouchers = [
-    { code: 'WELCOME50', label: 'Giảm 50.000đ cho lần đầu đặt lịch', discount: 50_000 },
-    { code: 'HEALTH10', label: 'Giảm 10% phí khám', discountRate: 0.1 },
-  ];
+  readonly vouchers = signal<PatientVoucher[]>([]);
 
   readonly countdownSeconds = signal(TOTAL_SECONDS);
   readonly loading = signal(false);
@@ -132,6 +129,12 @@ export class BookingStepperPage implements OnDestroy {
     this.api.searchDoctors().subscribe({
       next: (response) => this.doctors.set(response.data.map((doctor) => this.mapDoctor(doctor))),
       error: () => this.errorMessage.set('Không thể tải danh sách bác sĩ.'),
+    });
+    this.api.getVouchers().subscribe({
+      next: (vouchers) => this.vouchers.set(vouchers.filter((voucher) =>
+        !voucher.isUsed && new Date(voucher.expiresAt).getTime() > Date.now(),
+      )),
+      error: () => this.vouchers.set([]),
     });
     if (doctorId) this.loadDoctor(doctorId);
   }
@@ -215,17 +218,25 @@ export class BookingStepperPage implements OnDestroy {
 
   applyVoucher(code = this.voucherCode()): void {
     const normalizedCode = code.trim().toUpperCase();
-    const voucher = this.vouchers.find((item) => item.code === normalizedCode);
-    if (!voucher) {
+    const fee = this.selectedDoctor()?.fee ?? 0;
+    if (!normalizedCode || fee <= 0) {
       this.appliedVoucher.set(null);
-      this.voucherMessage.set('Mã voucher không hợp lệ hoặc đã hết hạn.');
+      this.voucherMessage.set('Vui lòng chọn bác sĩ và nhập mã voucher.');
       return;
     }
-    const fee = this.selectedDoctor()?.fee ?? 0;
-    const discount = voucher.discount ?? Math.round(fee * (voucher.discountRate ?? 0));
     this.voucherCode.set(normalizedCode);
-    this.appliedVoucher.set({ code: normalizedCode, discount: Math.min(discount, fee) });
-    this.voucherMessage.set(`Đã áp dụng mã ${normalizedCode}.`);
+    this.appliedVoucher.set(null);
+    this.voucherMessage.set(null);
+    this.api.validateVoucher(normalizedCode, fee).subscribe({
+      next: (voucher) => {
+        this.appliedVoucher.set({
+          code: voucher.code,
+          discount: Math.min(Number(voucher.discountAmount), fee),
+        });
+        this.voucherMessage.set(`Đã áp dụng mã ${voucher.code}.`);
+      },
+      error: () => this.voucherMessage.set('Mã voucher không hợp lệ hoặc đã hết hạn.'),
+    });
   }
 
   selectVoucher(code: string): void { this.voucherCode.set(code); this.applyVoucher(code); }

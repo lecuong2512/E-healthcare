@@ -28,4 +28,20 @@ describe('PatientBookingApiService', () => {
     expect(request.request.body.ipnUrl).toBeUndefined();
     request.flush({});
   });
+
+  it('loads and validates vouchers through the appointment APIs', () => {
+    service.getVouchers().subscribe();
+    const listRequest = http.expectOne('/api/v1/appointments/me/vouchers');
+    expect(listRequest.request.method).toBe('GET');
+    listRequest.flush([]);
+
+    service.validateVoucher('COMPENSATE-20', 350_000).subscribe();
+    const validationRequest = http.expectOne((request) =>
+      request.url === '/api/v1/appointments/vouchers/validate' &&
+      request.params.get('code') === 'COMPENSATE-20' &&
+      request.params.get('totalAmount') === '350000',
+    );
+    expect(validationRequest.request.method).toBe('GET');
+    validationRequest.flush({});
+  });
 });

@@ -40,12 +40,14 @@ describe('BookingStepperPage payment flow', () => {
   beforeEach(async () => {
     api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', [
       'searchDoctors', 'getDoctor', 'reserveSlot', 'releaseSlot', 'confirmBooking', 'initiatePayment',
+      'getVouchers', 'validateVoucher',
     ]);
     api.searchDoctors.and.returnValue(of({
       data: [doctor],
       pagination: { page: 1, limit: 100, total: 1, totalPages: 1 },
     }));
     api.getDoctor.and.returnValue(of(doctor));
+    api.getVouchers.and.returnValue(of([]));
     api.reserveSlot.and.returnValue(of({
       success: true,
       message: 'ok',
@@ -178,5 +180,34 @@ describe('BookingStepperPage payment flow', () => {
 
     expect(component.consentError).toBeTrue();
     expect(api.confirmBooking).not.toHaveBeenCalled();
+  });
+
+  it('loads vouchers and uses the backend validation discount', () => {
+    api.getVouchers.calls.reset();
+    api.getVouchers.and.returnValue(of([{
+      id: 'voucher-id',
+      code: 'COMPENSATE-20',
+      discountPercent: 20,
+      isUsed: false,
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    }]));
+    api.validateVoucher.and.returnValue(of({
+      code: 'COMPENSATE-20',
+      discountPercent: 20,
+      discountAmount: 70_000,
+      finalAmount: 280_000,
+    }));
+
+    fixture.destroy();
+    fixture = TestBed.createComponent(BookingStepperPage);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    component.selectDoctorAndContinue(component.doctors()[0]);
+    component.applyVoucher('compensate-20');
+
+    expect(component.vouchers().map((voucher) => voucher.code)).toEqual(['COMPENSATE-20']);
+    expect(api.validateVoucher).toHaveBeenCalledWith('COMPENSATE-20', 350_000);
+    expect(component.discountAmount()).toBe(70_000);
+    expect(component.payableAmount()).toBe(280_000);
   });
 });
