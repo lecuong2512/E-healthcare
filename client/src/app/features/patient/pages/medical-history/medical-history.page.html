@@ -13,7 +13,7 @@
     </header>
 
     @if (toast()) {
-      <div class="rounded-xl border px-4 py-3" [class.border-emerald-200]="toastType() === 'success'" [class.bg-emerald-50]="toastType() === 'success'" [class.text-emerald-800]="toastType() === 'success'" [class.border-rose-200]="toastType() === 'error'" [class.bg-rose-50]="toastType() === 'error'" [class.text-rose-800]="toastType() === 'error'">
+      <div class="rounded-xl border px-4 py-3" [attr.role]="toastType() === 'error' ? 'alert' : 'status'" aria-live="polite" [class.border-emerald-200]="toastType() === 'success'" [class.bg-emerald-50]="toastType() === 'success'" [class.text-emerald-800]="toastType() === 'success'" [class.border-rose-200]="toastType() === 'error'" [class.bg-rose-50]="toastType() === 'error'" [class.text-rose-800]="toastType() === 'error'">
         {{ toast() }}
       </div>
     }
@@ -94,7 +94,7 @@
                   <p class="mt-4 text-xs text-slate-500">Địa chỉ phòng khám do cơ sở y tế cung cấp khi xác nhận lịch.</p>
                   <div class="mt-4 flex flex-wrap gap-2">
                     <button (click)="openCancel(item)" [disabled]="!canCancel(item)" class="rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-40">
-                      Hủy lịch khám
+                      Hủy lịch hẹn
                     </button>
                     <button (click)="directions(item)" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700">
                       Chỉ đường đến phòng khám ↗
@@ -239,7 +239,7 @@
           [disabled]="submitting() || !cancelReason.trim() || !consentAccepted"
           class="rounded-xl bg-rose-700 px-4 py-2.5 font-semibold text-white disabled:opacity-50"
         >
-          {{ submitting() ? 'Đang gửi…' : 'Xác nhận hủy' }}
+          {{ submitting() ? 'Đang hủy lịch…' : 'Xác nhận hủy' }}
         </button>
       </div>
     </section>

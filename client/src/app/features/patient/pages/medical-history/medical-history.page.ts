@@ -425,11 +425,16 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
       consentAccepted: true,
     };
 
-    const success = (updated: object = {}) => {
+    const success = (updated: Partial<Appointment>) => {
       this.appointments.update((rows) =>
         rows.map((row) =>
           row.id === a.id
-            ? { ...row, ...updated, status: 'CANCELLED_BY_PATIENT', cancellationReason: reason }
+            ? {
+                ...row,
+                ...updated,
+                status: updated.status || 'CANCELLED_BY_PATIENT',
+                cancellationReason: updated.cancellationReason ?? reason,
+              }
             : row
         )
       );
@@ -443,7 +448,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
       .post(`${environment.apiBaseUrl}/appointments/${encodeURIComponent(a.id)}/cancel`, payload)
       .subscribe({
         next: (updated) => {
-          success(updated as object);
+          success(updated as Partial<Appointment>);
           this.load();
         },
         error: (e) => {

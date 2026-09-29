@@ -279,15 +279,27 @@ describe('MedicalHistoryPage', () => {
       expect(component.submitting()).toBeFalse();
     });
 
-    it('sends POST to the API and refreshes appointment history', () => {
+    it('requires confirmation, shows loading, then updates and refreshes appointment history', () => {
       const appt = { id: 'apt-real-01', status: 'CONFIRMED' };
       component.appointments.set([appt]);
-      component.openCancel(appt);
+      fixture.detectChanges();
+      const cancelButton = Array.from(fixture.nativeElement.querySelectorAll('button'))
+        .find((button: HTMLButtonElement) => button.textContent?.trim() === 'Hủy lịch hẹn') as HTMLButtonElement;
+      cancelButton.click();
+      fixture.detectChanges();
+      expect(component.cancelTarget()).toEqual(appt);
+      httpMock.expectNone('/api/v1/appointments/apt-real-01/cancel');
+
       component.cancelReason = 'Thay đổi kế hoạch';
       component.consentAccepted = true;
+      fixture.detectChanges();
 
-      component.submitCancel();
+      const confirmButton = Array.from(fixture.nativeElement.querySelectorAll('button'))
+        .find((button: HTMLButtonElement) => button.textContent?.trim() === 'Xác nhận hủy') as HTMLButtonElement;
+      confirmButton.click();
       expect(component.submitting()).toBeTrue();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Đang hủy lịch…');
 
       const req = httpMock.expectOne('/api/v1/appointments/apt-real-01/cancel');
       expect(req.request.method).toBe('POST');
@@ -296,15 +308,17 @@ describe('MedicalHistoryPage', () => {
         consentAccepted: true,
       });
 
-      req.flush({ id: 'apt-real-01', status: 'CANCELLED_BY_PATIENT' });
+      req.flush({ id: 'apt-real-01', status: 'CANCELLED_BY_CLINIC', cancellationReason: 'Ca khám thay đổi' });
+      expect(component.appointments()[0].status).toBe('CANCELLED_BY_CLINIC');
 
       const reloadReq = httpMock.expectOne('/api/v1/appointments/me');
       expect(reloadReq.request.method).toBe('GET');
-      reloadReq.flush([]);
+      reloadReq.flush([{ id: 'apt-real-01', status: 'CANCELLED_BY_PATIENT' }]);
 
       expect(component.submitting()).toBeFalse();
       expect(component.cancelTarget()).toBeNull();
       expect(component.toast()).toContain('thành công');
+      expect(component.appointments()[0].status).toBe('CANCELLED_BY_PATIENT');
     });
 
     it('handles API failure gracefully with an error toast', () => {
