@@ -39,14 +39,18 @@ export class EmrAddendumEntity {
   @JoinColumn({ name: 'doctor_id' })
   doctor!: DoctorEntity;
 
-  @Column({ type: 'text' })
+  /** Decrypted in memory only by ClinicalEncryptedStore. */
   reason!: string;
 
-  @Column({ name: 'previous_content', type: 'jsonb' })
   previousContent!: EmrClinicalSnapshot;
 
-  @Column({ name: 'updated_content', type: 'jsonb' })
   updatedContent!: EmrClinicalSnapshot;
+
+  @Column({ name: 'content_ciphertext', type: 'bytea', select: false })
+  contentCiphertext!: Buffer;
+
+  @Column({ name: 'encryption_key_version', type: 'smallint' })
+  encryptionKeyVersion!: number;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

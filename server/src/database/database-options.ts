@@ -49,12 +49,17 @@ import { ReportApprovalEntity } from './entities/report-approval.entity';
 import { AddReportApprovals1790300000000 } from './migrations/1790300000000-add-report-approvals';
 import { DoctorReviewEntity } from "./entities/doctor-review.entity";
 import { CreateDoctorReviews1790586000000 } from "./migrations/1790586000000-create-doctor-reviews";
+import { AuditLogEntity } from './entities/audit-log.entity';
+import { CreateAppendOnlyAuditLogs1790845200000 } from './migrations/1790845200000-create-append-only-audit-logs';
+import { EncryptMedicalDataAtRest1790848800000 } from './migrations/1790848800000-encrypt-medical-data-at-rest';
+import { SafeTypeOrmLogger } from './safe-typeorm.logger';
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
     url,
     synchronize: false,
     logging: false,
+    logger: new SafeTypeOrmLogger(false),
     entities: [
       UserEntity,
       UserRoleEntity,
@@ -80,6 +85,7 @@ export function createDataSource(url: string): DataSource {
       EmrAddendumEntity,
       ReportApprovalEntity,
       DoctorReviewEntity,
+      AuditLogEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -106,6 +112,8 @@ export function createDataSource(url: string): DataSource {
       AddAppointmentConsent1790151600000,
       AddReportApprovals1790300000000,
       CreateDoctorReviews1790586000000,
+      CreateAppendOnlyAuditLogs1790845200000,
+      EncryptMedicalDataAtRest1790848800000,
     ],
   });
 }

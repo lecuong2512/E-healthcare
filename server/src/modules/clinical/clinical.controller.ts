@@ -12,6 +12,7 @@ import {
 import { Role } from '@shared/enums';
 import { Roles } from '../../common/decorators/auth.decorators';
 import { AuthenticatedRequest } from '../../common/guards/authenticated-request';
+import { auditContextFromRequest } from '../audit/audit-context';
 import { ClinicalService } from './clinical.service';
 import { Icd10Service } from './icd10/icd10.service';
 import {
@@ -63,7 +64,11 @@ export class ClinicalController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: CreateMedicalRecordDto,
   ) {
-    return this.clinicalService.createMedicalRecord(req.auth!.userId, dto);
+    return this.clinicalService.createMedicalRecord(
+      req.auth!.userId,
+      dto,
+      auditContextFromRequest(req),
+    );
   }
 
   /**
@@ -80,6 +85,7 @@ export class ClinicalController {
       req.auth!.userId,
       recordId,
       dto,
+      auditContextFromRequest(req),
     );
   }
 
@@ -95,6 +101,7 @@ export class ClinicalController {
     return this.clinicalService.completeConsultation(
       req.auth!.userId,
       recordId,
+      auditContextFromRequest(req),
     );
   }
 
@@ -102,7 +109,7 @@ export class ClinicalController {
    * Get Medical Record by ID.
    */
   @Get('medical-records/:id')
-  @Roles(Role.DOCTOR, Role.PATIENT, Role.ADMIN)
+  @Roles(Role.DOCTOR, Role.PATIENT)
   async getMedicalRecord(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) recordId: string,
@@ -111,6 +118,7 @@ export class ClinicalController {
       req.auth!.userId,
       req.auth!.role,
       recordId,
+      auditContextFromRequest(req),
     );
   }
 
@@ -118,7 +126,7 @@ export class ClinicalController {
    * Get Medical Record by Appointment ID.
    */
   @Get('medical-records/appointment/:appointmentId')
-  @Roles(Role.DOCTOR, Role.PATIENT, Role.ADMIN)
+  @Roles(Role.DOCTOR, Role.PATIENT)
   async getMedicalRecordByAppointment(
     @Req() req: AuthenticatedRequest,
     @Param('appointmentId', ParseUUIDPipe) appointmentId: string,
@@ -127,6 +135,7 @@ export class ClinicalController {
       req.auth!.userId,
       req.auth!.role,
       appointmentId,
+      auditContextFromRequest(req),
     );
   }
 
@@ -144,6 +153,7 @@ export class ClinicalController {
       req.auth!.userId,
       recordId,
       dto,
+      auditContextFromRequest(req),
     );
   }
 
@@ -160,6 +170,7 @@ export class ClinicalController {
       req.auth!.userId,
       req.auth!.role,
       recordId,
+      auditContextFromRequest(req),
     );
   }
 }

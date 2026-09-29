@@ -15,7 +15,7 @@
         type="button"
         class="export-action min-h-11 rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
         [disabled]="store.totalItems() === 0 || store.exportState() === 'exporting'"
-        (click)="store.requestExport()"
+        (click)="exportCsv()"
       >
         {{ store.exportState() === 'exporting' ? 'Đang xuất CSV…' : 'Xuất CSV theo bộ lọc' }}
       </button>
@@ -140,7 +140,7 @@
       } @else if (store.state() === 'error') {
         <div class="p-10 text-center" role="alert">
           <p class="font-semibold text-red-700">{{ store.errorMessage() }}</p>
-          <button type="button" class="mt-4 min-h-11 rounded-lg border border-slate-300 px-4 font-semibold" (click)="store.retry()">
+          <button type="button" class="mt-4 min-h-11 rounded-lg border border-slate-300 px-4 font-semibold" (click)="retry()">
             Thử lại
           </button>
         </div>
@@ -196,10 +196,10 @@
           Trang {{ store.page() }} / {{ store.totalPages() || 1 }}
         </span>
         <div class="flex gap-2">
-          <button type="button" class="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold disabled:opacity-40" [disabled]="!store.canGoPrevious()" (click)="store.setPage(store.page() - 1)">
+          <button type="button" class="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold disabled:opacity-40" [disabled]="!store.canGoPrevious()" (click)="changePage(store.page() - 1)">
             Trang trước
           </button>
-          <button type="button" class="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold disabled:opacity-40" [disabled]="!store.canGoNext()" (click)="store.setPage(store.page() + 1)">
+          <button type="button" class="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold disabled:opacity-40" [disabled]="!store.canGoNext()" (click)="changePage(store.page() + 1)">
             Trang sau
           </button>
         </div>

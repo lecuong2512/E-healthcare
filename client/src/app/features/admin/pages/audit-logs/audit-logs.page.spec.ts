@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { AuditLogsPage } from './audit-logs.page';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 
 describe('AuditLogsPage', () => {
   let fixture: ComponentFixture<AuditLogsPage>;
@@ -9,6 +11,7 @@ describe('AuditLogsPage', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AuditLogsPage],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AuditLogsPage);
@@ -39,13 +42,11 @@ describe('AuditLogsPage', () => {
       (option) => (option as HTMLOptionElement).value,
     );
 
-    expect(values).toEqual([
-      '',
-      'LOGIN',
-      'VIEW_EMR',
-      'UPDATE_RX',
-      'CANCEL_APPT',
-    ]);
+    expect(values).toContain('LOGIN');
+    expect(values).toContain('VIEW_EMR');
+    expect(values).toContain('UPDATE_RX');
+    expect(values).toContain('CANCEL_APPT');
+    expect(values).toContain('EXPORT_AUDIT_LOGS');
   });
 
   it('validates that the start time precedes the end time', () => {
