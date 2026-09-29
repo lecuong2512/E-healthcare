@@ -5,7 +5,7 @@ describe('AdminDashboardService', () => {
   it('maps aggregated appointment metrics to dashboard KPIs', async () => {
     const dataSource = { query: jest.fn().mockResolvedValue([{ visits: '12', revenue: '4800000', completed: '9', cancelled: '2', noShows: '1' }]) } as unknown as DataSource;
     const service = new AdminDashboardService(dataSource);
-    await expect(service.overview(7)).resolves.toMatchObject({ visits: 12, revenue: 4800000, completionRate: 75, cancellationRate: 16.67, noShowRate: 8.33 });
+    await expect(service.overview(7)).resolves.toMatchObject({ visits: 12, revenue: 4800000, completionRate: 75, cancellationRate: 16.67, noShowRate: 8.33, paymentBreakdown: [] });
   });
   it('stores the administrator confirmation before a report is issued', async () => {
     const repository = { create: jest.fn(value => value), save: jest.fn(value => Promise.resolve(value)) };

@@ -10,8 +10,10 @@ export class AdminDashboardService {
 
   async overview(days = 7) {
     const [row] = await this.dataSource.query(`SELECT COUNT(*)::int AS visits, COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'PAID'), 0)::numeric AS revenue, COUNT(*) FILTER (WHERE status = 'COMPLETED')::int AS completed, COUNT(*) FILTER (WHERE status = 'CANCELLED')::int AS cancelled, COUNT(*) FILTER (WHERE status = 'NO_SHOW')::int AS "noShows" FROM appointments WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')`, [days]);
+    const paymentRows = await this.dataSource.query(`SELECT payment_method AS method, COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'PAID'), 0)::numeric AS revenue FROM appointments WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day') GROUP BY payment_method`, [days]);
     const visits = Number(row.visits); const completed = Number(row.completed); const cancelled = Number(row.cancelled); const noShows = Number(row.noShows);
-    return { visits, revenue: Number(row.revenue), completionRate: this.rate(completed, visits), cancellationRate: this.rate(cancelled, visits), noShowRate: this.rate(noShows, visits), trend: [42, 51, 47, 63, 61, 44, 59] };
+    const paymentBreakdown = paymentRows.filter((payment: { method?: string }) => payment.method).map((payment: { method: string; revenue: string }) => ({ method: payment.method, revenue: Number(payment.revenue), percentage: this.rate(Number(payment.revenue), Number(row.revenue)) }));
+    return { visits, revenue: Number(row.revenue), completionRate: this.rate(completed, visits), cancellationRate: this.rate(cancelled, visits), noShowRate: this.rate(noShows, visits), trend: [42, 51, 47, 63, 61, 44, 59], paymentBreakdown };
   }
 
   async approval(days: number, approvedBy: string) { const approval = await this.dataSource.getRepository(ReportApprovalEntity).save(this.dataSource.getRepository(ReportApprovalEntity).create({ approvedBy, days })); return { status: 'APPROVED', approvedAt: approval.approvedAt, approvedBy, days }; }
