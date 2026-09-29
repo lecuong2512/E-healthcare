@@ -328,4 +328,24 @@ describe('PaymentFinalizerService', () => {
     expect(payment.nextReconcileAt).toBeNull();
     expect(payment.lastReconcileError).toBe('gateway unavailable');
   });
+
+  it.each([
+    PaymentTransactionStatus.FAILED,
+    PaymentTransactionStatus.TIMEOUT,
+    PaymentTransactionStatus.SUPERSEDED,
+    PaymentTransactionStatus.LATE_SUCCESS,
+    PaymentTransactionStatus.SUCCESS,
+  ])('never revives terminal state %s for another reconciliation retry', async (status) => {
+    payment.status = status;
+
+    await service.scheduleReconciliationRetry(
+      PaymentMethod.VNPAY,
+      payment.merchantTransactionId,
+      'stale worker error',
+    );
+
+    expect(payment.status).toBe(status);
+    expect(payment.reconciliationAttempts).toBe(0);
+    expect(manager.save).not.toHaveBeenCalled();
+  });
 });

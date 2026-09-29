@@ -192,6 +192,24 @@ describe('PaymentReconciliationService', () => {
     await expect(first).resolves.toBe(1);
   });
 
+  it('keeps the booking hold when reconciliation runs before reservation expiry', async () => {
+    const beforeExpiry = {
+      ...transaction,
+      status: PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+      expiresAt: new Date('2026-09-28T10:10:00.000Z'),
+      nextReconcileAt: new Date('2026-09-28T09:59:00.000Z'),
+      reconciliationManualReview: false,
+    } as PaymentTransactionEntity;
+    repository.find.mockResolvedValueOnce([beforeExpiry]);
+    finalizer.finalize.mockResolvedValueOnce('PENDING');
+    vnpay.queryStatus.mockResolvedValueOnce({ ...result, state: 'PENDING' });
+
+    await service.reconcileExpired(new Date('2026-09-28T10:00:00.000Z'));
+
+    expect(finalizer.expireReservationForReconciliation).not.toHaveBeenCalled();
+    expect(finalizer.scheduleReconciliationRetry).toHaveBeenCalled();
+  });
+
   it('does not acquire a lock or query providers while payments are disabled', async () => {
     configuration.isEnabled.mockReturnValueOnce(false);
 

@@ -241,10 +241,12 @@ export class PaymentReconciliationService {
       const result = await this.provider(transaction.provider).queryStatus(transaction);
       const outcome = await this.finalizer.finalize(result);
       if (outcome === 'PENDING' || outcome === 'RECONCILIATION_REQUIRED') {
-        await this.finalizer.expireReservationForReconciliation(
-          transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
-          transaction.merchantTransactionId,
-        );
+        if (transaction.expiresAt.getTime() <= now.getTime()) {
+          await this.finalizer.expireReservationForReconciliation(
+            transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
+            transaction.merchantTransactionId,
+          );
+        }
         await this.finalizer.scheduleReconciliationRetry(
           transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
           transaction.merchantTransactionId,
@@ -257,10 +259,12 @@ export class PaymentReconciliationService {
       this.logger.warn(
         `Payment query failed for ${transaction.merchantTransactionId}: ${message}`,
       );
-      await this.finalizer.expireReservationForReconciliation(
-        transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
-        transaction.merchantTransactionId,
-      );
+      if (transaction.expiresAt.getTime() <= now.getTime()) {
+        await this.finalizer.expireReservationForReconciliation(
+          transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
+          transaction.merchantTransactionId,
+        );
+      }
       await this.finalizer.scheduleReconciliationRetry(
         transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
         transaction.merchantTransactionId,

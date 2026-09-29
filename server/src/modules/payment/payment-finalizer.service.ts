@@ -198,7 +198,13 @@ export class PaymentFinalizerService {
           merchantTransactionId,
         })
         .getOne();
-      if (!payment || payment.status === PaymentTransactionStatus.SUCCESS) return;
+        if (
+          !payment ||
+          ![
+            PaymentTransactionStatus.PENDING,
+            PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+          ].includes(payment.status)
+        ) return;
 
       payment.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
       payment.reconciliationAttempts = (payment.reconciliationAttempts || 0) + 1;
