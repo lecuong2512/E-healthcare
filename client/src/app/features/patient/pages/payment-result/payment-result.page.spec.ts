@@ -29,6 +29,7 @@ describe('PaymentResultPage', () => {
     }).compileComponents();
 
     sessionStorage.setItem('pendingPaymentAppointmentId', 'appointment-id');
+    sessionStorage.setItem('pendingPaymentContext', '{"appointmentId":"appointment-id"}');
     const fixture = TestBed.createComponent(PaymentResultPage);
     fixture.detectChanges();
     tick();
@@ -36,6 +37,7 @@ describe('PaymentResultPage', () => {
     expect(fixture.componentInstance.state()).toBe('success');
     expect(api.getPaymentStatus).toHaveBeenCalledWith('appointment-id');
     expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBeNull();
+    expect(sessionStorage.getItem('pendingPaymentContext')).toBeNull();
   }));
 
   it('keeps the pending appointment in session storage while reconciliation is required', fakeAsync(() => {
@@ -50,6 +52,7 @@ describe('PaymentResultPage', () => {
       paidAt: null,
     }));
     sessionStorage.setItem('pendingPaymentAppointmentId', 'appointment-id');
+    sessionStorage.setItem('pendingPaymentContext', '{"appointmentId":"appointment-id"}');
     TestBed.configureTestingModule({
       imports: [PaymentResultPage, NoopAnimationsModule],
       providers: [
@@ -65,5 +68,6 @@ describe('PaymentResultPage', () => {
     expect(fixture.componentInstance.state()).toBe('warning');
     expect(api.getPaymentStatus).toHaveBeenCalledWith('appointment-id');
     expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBe('appointment-id');
+    expect(sessionStorage.getItem('pendingPaymentContext')).not.toBeNull();
   }));
 });

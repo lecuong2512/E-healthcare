@@ -12,6 +12,13 @@ import { PatientBookingApiService, PatientDoctorDetail, PatientDoctorSchedule, P
 import { PaymentRedirectService } from '../../data-access/payment-redirect.service';
 
 const TOTAL_SECONDS = 10 * 60;
+const PENDING_PAYMENT_CONTEXT_KEY = 'pendingPaymentContext';
+
+interface PendingPaymentContext {
+  appointmentId: string;
+  provider: PaymentMethod.VNPAY | PaymentMethod.MOMO;
+  idempotencyKey: string;
+}
 
 export interface Doctor {
   id: string;
@@ -103,13 +110,16 @@ export class BookingStepperPage implements OnDestroy {
   readonly countdownSeconds = signal(TOTAL_SECONDS);
   readonly loading = signal(false);
   readonly errorMessage = signal<string | null>(null);
+  readonly pendingPaymentContext = signal<PendingPaymentContext | null>(
+    this.readPendingPaymentContext(),
+  );
   readonly selectedFileName = signal<string | null>(null);
   consentAccepted = false;
   consentError = false;
   private timerInterval: ReturnType<typeof setInterval> | null = null;
   private reservationId: string | null = null;
   private bookingCommitted = false;
-  private idempotencyKey: string | null = null;
+  private idempotencyKey: string | null = this.pendingPaymentContext()?.idempotencyKey ?? null;
 
   readonly formattedCountdown = computed(() => {
     const seconds = this.countdownSeconds();
@@ -243,6 +253,11 @@ export class BookingStepperPage implements OnDestroy {
   removeVoucher(): void { this.voucherCode.set(''); this.appliedVoucher.set(null); this.voucherMessage.set(null); }
 
   submitBooking(): void {
+    const pendingPayment = this.pendingPaymentContext();
+    if (pendingPayment) {
+      this.initiateOnlinePayment(pendingPayment);
+      return;
+    }
     const doctorId = this.selectedDoctorId();
     const slotId = this.selectedSlotId();
     if (!doctorId || !slotId || !this.reservationId || this.patientForm.invalid) return;
@@ -259,27 +274,30 @@ export class BookingStepperPage implements OnDestroy {
       reasonForVisit: this.patientForm.value.reason?.trim() || 'Khám theo lịch hẹn',
       paymentMethod: method,
       voucherCode: this.appliedVoucher()?.code,
-    }).pipe(
-      switchMap((appointment) => {
+    }).pipe(finalize(() => this.loading.set(false))).subscribe({
+      next: (appointment) => {
         this.bookingCommitted = true;
-        if (method === PaymentMethod.PAY_AT_CLINIC) return of({ appointment, payment: null });
-        this.idempotencyKey ||= crypto.randomUUID();
-        return this.api.initiatePayment(appointment.id, method, this.idempotencyKey)
-          .pipe(switchMap((payment) => of({ appointment, payment })));
-      }),
-      finalize(() => this.loading.set(false)),
-    ).subscribe({
-      next: ({ appointment, payment }) => {
-        if (!payment) { void this.router.navigate(['/patient/history']); return; }
-        sessionStorage.setItem('pendingPaymentAppointmentId', appointment.id);
-        try {
-          this.paymentRedirect.redirect(payment.paymentUrl);
-        } catch {
-          this.errorMessage.set('Cổng thanh toán trả về địa chỉ không an toàn.');
+        if (method === PaymentMethod.PAY_AT_CLINIC) {
+          void this.router.navigate(['/patient/history']);
+          return;
         }
+        this.idempotencyKey ||= crypto.randomUUID();
+        const context: PendingPaymentContext = {
+          appointmentId: appointment.id,
+          provider: method,
+          idempotencyKey: this.idempotencyKey,
+        };
+        this.persistPendingPaymentContext(context);
+        this.loading.set(false);
+        this.initiateOnlinePayment(context);
       },
       error: (error) => this.errorMessage.set(this.errorText(error)),
     });
+  }
+
+  retryPendingPayment(): void {
+    const context = this.pendingPaymentContext();
+    if (context) this.initiateOnlinePayment(context);
   }
 
   goToStep(step: number): void { this.step.set(step); }
@@ -363,6 +381,50 @@ export class BookingStepperPage implements OnDestroy {
     if (!doctorId || !slotId || !reservationId) return;
     this.reservationId = null;
     this.api.releaseSlot({ doctorId, slotId, reservationId }).subscribe({ error: () => undefined });
+  }
+
+  private initiateOnlinePayment(context: PendingPaymentContext): void {
+    if (this.loading()) return;
+    this.loading.set(true);
+    this.errorMessage.set(null);
+    this.api.initiatePayment(
+      context.appointmentId,
+      context.provider,
+      context.idempotencyKey,
+    ).pipe(finalize(() => this.loading.set(false))).subscribe({
+      next: (payment) => {
+        sessionStorage.setItem('pendingPaymentAppointmentId', context.appointmentId);
+        try {
+          this.paymentRedirect.redirect(payment.paymentUrl);
+        } catch {
+          this.errorMessage.set('Cổng thanh toán trả về địa chỉ không an toàn.');
+        }
+      },
+      error: (error) => this.errorMessage.set(this.errorText(error)),
+    });
+  }
+
+  private persistPendingPaymentContext(context: PendingPaymentContext): void {
+    this.pendingPaymentContext.set(context);
+    sessionStorage.setItem(PENDING_PAYMENT_CONTEXT_KEY, JSON.stringify(context));
+    sessionStorage.setItem('pendingPaymentAppointmentId', context.appointmentId);
+  }
+
+  private readPendingPaymentContext(): PendingPaymentContext | null {
+    try {
+      const raw = sessionStorage.getItem(PENDING_PAYMENT_CONTEXT_KEY);
+      if (!raw) return null;
+      const value = JSON.parse(raw) as Partial<PendingPaymentContext>;
+      if (
+        typeof value.appointmentId !== 'string' ||
+        typeof value.idempotencyKey !== 'string' ||
+        ![PaymentMethod.VNPAY, PaymentMethod.MOMO].includes(value.provider as PaymentMethod)
+      ) return null;
+      return value as PendingPaymentContext;
+    } catch {
+      sessionStorage.removeItem(PENDING_PAYMENT_CONTEXT_KEY);
+      return null;
+    }
   }
 
   private errorText(error: unknown): string {

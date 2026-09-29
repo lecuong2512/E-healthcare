@@ -560,6 +560,23 @@
           </div>
         </div>
 
+        @if (pendingPaymentContext(); as pendingPayment) {
+          <nz-alert
+            nzType="warning"
+            nzShowIcon
+            nzMessage="Lịch hẹn đã được tạo và đang chờ thanh toán"
+            [nzDescription]="'Tiếp tục giao dịch ' + pendingPayment.provider + '. Hệ thống sẽ không tạo lại lịch hẹn.'"
+          ></nz-alert>
+          <button
+            type="button"
+            (click)="retryPendingPayment()"
+            [disabled]="loading()"
+            class="min-h-[44px] w-full rounded-xl bg-sky-600 px-5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Tiếp tục thanh toán
+          </button>
+        }
+
         <!-- Payment method selection -->
         <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
           <p class="text-xs font-bold text-slate-800">Chọn phương thức thanh toán</p>

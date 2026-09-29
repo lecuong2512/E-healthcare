@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed, discardPeriodicTasks, fakeAsync, tick } from
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppointmentStatus, PaymentMethod, PaymentStatus } from '@shared/enums';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { PatientBookingApiService, PatientDoctorDetail } from '../../data-access/patient-booking-api.service';
 import { PaymentRedirectService } from '../../data-access/payment-redirect.service';
 import { BookingStepperPage } from './booking-stepper.page';
@@ -167,6 +167,62 @@ describe('BookingStepperPage payment flow', () => {
 
     expect(api.initiatePayment).not.toHaveBeenCalled();
     expect(router.navigate).toHaveBeenCalledWith(['/patient/history']);
+  });
+
+  it('retries payment initiation without confirming the booking again', () => {
+    api.initiatePayment.and.returnValues(
+      throwError(() => new Error('network failure')),
+      of({
+        transactionId: 'payment-id',
+        appointmentId,
+        provider: PaymentMethod.MOMO,
+        merchantTransactionId: 'PAY01',
+        paymentUrl: 'https://test-payment.momo.vn/pay',
+        expiresAt: new Date().toISOString(),
+      }),
+    );
+    component.selectDoctorAndContinue(component.doctors()[0]);
+    component.chooseSlot(component.morningSlots[0]);
+    component.selectPayment(PaymentMethod.MOMO);
+    component.consentAccepted = true;
+    component.patientForm.setValue({
+      fullName: 'Nguyễn Văn A', phone: '0912345678', dob: '2000-01-01', gender: 'Nam', reason: 'Khám định kỳ',
+    });
+
+    component.submitBooking();
+    const firstKey = api.initiatePayment.calls.mostRecent().args[2];
+    component.submitBooking();
+
+    expect(api.confirmBooking).toHaveBeenCalledTimes(1);
+    expect(api.initiatePayment).toHaveBeenCalledTimes(2);
+    expect(api.initiatePayment.calls.mostRecent().args).toEqual([
+      appointmentId,
+      PaymentMethod.MOMO,
+      firstKey,
+    ]);
+    expect(redirect.redirect).toHaveBeenCalledWith('https://test-payment.momo.vn/pay');
+  });
+
+  it('recovers a pending payment context after the page reloads', () => {
+    const idempotencyKey = '55555555-5555-4555-8555-555555555555';
+    sessionStorage.setItem('pendingPaymentContext', JSON.stringify({
+      appointmentId,
+      provider: PaymentMethod.VNPAY,
+      idempotencyKey,
+    }));
+    fixture.destroy();
+    fixture = TestBed.createComponent(BookingStepperPage);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    component.retryPendingPayment();
+
+    expect(api.confirmBooking).not.toHaveBeenCalled();
+    expect(api.initiatePayment).toHaveBeenCalledWith(
+      appointmentId,
+      PaymentMethod.VNPAY,
+      idempotencyKey,
+    );
   });
 
   it('requires consent before creating the appointment', () => {

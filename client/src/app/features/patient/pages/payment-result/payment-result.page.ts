@@ -120,6 +120,7 @@ export class PaymentResultPage {
       this.status.set(status);
       if (['success', 'error'].includes(this.toState(status))) {
         sessionStorage.removeItem('pendingPaymentAppointmentId');
+        sessionStorage.removeItem('pendingPaymentContext');
       }
     });
   }
