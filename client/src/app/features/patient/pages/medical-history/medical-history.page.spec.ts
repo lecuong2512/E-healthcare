@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { NzMessageService } from 'ng-zorro-antd/message';
+import { TokenStoreService } from '../../../../core/services/token-store.service';
 
 import { MedicalHistoryPage } from './medical-history.page';
 
@@ -19,6 +20,10 @@ describe('MedicalHistoryPage', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        {
+          provide: TokenStoreService,
+          useValue: { accessToken: () => 'patient-session-token' },
+        },
         provideNoopAnimations(),
       ],
     }).compileComponents();
@@ -96,6 +101,70 @@ describe('MedicalHistoryPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('img[alt="Mã QR check-in lịch hẹn"]')).toBeTruthy();
+  });
+
+  it('loads and displays the authenticated Past medical record detail', () => {
+    const appointment = { id: 'appointment-1', status: 'COMPLETED' };
+    component.showDetails(appointment);
+    fixture.detectChanges();
+    expect(component.detailLoading()).toBeTrue();
+
+    const request = httpMock.expectOne('/api/v1/clinical/medical-records/appointment/appointment-1');
+    expect(request.request.headers.get('Authorization')).toBe('Bearer patient-session-token');
+    request.flush({
+      id: 'record-1',
+      appointmentId: 'appointment-1',
+      patientId: 'patient-1',
+      doctorId: 'doctor-1',
+      vitalSigns: {
+        bloodPressure: '', pulse: 0, temperature: 0, respiratoryRate: 0,
+        weight: 0, height: 0, bmi: 0,
+      },
+      clinicalNotes: 'Viêm họng cấp',
+      icd10PrimaryCode: 'J02.9',
+      icd10SecondaryCodes: null,
+      doctorAdvice: 'Uống đủ nước và nghỉ ngơi.',
+      followUpDate: '2026-10-10',
+      isLocked: true,
+      lockedAt: null,
+      completedAt: '2026-09-20T10:00:00Z',
+      prescription: {
+        id: 'prescription-1',
+        medicalRecordId: 'record-1',
+        prescriptionCode: 'RX-1',
+        createdAt: '2026-09-20T10:00:00Z',
+        items: [{
+          id: 'item-1', prescriptionId: 'prescription-1',
+          medicineName: 'Thuốc A', activeIngredient: 'Hoạt chất A',
+          dosageMorning: '1 viên', dosageNoon: null, dosageAfternoon: null,
+          dosageNight: null, totalQuantity: 5, unit: 'viên',
+          usageInstructions: 'Uống sau ăn.',
+        }],
+      },
+    });
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(component.detailLoading()).toBeFalse();
+    expect(text).toContain('Viêm họng cấp');
+    expect(text).toContain('J02.9');
+    expect(text).toContain('Uống đủ nước và nghỉ ngơi.');
+    expect(text).toContain('10/10/2026');
+    expect(text).toContain('Thuốc A');
+    expect(text).toContain('Uống sau ăn.');
+    expect(text).toContain('Tải bản PDF chưa khả dụng');
+  });
+
+  it('shows permission or missing-record errors and allows retry', () => {
+    component.showDetails({ id: 'appointment-2', status: 'COMPLETED' });
+    httpMock.expectOne('/api/v1/clinical/medical-records/appointment/appointment-2').flush(
+      { message: 'Bạn chỉ có thể xem hồ sơ bệnh án của chính mình.' },
+      { status: 403, statusText: 'Forbidden' },
+    );
+    fixture.detectChanges();
+    expect(component.detailLoading()).toBeFalse();
+    expect(fixture.nativeElement.textContent).toContain('Bạn chỉ có thể xem hồ sơ bệnh án của chính mình.');
+    expect(fixture.nativeElement.textContent).toContain('Thử tải lại');
   });
 
   describe('canCancel', () => {

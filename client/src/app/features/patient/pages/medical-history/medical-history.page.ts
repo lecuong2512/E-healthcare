@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { MedicalRecordDetailResponse } from '@shared/interfaces';
 import {
   AppointmentDoctorReview,
   CreateDoctorReviewRequest,
@@ -15,6 +16,7 @@ import { NzModalModule } from 'ng-zorro-antd/modal';
 import { NzRateModule } from 'ng-zorro-antd/rate';
 import { toDataURL } from 'qrcode';
 import { environment } from '../../../../../environments/environment';
+import { ClinicalService } from '../../../../core/services/clinical.service';
 import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
 
 type Tab = 'upcoming' | 'completed' | 'cancelled';
@@ -38,7 +40,6 @@ interface Appointment {
     user?: { fullName?: string };
   };
   schedule?: { date: string; startTime: string; endTime: string };
-  medicalRecord?: MedicalRecord;
   review?: AppointmentDoctorReview | null;
 }
 
@@ -64,38 +65,6 @@ interface QrState {
   error?: string;
 }
 
-interface MedicalRecord {
-  id?: string;
-  clinicalNotes?: string;
-  icd10PrimaryCode?: string;
-  icd10SecondaryCodes?: string | null;
-  doctorAdvice?: string | null;
-  followUpDate?: string | null;
-  primaryDiagnosis?: string;
-  secondaryDiagnoses?: string[];
-  dietAdvice?: string;
-  prescription?: {
-    prescriptionCode?: string;
-    items?: PrescriptionItem[];
-    pdfUrl?: string;
-    digitallySigned?: boolean;
-  };
-  resultPdfUrl?: string;
-  digitallySigned?: boolean;
-}
-
-interface PrescriptionItem {
-  medicineName: string;
-  activeIngredient?: string | null;
-  totalQuantity: number;
-  unit: string;
-  usageInstructions?: string | null;
-  dosageMorning?: string | null;
-  dosageNoon?: string | null;
-  dosageAfternoon?: string | null;
-  dosageNight?: string | null;
-}
-
 @Component({
   selector: 'app-medical-history-page',
   standalone: true,
@@ -115,6 +84,7 @@ interface PrescriptionItem {
 })
 export class MedicalHistoryPage implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
+  private readonly clinical = inject(ClinicalService);
   private readonly message = inject(NzMessageService);
 
   readonly tabs: { id: Tab; label: string }[] = [
@@ -144,7 +114,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   readonly submitting = signal(false);
 
   readonly detail = signal<Appointment | null>(null);
-  readonly detailRecord = signal<MedicalRecord | null>(null);
+  readonly detailRecord = signal<MedicalRecordDetailResponse | null>(null);
   readonly detailLoading = signal(false);
   readonly detailError = signal('');
 
@@ -232,144 +202,6 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   private apiError(error: unknown, fallback: string): string {
     const response = error as { error?: { message?: string } };
     return response?.error?.message || fallback;
-  }
-
-  useMockData(): void {
-    const date = (offset: number, time: string) => {
-      const d = new Date(Date.now() + offset * 86400000);
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-
-      return {
-        date: `${yyyy}-${mm}-${dd}`,
-        startTime: time,
-        endTime: `${String((Number(time.slice(0, 2)) + 1) % 24).padStart(2, '0')}:${time.slice(3, 5)}:00`,
-      };
-    };
-
-    const relativeSchedule = (hoursFromNow: number) => {
-      const start = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
-      const end = new Date(start.getTime() + 60 * 60 * 1000);
-
-      const format = (value: Date) => {
-        const yyyy = value.getFullYear();
-        const mm = String(value.getMonth() + 1).padStart(2, '0');
-        const dd = String(value.getDate()).padStart(2, '0');
-        const hh = String(value.getHours()).padStart(2, '0');
-        const min = String(value.getMinutes()).padStart(2, '0');
-
-        return {
-          date: `${yyyy}-${mm}-${dd}`,
-          startTime: `${hh}:${min}:00`,
-          endTime: `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}:00`,
-        };
-      };
-
-      return format(start);
-    };
-
-    const doctor = (
-      name: string,
-      title: string,
-      specialty: string,
-      room: string
-    ) => ({
-      id: `mock-${name}`,
-      academicTitle: title,
-      roomNumber: room,
-      specialty: { name: specialty },
-      user: { fullName: name },
-    });
-
-    const prescription: PrescriptionItem[] = [
-      {
-        medicineName: 'Amlodipine 5 mg',
-        activeIngredient: 'Amlodipine',
-        totalQuantity: 30,
-        unit: 'viên',
-        usageInstructions: 'Uống 1 viên mỗi ngày, sau ăn sáng.',
-        dosageMorning: '1 viên',
-        dosageNoon: '—',
-        dosageAfternoon: '—',
-        dosageNight: '—',
-      },
-      {
-        medicineName: 'Atorvastatin 10 mg',
-        activeIngredient: 'Atorvastatin',
-        totalQuantity: 30,
-        unit: 'viên',
-        usageInstructions: 'Uống buổi tối trước khi ngủ.',
-        dosageMorning: '—',
-        dosageNoon: '—',
-        dosageAfternoon: '—',
-        dosageNight: '1 viên',
-      },
-    ];
-
-    this.appointments.set([
-      {
-        id: 'mock-upcoming-01',
-        appointmentCode: 'APT-DEMO-2601',
-        status: 'CONFIRMED',
-        totalAmount: 350000,
-        doctor: doctor('Trần Văn Tiến', 'PGS.TS.BS', 'Tim mạch', 'A203'),
-        schedule: relativeSchedule(72),
-      },
-      {
-        id: 'mock-upcoming-02',
-        appointmentCode: 'APT-DEMO-2602',
-        status: 'CONFIRMED',
-        totalAmount: 280000,
-        doctor: doctor('Trần Quốc Bảo', 'ThS.BS', 'Nội tổng quát', 'B105'),
-        schedule: relativeSchedule(8),
-      },
-      {
-        id: 'mock-upcoming-03',
-        appointmentCode: 'APT-DEMO-2603',
-        status: 'CONFIRMED',
-        totalAmount: 260000,
-        doctor: doctor('Phạm Hoàng Long', 'BSCKII', 'Da liễu', 'D108'),
-        schedule: relativeSchedule(1.5),
-      },
-      {
-        id: 'mock-completed-01',
-        appointmentCode: 'APT-DEMO-2518',
-        status: 'COMPLETED',
-        totalAmount: 420000,
-        doctor: doctor('Lê Thu Hà', 'BSCKII', 'Nội tiết', 'C312'),
-        schedule: date(-12, '08:30:00'),
-        medicalRecord: {
-          clinicalNotes: 'Tăng huyết áp nguyên phát, hiện ổn định với điều trị.',
-          icd10PrimaryCode: 'I10',
-          icd10SecondaryCodes: 'E78.5',
-          doctorAdvice:
-            'Duy trì thuốc đều đặn, đo huyết áp tại nhà mỗi sáng. Tái khám sau 4 tuần.',
-          followUpDate: date(16, '00:00:00').date,
-          dietAdvice: 'Giảm muối, hạn chế thức ăn nhiều dầu mỡ.',
-          digitallySigned: true,
-          prescription: {
-            prescriptionCode: 'RX-DEMO-771',
-            digitallySigned: true,
-            items: prescription,
-          },
-        },
-      },
-      {
-        id: 'mock-cancelled-01',
-        appointmentCode: 'APT-DEMO-2509',
-        status: 'CANCELLED_BY_PATIENT',
-        totalAmount: 250000,
-        cancellationReason: 'Bệnh nhân có lịch công tác đột xuất.',
-        doctor: doctor('Phạm Hoàng Long', 'ThS.BS', 'Nhi khoa', 'D108'),
-        schedule: date(-4, '10:15:00'),
-      },
-    ]);
-
-    this.error.set('');
-    this.loading.set(false);
-    this.isMock.set(true);
-    this.activeTab.set('upcoming');
   }
 
   count(tab: Tab): number {
@@ -642,17 +474,12 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
 
   showDetails(a: Appointment): void {
     this.detail.set(a);
-    this.detailRecord.set(a.medicalRecord || null);
+    this.detailRecord.set(null);
     this.detailError.set('');
-
-    if (a.medicalRecord) {
-      return;
-    }
-
     this.detailLoading.set(true);
 
-    this.http
-      .get<MedicalRecord>(`${environment.apiBaseUrl}/clinical/medical-records/appointment/${encodeURIComponent(a.id)}`)
+    this.clinical
+      .getMedicalRecordByAppointment(a.id)
       .subscribe({
         next: (r) => {
           this.detailRecord.set(r);
@@ -663,22 +490,5 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
           this.detailLoading.set(false);
         },
       });
-  }
-
-  secondaryDiagnosis(): string {
-    const r = this.detailRecord();
-    return r?.secondaryDiagnoses?.join(', ') || r?.icd10SecondaryCodes || 'Không có';
-  }
-
-  download(url?: string): void {
-    if (!url) {
-      return;
-    }
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '';
-    a.rel = 'noopener';
-    a.click();
   }
 }
