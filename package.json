@@ -18,6 +18,8 @@
   },
   "dependencies": {},
   "overrides": {
-    "@nestjs/platform-express": { "multer": "^2.3.0" }
+    "@nestjs/platform-express": {
+      "multer": "^2.3.0"
+    }
   }
 }
