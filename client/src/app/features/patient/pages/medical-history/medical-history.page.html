@@ -11,6 +11,7 @@
       </div>
 
       <div class="flex gap-2">
+        <button type="button" (click)="useMockData()" class="rounded-xl border border-sky-700 bg-white px-4 py-3 font-semibold text-sky-700 hover:bg-sky-50">Dữ liệu mẫu (Demo)</button>
         <a routerLink="/patient/booking" class="rounded-xl bg-sky-700 px-4 py-3 font-semibold text-white">Đặt lịch mới</a>
       </div>
     </header>
@@ -40,6 +41,7 @@
         <p class="font-semibold text-rose-700">{{ error() }}</p>
         <div class="mt-4 flex justify-center gap-2">
           <button (click)="load()" class="rounded-lg border px-4 py-2 text-slate-700">Thử lại</button>
+          <button type="button" (click)="useMockData()" class="rounded-lg bg-sky-700 px-4 py-2 font-semibold text-white">Xem dữ liệu mẫu (Demo)</button>
         </div>
       </section>
     } @else {
