@@ -46,6 +46,7 @@ import { AddEmrPrescriptionTables1790065218000 } from "./migrations/179006521800
 import { CreateEmrAddendumsTable1790150000000 } from "./migrations/1790150000000-create-emr-addendums-table";
 import { AddAppointmentConsent1790151600000 } from "./migrations/1790151600000-add-appointment-consent";
 import { AddAdminCatalogStaffReporting1790240000000 } from './migrations/1790240000000-add-admin-catalog-staff-reporting';
+import { AddSpecialtyHeadDoctor1790320000000 } from './migrations/1790320000000-add-specialty-head-doctor';
 import { Icd10CatalogEntity, MedicalServiceEntity, MedicineEntity } from './entities/admin-catalog.entity';
 export function createDataSource(url: string): DataSource {
   return new DataSource({
@@ -104,6 +105,7 @@ export function createDataSource(url: string): DataSource {
       CreateEmrAddendumsTable1790150000000,
       AddAppointmentConsent1790151600000,
       AddAdminCatalogStaffReporting1790240000000,
+      AddSpecialtyHeadDoctor1790320000000,
     ],
   });
 }

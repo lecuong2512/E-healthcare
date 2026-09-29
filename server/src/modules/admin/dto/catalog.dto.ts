@@ -22,6 +22,7 @@ export class CatalogMutationDto {
   @IsOptional() @IsInt() @Min(0) listedPrice?: number;
   @IsOptional() @IsInt() @Min(1) durationMinutes?: number;
   @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() iconUrl?: string;
   @IsOptional() @IsString() category?: string;
   @IsOptional() @IsUUID() headDoctorId?: string;
 }

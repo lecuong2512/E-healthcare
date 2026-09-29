@@ -5,7 +5,7 @@ import { CatalogAdminService } from './admin-catalog.service';
 import { AdminCatalogType } from './admin.types';
 import { CatalogListDto, CatalogMutationDto, CatalogVisibilityDto } from './dto/catalog.dto';
 
-@Controller('api/v1/admin/catalogs')
+@Controller('admin/catalogs')
 @Roles(Role.ADMIN)
 export class CatalogAdminController {
   constructor(private readonly service: CatalogAdminService) {}
@@ -18,4 +18,5 @@ export class CatalogAdminController {
   @Post(':type') create(@Param('type') type: AdminCatalogType, @Body() dto: CatalogMutationDto) { return this.service.create(type, dto); }
   @Patch(':type/:id') update(@Param('type') type: AdminCatalogType, @Param('id') id: string, @Body() dto: CatalogMutationDto) { return this.service.update(type, id, dto); }
   @Patch(':type/:id/visibility') visibility(@Param('type') type: AdminCatalogType, @Param('id') id: string, @Body() dto: CatalogVisibilityDto) { return this.service.setVisibility(type, id, dto.isActive); }
+  @Post('icd10/sync') syncIcd10() { return this.service.syncIcd10(); }
 }

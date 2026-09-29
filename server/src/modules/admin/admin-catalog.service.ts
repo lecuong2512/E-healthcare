@@ -4,10 +4,11 @@ import { SpecialtyEntity } from '../../database/entities/specialty.entity';
 import { Icd10CatalogEntity, MedicalServiceEntity, MedicineEntity } from '../../database/entities/admin-catalog.entity';
 import { AdminCatalogType, CatalogListQuery, CatalogPage } from './admin.types';
 import { CatalogMutationDto } from './dto/catalog.dto';
+import { Icd10Service } from '../clinical/icd10/icd10.service';
 
 @Injectable()
 export class CatalogAdminService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly dataSource: DataSource, private readonly icd10: Icd10Service) {}
 
   async list(type: AdminCatalogType, input: CatalogListQuery = {}): Promise<CatalogPage<unknown>> {
     const page = Math.max(1, input.page ?? 1);
@@ -48,9 +49,16 @@ export class CatalogAdminService {
     return repository.save(Object.assign(record, this.mapInput(type, input)));
   }
 
+  async syncIcd10(): Promise<{ synchronized: number }> {
+    const canonical = await this.icd10.search('', 50);
+    const records = canonical.map(item => ({ code: item.code, name: item.nameVi, category: item.chapter, isActive: true }));
+    await this.dataSource.getRepository(Icd10CatalogEntity).upsert(records, ['code']);
+    return { synchronized: records.length };
+  }
+
   private mapInput(type: AdminCatalogType, input: CatalogMutationDto): Record<string, unknown> {
     const trim = (value?: string) => value?.trim() || undefined;
-    if (type === AdminCatalogType.SPECIALTY) return { name: trim(input.name), description: trim(input.description) };
+    if (type === AdminCatalogType.SPECIALTY) return { name: trim(input.name), description: trim(input.description), iconUrl: trim(input.iconUrl), headDoctorId: input.headDoctorId };
     if (type === AdminCatalogType.MEDICINE) return { code: trim(input.code), brandName: trim(input.brandName), activeIngredient: trim(input.activeIngredient), strength: trim(input.strength), packageUnit: trim(input.packageUnit), contraindications: trim(input.contraindications), referencePrice: input.referencePrice };
     if (type === AdminCatalogType.SERVICE) return { code: trim(input.code), name: trim(input.name), listedPrice: input.listedPrice, durationMinutes: input.durationMinutes, description: trim(input.description) };
     return { code: trim(input.code), name: trim(input.name), category: trim(input.category) };
