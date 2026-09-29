@@ -8,6 +8,33 @@ describe('AdminDashboardService', () => {
     const service = new AdminDashboardService(dataSource);
     await expect(service.overview(7)).resolves.toMatchObject({ visits: 12, revenue: 4800000, completionRate: 75, cancellationRate: 16.67, noShowRate: 8.33, paymentBreakdown: [], trend: [{ day: '2026-09-29', visits: 3, revenue: 1200000 }] });
   });
+  it('uses a non-reserved alias for the doctor performance user join', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ visits: '0', revenue: '0', completed: '0', cancelled: '0', noShows: '0' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    await new AdminDashboardService({ query } as unknown as DataSource).overview(7);
+    expect(query.mock.calls[3][0]).toContain('JOIN users staff_user');
+  });
+  it('applies the appointment-duration filter to AVG before rounding it', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ visits: '0', revenue: '0', completed: '0', cancelled: '0', noShows: '0' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    await new AdminDashboardService({ query } as unknown as DataSource).overview(7);
+    expect(query.mock.calls[3][0]).toContain('ROUND(AVG(EXTRACT(EPOCH FROM (appointment.completed_at - appointment.checked_in_at)) / 60) FILTER');
+  });
+  it('counts every appointment cancellation status in the cancellation KPI', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ visits: '0', revenue: '0', completed: '0', cancelled: '0', noShows: '0' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    await new AdminDashboardService({ query } as unknown as DataSource).overview(7);
+    expect(query.mock.calls[0][0]).toContain("status IN ('CANCELLED', 'CANCELLED_BY_PATIENT', 'CANCELLED_BY_CLINIC')");
+  });
   it('stores the administrator confirmation before a report is issued', async () => {
     const repository = { create: jest.fn(value => value), save: jest.fn(value => Promise.resolve(value)) };
     const service = new AdminDashboardService({ getRepository: jest.fn(() => repository) } as unknown as DataSource);
