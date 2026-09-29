@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
@@ -6,7 +6,6 @@ import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { NzMessageService } from 'ng-zorro-antd/message';
 
 import { MedicalHistoryPage } from './medical-history.page';
-import { TokenStoreService } from '../../../../core/services/token-store.service';
 
 describe('MedicalHistoryPage', () => {
   let component: MedicalHistoryPage;
@@ -21,12 +20,6 @@ describe('MedicalHistoryPage', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         provideNoopAnimations(),
-        {
-          provide: TokenStoreService,
-          useValue: {
-            accessToken: () => 'fake-jwt-token',
-          },
-        },
       ],
     }).compileComponents();
 
@@ -34,8 +27,8 @@ describe('MedicalHistoryPage', () => {
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
-    const initialRequest = httpMock.expectOne('/api/v1/appointments/me');
-    initialRequest.flush([]);
+    httpMock.expectOne('/api/v1/appointments/me').flush([]);
+    fixture.detectChanges();
   });
 
   afterEach(() => {
@@ -46,11 +39,17 @@ describe('MedicalHistoryPage', () => {
   it('should create the component and load real appointments by default', () => {
     expect(component).toBeTruthy();
     expect(component.appointments()).toEqual([]);
-    expect(component.isMock()).toBeFalse();
     expect(component.activeTab()).toBe('upcoming');
   });
 
   it('should filter items correctly for each tab', () => {
+    component.appointments.set([
+      { id: '1', status: 'CONFIRMED' },
+      { id: '2', status: 'CHECKED_IN' },
+      { id: '3', status: 'COMPLETED' },
+      { id: '4', status: 'CANCELLED_BY_PATIENT' },
+      { id: '5', status: 'CANCELLED_BY_CLINIC' },
+    ]);
     component.activeTab.set('upcoming');
     const upcoming = component.itemsForTab();
     expect(upcoming.every((a) => ['CONFIRMED', 'CHECKED_IN'].includes(a.status))).toBeTrue();
@@ -64,6 +63,41 @@ describe('MedicalHistoryPage', () => {
     expect(cancelled.every((a) => a.status.includes('CANCELLED'))).toBeTrue();
   });
 
+  it('shows an empty state when the patient has no appointments', () => {
+    expect(fixture.nativeElement.textContent).toContain('Bạn chưa có lịch khám sắp tới');
+  });
+
+  it('shows loading while refreshing appointments', () => {
+    component.load();
+    expect(component.loading()).toBeTrue();
+    httpMock.expectOne('/api/v1/appointments/me').flush([]);
+    expect(component.loading()).toBeFalse();
+  });
+
+  it('shows an error state and retry action when the API fails', () => {
+    component.load();
+    httpMock.expectOne('/api/v1/appointments/me').flush(
+      { message: 'Lỗi tải dữ liệu' },
+      { status: 500, statusText: 'Server Error' },
+    );
+    fixture.detectChanges();
+    expect(component.error()).toBe('Lỗi tải dữ liệu');
+    expect(fixture.nativeElement.textContent).toContain('Thử lại');
+  });
+
+  it('requests and renders the check-in QR returned by the API', async () => {
+    component.load();
+    httpMock.expectOne('/api/v1/appointments/me').flush([
+      { id: 'appointment-1', status: 'CONFIRMED', appointmentCode: 'APT-1' },
+    ]);
+    const qrRequest = httpMock.expectOne('/api/v1/appointments/appointment-1/check-in-qr');
+    expect(qrRequest.request.method).toBe('GET');
+    qrRequest.flush({ qrToken: 'check-in-token', expiresAt: '2026-09-29T10:00:00Z' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('img[alt="Mã QR check-in lịch hẹn"]')).toBeTruthy();
+  });
+
   describe('canCancel', () => {
     it('should allow cancellation only for CONFIRMED status', () => {
       expect(component.canCancel({ id: '1', status: 'CONFIRMED' })).toBeTrue();
@@ -75,28 +109,6 @@ describe('MedicalHistoryPage', () => {
   });
 
   describe('Refund Policy calculation (Section 5.3 & Card 3.11)', () => {
-    const createMockTarget = (hoursAhead: number) => {
-      const targetTime = Date.now() + hoursAhead * 3600000;
-      const targetDate = new Date(targetTime);
-      const yyyy = targetDate.getFullYear();
-      const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(targetDate.getDate()).padStart(2, '0');
-      const hh = String(targetDate.getHours()).padStart(2, '0');
-      const min = String(targetDate.getMinutes()).padStart(2, '0');
-      const ss = String(targetDate.getSeconds()).padStart(2, '0');
-
-      return {
-        id: 'target-1',
-        status: 'CONFIRMED',
-        totalAmount: 200000,
-        schedule: {
-          date: `${yyyy}-${mm}-${dd}`,
-          startTime: `${hh}:${min}:${ss}`,
-          endTime: '23:59:59',
-        },
-      };
-    };
-
     it('should classify >= 24 hours as green (100% refund)', () => {
       // 25 hours ahead
       spyOn(component, 'remainingMs').and.returnValue(25 * 3600000);
@@ -198,31 +210,7 @@ describe('MedicalHistoryPage', () => {
       expect(component.submitting()).toBeFalse();
     });
 
-    it('should successfully cancel in mock mode and update local status', fakeAsync(() => {
-      component.useMockData();
-      const appt = component.appointments()[0];
-      component.openCancel(appt);
-      component.cancelReason = 'Có việc bận đột xuất';
-      component.consentAccepted = true;
-
-      component.submitCancel();
-      expect(component.submitting()).toBeTrue();
-
-      tick(500);
-
-      expect(component.submitting()).toBeFalse();
-      expect(component.cancelTarget()).toBeNull();
-      expect(component.toast()).toContain('thành công');
-
-      const updated = component.appointments().find((a) => a.id === appt.id);
-      expect(updated?.status).toBe('CANCELLED_BY_PATIENT');
-      expect(updated?.cancellationReason).toBe('Có việc bận đột xuất');
-
-      tick(5000);
-    }));
-
-    it('should send POST request to API when isMock is false', () => {
-      component.isMock.set(false);
+    it('sends POST to the API and refreshes appointment history', () => {
       const appt = { id: 'apt-real-01', status: 'CONFIRMED' };
       component.appointments.set([appt]);
       component.openCancel(appt);
@@ -241,7 +229,6 @@ describe('MedicalHistoryPage', () => {
 
       req.flush({ id: 'apt-real-01', status: 'CANCELLED_BY_PATIENT' });
 
-      // In real mode, it triggers this.load()
       const reloadReq = httpMock.expectOne('/api/v1/appointments/me');
       expect(reloadReq.request.method).toBe('GET');
       reloadReq.flush([]);
@@ -251,8 +238,7 @@ describe('MedicalHistoryPage', () => {
       expect(component.toast()).toContain('thành công');
     });
 
-    it('should handle API failure gracefully with error toast', () => {
-      component.isMock.set(false);
+    it('handles API failure gracefully with an error toast', () => {
       const appt = { id: 'apt-real-02', status: 'CONFIRMED' };
       component.appointments.set([appt]);
       component.openCancel(appt);

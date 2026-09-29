@@ -5,13 +5,9 @@
         <p class="text-sm font-semibold text-sky-700">HỒ SƠ SỨC KHỎE</p>
         <h1 class="mt-1 text-3xl font-bold text-slate-900">Lịch sử khám</h1>
         <p class="mt-2 text-slate-500">Lịch hẹn, kết quả khám và đơn thuốc của bạn</p>
-        @if (isMock()) {
-          <span class="mt-2 inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">CHẾ ĐỘ DỮ LIỆU MẪU</span>
-        }
       </div>
 
       <div class="flex gap-2">
-        <button type="button" (click)="useMockData()" class="rounded-xl border border-sky-700 bg-white px-4 py-3 font-semibold text-sky-700 hover:bg-sky-50">Dữ liệu mẫu (Demo)</button>
         <a routerLink="/patient/booking" class="rounded-xl bg-sky-700 px-4 py-3 font-semibold text-white">Đặt lịch mới</a>
       </div>
     </header>
@@ -41,7 +37,6 @@
         <p class="font-semibold text-rose-700">{{ error() }}</p>
         <div class="mt-4 flex justify-center gap-2">
           <button (click)="load()" class="rounded-lg border px-4 py-2 text-slate-700">Thử lại</button>
-          <button type="button" (click)="useMockData()" class="rounded-lg bg-sky-700 px-4 py-2 font-semibold text-white">Xem dữ liệu mẫu (Demo)</button>
         </div>
       </section>
     } @else {
@@ -76,10 +71,12 @@
                     <span class="text-slate-400">Giờ khám</span><br>
                     <b>{{ item.schedule?.startTime | slice: 0 : 5 }} – {{ item.schedule?.endTime | slice: 0 : 5 }}</b>
                   </p>
-                  <p>
-                    <span class="text-slate-400">Mã lịch</span><br>
-                    <b>{{ item.appointmentCode || item.id }}</b>
-                  </p>
+                  @if (item.appointmentCode) {
+                    <p>
+                      <span class="text-slate-400">Mã lịch</span><br>
+                      <b>{{ item.appointmentCode }}</b>
+                    </p>
+                  }
                   <p>
                     <span class="text-slate-400">Chi phí</span><br>
                     <b>{{ item.totalAmount | number }} ₫</b>
@@ -124,13 +121,24 @@
 
               @if (activeTab() === 'upcoming') {
                 <div class="flex shrink-0 flex-col items-center rounded-xl border border-slate-200 bg-slate-50 p-4 md:w-40">
-                  <div class="flex h-28 w-28 items-center justify-center rounded-lg bg-white text-center text-xs text-slate-500" [attr.data-qr]="item.appointmentCode || item.id">
-                    <div>
-                      <div class="text-4xl text-slate-900">▦</div>
-                      QR check-in
-                    </div>
-                  </div>
-                  <span class="mt-2 text-xs font-medium text-slate-600">Xuất trình khi đến viện</span>
+                  @if (item.status === 'CONFIRMED') {
+                    @if (qrStates()[item.id]; as qr) {
+                      @if (qr.dataUrl) {
+                        <img [src]="qr.dataUrl" alt="Mã QR check-in lịch hẹn" class="h-28 w-28 rounded-lg bg-white" />
+                        <button (click)="loadQr(item)" class="mt-2 text-xs font-semibold text-sky-700">Làm mới mã QR</button>
+                      } @else if (qr.loading) {
+                        <div class="flex h-28 w-28 items-center justify-center rounded-lg bg-white text-center text-xs text-slate-500" role="status">Đang tạo mã QR…</div>
+                      } @else {
+                        <p class="flex h-28 w-28 items-center justify-center rounded-lg bg-white p-2 text-center text-xs text-rose-700">{{ qr.error }}</p>
+                        <button (click)="loadQr(item)" class="mt-2 text-xs font-semibold text-sky-700">Thử lại</button>
+                      }
+                    } @else {
+                      <button (click)="loadQr(item)" class="flex h-28 w-28 items-center justify-center rounded-lg bg-white text-center text-xs font-semibold text-sky-700">Tạo mã QR check-in</button>
+                    }
+                    <span class="mt-2 text-center text-xs font-medium text-slate-600">Xuất trình khi đến viện</span>
+                  } @else {
+                    <div class="flex h-28 w-28 items-center justify-center rounded-lg bg-white p-3 text-center text-xs text-slate-500">Lịch hẹn đã check-in</div>
+                  }
                 </div>
               }
             </div>

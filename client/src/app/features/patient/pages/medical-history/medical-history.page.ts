@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -13,7 +13,8 @@ import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzMessageModule, NzMessageService } from 'ng-zorro-antd/message';
 import { NzModalModule } from 'ng-zorro-antd/modal';
 import { NzRateModule } from 'ng-zorro-antd/rate';
-import { TokenStoreService } from '../../../../core/services/token-store.service';
+import { toDataURL } from 'qrcode';
+import { environment } from '../../../../../environments/environment';
 import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
 
 type Tab = 'upcoming' | 'completed' | 'cancelled';
@@ -39,6 +40,28 @@ interface Appointment {
   schedule?: { date: string; startTime: string; endTime: string };
   medicalRecord?: MedicalRecord;
   review?: AppointmentDoctorReview | null;
+}
+
+interface CheckInQrResponse {
+  qrToken: string;
+  expiresAt: string;
+}
+
+interface QrState {
+  loading: boolean;
+  dataUrl?: string;
+  error?: string;
+}
+
+interface CheckInQrResponse {
+  qrToken: string;
+  expiresAt: string;
+}
+
+interface QrState {
+  loading: boolean;
+  dataUrl?: string;
+  error?: string;
 }
 
 interface MedicalRecord {
@@ -92,7 +115,6 @@ interface PrescriptionItem {
 })
 export class MedicalHistoryPage implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
-  private readonly tokens = inject(TokenStoreService);
   private readonly message = inject(NzMessageService);
 
   readonly tabs: { id: Tab; label: string }[] = [
@@ -112,6 +134,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   readonly reviewModalVisible = signal(false);
   readonly reviewSubmitting = signal(false);
   reviewComment = '';
+  readonly qrStates = signal<Record<string, QrState>>({});
 
   readonly cancelTarget = signal<Appointment | null>(null);
   cancelReason = '';
@@ -145,31 +168,70 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
     }
   }
 
-  private headers(): HttpHeaders {
-    return new HttpHeaders({
-      Authorization: `Bearer ${this.tokens.accessToken() ?? ''}`,
-    });
-  }
-
   load(): void {
-    this.isMock.set(false);
     this.loading.set(true);
     this.error.set('');
 
     this.http
-      .get<Appointment[]>('/api/v1/appointments/me', { headers: this.headers() })
+      .get<Appointment[]>(`${environment.apiBaseUrl}/appointments/me`)
       .subscribe({
         next: (rows) => {
-          this.appointments.set(rows);
+          const appointments = rows ?? [];
+          this.appointments.set(appointments);
           this.loading.set(false);
+          appointments
+            .filter((appointment) => appointment.status === 'CONFIRMED')
+            .forEach((appointment) => this.loadQr(appointment));
         },
         error: (e) => {
           this.error.set(
-            e?.error?.message || 'Không thể tải lịch sử khám. Vui lòng thử lại.'
+            this.apiError(e, 'Không thể tải lịch sử khám. Vui lòng thử lại.'),
           );
           this.loading.set(false);
         },
       });
+  }
+
+  loadQr(appointment: Appointment): void {
+    if (appointment.status !== 'CONFIRMED') return;
+
+    this.qrStates.update((states) => ({
+      ...states,
+      [appointment.id]: { loading: true },
+    }));
+
+    this.http
+      .get<CheckInQrResponse>(
+        `${environment.apiBaseUrl}/appointments/${encodeURIComponent(appointment.id)}/check-in-qr`,
+      )
+      .subscribe({
+        next: ({ qrToken }) => {
+          void toDataURL(qrToken, { width: 160, margin: 1, errorCorrectionLevel: 'M' })
+            .then((dataUrl: string) => {
+              this.qrStates.update((states) => ({
+                ...states,
+                [appointment.id]: { loading: false, dataUrl },
+              }));
+            })
+            .catch(() => this.setQrError(appointment.id));
+        },
+        error: () => this.setQrError(appointment.id),
+      });
+  }
+
+  private setQrError(appointmentId: string): void {
+    this.qrStates.update((states) => ({
+      ...states,
+      [appointmentId]: {
+        loading: false,
+        error: 'Không thể tải mã QR. Vui lòng thử lại.',
+      },
+    }));
+  }
+
+  private apiError(error: unknown, fallback: string): string {
+    const response = error as { error?: { message?: string } };
+    return response?.error?.message || fallback;
   }
 
   useMockData(): void {
@@ -358,7 +420,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   }
 
   canCancel(a: Appointment): boolean {
-    return ['CONFIRMED'].includes(a.status);
+    return a.status === 'CONFIRMED';
   }
 
   canReview(a: Appointment): boolean {
@@ -431,9 +493,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
     }
 
     this.http
-      .post<DoctorReviewResponse>(`/api/v1/doctors/${doctorId}/reviews`, payload, {
-        headers: this.headers(),
-      })
+      .post<DoctorReviewResponse>(`/api/v1/doctors/${doctorId}/reviews`, payload)
       .subscribe({
         next: success,
         error: (error) => {
@@ -545,25 +605,19 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
       this.cancelTarget.set(null);
       this.submitting.set(false);
       this.showToast('Đã hủy lịch khám thành công.', 'success');
-
-      if (!this.isMock()) {
-        this.load();
-      }
     };
 
-    if (this.isMock()) {
-      setTimeout(() => success(payload), 500);
-      return;
-    }
-
     this.http
-      .post(`/api/v1/appointments/${a.id}/cancel`, payload, { headers: this.headers() })
+      .post(`${environment.apiBaseUrl}/appointments/${encodeURIComponent(a.id)}/cancel`, payload)
       .subscribe({
-        next: (updated) => success(updated as object),
+        next: (updated) => {
+          success(updated as object);
+          this.load();
+        },
         error: (e) => {
           this.submitting.set(false);
           this.showToast(
-            e?.error?.message || 'Không thể hủy lịch. Vui lòng thử lại.',
+            this.apiError(e, 'Không thể hủy lịch. Vui lòng thử lại.'),
             'error'
           );
         },
@@ -598,18 +652,14 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
     this.detailLoading.set(true);
 
     this.http
-      .get<MedicalRecord>(`/api/v1/clinical/medical-records/appointment/${a.id}`, {
-        headers: this.headers(),
-      })
+      .get<MedicalRecord>(`${environment.apiBaseUrl}/clinical/medical-records/appointment/${encodeURIComponent(a.id)}`)
       .subscribe({
         next: (r) => {
           this.detailRecord.set(r);
           this.detailLoading.set(false);
         },
         error: (e) => {
-          this.detailError.set(
-            e?.error?.message || 'Chưa có dữ liệu hồ sơ khám cho lần khám này.'
-          );
+          this.detailError.set(this.apiError(e, 'Chưa có dữ liệu hồ sơ khám cho lần khám này.'));
           this.detailLoading.set(false);
         },
       });
