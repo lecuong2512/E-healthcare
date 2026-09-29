@@ -11,6 +11,6 @@ export class AdminDashboardController {
   constructor(private readonly service: AdminDashboardService) {}
   @Get('overview') overview(@Query('days') days?: string) { return this.service.overview(Number(days) || 7); }
   @Post('approve') approve(@Body('days') days: number, @Req() request: AuthenticatedRequest) { return this.service.approval(days || 7, request.auth!.userId); }
-  @Get('export/csv') async csv(@Query('days') days: string, @Res() response: Response) { const kpi = await this.service.overview(Number(days) || 7); response.setHeader('Content-Type', 'text/csv; charset=utf-8'); response.setHeader('Content-Disposition', 'attachment; filename="ehealth-kpi.csv"'); response.send(`Chỉ số,Giá trị\nTổng lượt khám,${kpi.visits}\nTổng doanh thu,${kpi.revenue}\nTỷ lệ hoàn thành,${kpi.completionRate}%\nNo-show,${kpi.noShowRate}%\nTỷ lệ hủy,${kpi.cancellationRate}%`); }
+  @Get('export/xlsx') async xlsx(@Query('days') days: string, @Res() response: Response) { response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); response.setHeader('Content-Disposition', 'attachment; filename="ehealth-kpi.xlsx"'); response.send(await this.service.exportXlsx(Number(days) || 7)); }
   @Get('export/pdf') async pdf(@Query('days') days: string, @Res() response: Response) { response.setHeader('Content-Type', 'application/pdf'); response.setHeader('Content-Disposition', 'attachment; filename="ehealth-kpi.pdf"'); response.send(await this.service.exportPdf(Number(days) || 7)); }
 }

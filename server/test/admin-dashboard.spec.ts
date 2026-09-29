@@ -13,4 +13,9 @@ describe('AdminDashboardService', () => {
     await service.approval(7, 'admin-1');
     expect(repository.save).toHaveBeenCalledWith(expect.objectContaining({ approvedBy: 'admin-1', days: 7 }));
   });
+  it('exports a standards-compliant XLSX workbook', async () => {
+    const dataSource = { query: jest.fn().mockResolvedValue([{ visits: '12', revenue: '4800000', completed: '9', cancelled: '2', noShows: '1' }]) } as unknown as DataSource;
+    const file = await new AdminDashboardService(dataSource).exportXlsx(7);
+    expect(file.subarray(0, 2).toString()).toBe('PK');
+  });
 });
