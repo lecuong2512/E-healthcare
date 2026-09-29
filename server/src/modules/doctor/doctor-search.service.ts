@@ -118,8 +118,8 @@ export class DoctorSearchService {
 
     const total = await query.getCount();
     const doctors = await query
-      .orderBy("doctor.rating_average", "DESC")
-      .addOrderBy("user.full_name", "ASC")
+      .orderBy("doctor.ratingAverage", "DESC")
+      .addOrderBy("user.fullName", "ASC")
       .skip((normalized.page - 1) * normalized.limit)
       .take(normalized.limit)
       .getMany();

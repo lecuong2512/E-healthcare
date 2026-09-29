@@ -45,6 +45,8 @@ import { EmrAddendumEntity } from "./entities/emr-addendum.entity";
 import { AddEmrPrescriptionTables1790065218000 } from "./migrations/1790065218000-add-emr-prescription-tables";
 import { CreateEmrAddendumsTable1790150000000 } from "./migrations/1790150000000-create-emr-addendums-table";
 import { AddAppointmentConsent1790151600000 } from "./migrations/1790151600000-add-appointment-consent";
+import { DoctorReviewEntity } from "./entities/doctor-review.entity";
+import { CreateDoctorReviews1790586000000 } from "./migrations/1790586000000-create-doctor-reviews";
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -74,6 +76,7 @@ export function createDataSource(url: string): DataSource {
       CounterPaymentTransactionEntity,
       ReceptionAuditLogEntity,
       EmrAddendumEntity,
+      DoctorReviewEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -98,6 +101,7 @@ export function createDataSource(url: string): DataSource {
       UniquePatientCitizenId1789938000000,
       CreateEmrAddendumsTable1790150000000,
       AddAppointmentConsent1790151600000,
+      CreateDoctorReviews1790586000000,
     ],
   });
 }

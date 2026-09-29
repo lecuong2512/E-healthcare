@@ -26,7 +26,41 @@ export class AppointmentLifecycleService {
     private readonly queueEvents: QueueEventsService,
   ) {}
   static patientRefundPercent(scheduledAt: Date, now = new Date()): number { const hours = (scheduledAt.getTime() - now.getTime()) / 3600000; return hours >= 24 ? 100 : hours >= 2 ? 70 : 0; }
-  async listForPatient(patientId: string): Promise<AppointmentEntity[]> { return this.dataSource.getRepository(AppointmentEntity).find({ where: { patientId }, relations: { doctor: true, schedule: true }, order: { id: 'DESC' } }); }
+  async listForPatient(patientId: string) {
+    const appointments = await this.dataSource.getRepository(AppointmentEntity).find({
+      where: { patientId },
+      relations: {
+        doctor: { user: true, specialty: true },
+        schedule: true,
+        review: true,
+      },
+      order: { id: 'DESC' },
+    });
+
+    return appointments.map(({ doctor, review, ...appointment }) => ({
+      ...appointment,
+      doctor: {
+        id: doctor.id,
+        academicTitle: doctor.academicTitle,
+        consultationFee: doctor.consultationFee,
+        roomNumber: doctor.roomNumber,
+        ratingAverage: doctor.ratingAverage,
+        user: { fullName: doctor.user.fullName },
+        specialty: {
+          id: doctor.specialty.id,
+          name: doctor.specialty.name,
+        },
+      },
+      review: review
+        ? {
+            id: review.id,
+            rating: review.rating,
+            comment: review.comment,
+            createdAt: review.createdAt,
+          }
+        : null,
+    }));
+  }
   async listVouchers(patientId: string): Promise<VoucherEntity[]> { return this.dataSource.getRepository(VoucherEntity).find({ where: { userId: patientId }, order: { expiresAt: 'ASC' } }); }
   async validateVoucher(patientId: string, code: string, totalAmount: number): Promise<{ code: string; discountPercent: number; discountAmount: number; finalAmount: number }> {
     if (!Number.isFinite(totalAmount) || totalAmount < 0) throw new BadRequestException('Tổng tiền không hợp lệ.');

@@ -8,6 +8,7 @@ import { errorInterceptor } from './core/interceptors/error.interceptor';
 import { AuthService } from './core/services/auth.service';
 import { registerLocaleData } from '@angular/common';
 import localeVi from '@angular/common/locales/vi';
+import { provideAnimations } from '@angular/platform-browser/animations';
 // Gọi /auth/refresh 1 lần khi app khởi động để phục hồi phiên đăng nhập
 // từ HttpOnly cookie (access token chỉ sống trong bộ nhớ nên mất khi F5).
 function initializeSession(authService: AuthService) {
@@ -17,6 +18,7 @@ registerLocaleData(localeVi);
 
 export const appConfig: ApplicationConfig = {
   providers: [
+    provideAnimations(),
     provideRouter(routes, withComponentInputBinding(), withViewTransitions()),
     // Thứ tự QUAN TRỌNG: errorInterceptor đứng trước để bọc ngoài cùng,
     // nhận được lỗi 401 "cuối cùng" mà authInterceptor ném lại sau khi
