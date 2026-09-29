@@ -66,6 +66,7 @@ describe('PaymentFinalizerService', () => {
       scheduleId: 'schedule-id',
       status: AppointmentStatus.PENDING_PAYMENT,
       paymentStatus: PaymentStatus.PENDING,
+      canonicalPaymentTransactionId: null,
       paidAt: null,
       cancelledAt: null,
       cancellationReason: null,
@@ -115,6 +116,7 @@ describe('PaymentFinalizerService', () => {
     expect(payment.signatureVerified).toBe(true);
     expect(appointment.status).toBe(AppointmentStatus.CONFIRMED);
     expect(appointment.paymentStatus).toBe(PaymentStatus.PAID);
+    expect(appointment.canonicalPaymentTransactionId).toBe(payment.id);
     expect(schedule.status).toBe(SlotStatus.BOOKED);
     expect(redis.releaseReservationIfOwner).toHaveBeenCalledWith(
       'lock:doctor:doctor-id:slot:schedule-id',
@@ -203,6 +205,7 @@ describe('PaymentFinalizerService', () => {
     expect(payment.status).toBe(PaymentTransactionStatus.LATE_SUCCESS);
     expect(appointment.status).toBe(AppointmentStatus.CONFIRMED);
     expect(appointment.paymentStatus).toBe(PaymentStatus.PAID);
+    expect(appointment.canonicalPaymentTransactionId).toBeNull();
     expect(appointment.paidAt).toEqual(new Date('2026-09-28T10:00:00.000Z'));
     expect(manager.create).toHaveBeenCalledWith(
       RefundRequestEntity,

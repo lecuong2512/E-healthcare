@@ -31,6 +31,7 @@ describe('PaymentService initiation and status', () => {
       scheduleId: 'schedule-id',
       reservationId: '95276349-390f-4ebc-b62b-5c96f60cf899',
       reservationExpiresAt: new Date(Date.now() + 5 * 60_000),
+      canonicalPaymentTransactionId: null,
       status: AppointmentStatus.PENDING_PAYMENT,
       paymentStatus: PaymentStatus.PENDING,
       paymentMethod: PaymentMethod.VNPAY,
@@ -175,5 +176,32 @@ describe('PaymentService initiation and status', () => {
     await expect(service.status(appointmentId, 'another-patient')).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  it('returns the canonical successful transaction instead of a newer late transaction', async () => {
+    appointment.status = AppointmentStatus.CONFIRMED;
+    appointment.paymentStatus = PaymentStatus.PAID;
+    appointment.canonicalPaymentTransactionId = 'canonical-payment';
+    const canonical = {
+      id: 'canonical-payment',
+      appointmentId,
+      provider: PaymentMethod.VNPAY,
+      status: PaymentTransactionStatus.SUCCESS,
+      expiresAt: new Date(),
+      paidAt: new Date(),
+    } as PaymentTransactionEntity;
+    const paymentFindOne = jest.fn().mockResolvedValue(canonical);
+    (dataSource.getRepository as jest.Mock).mockImplementation((entity) =>
+      entity === AppointmentEntity
+        ? { findOne: jest.fn().mockResolvedValue(appointment) }
+        : { findOne: paymentFindOne },
+    );
+
+    const result = await service.status(appointmentId, patientId);
+
+    expect(paymentFindOne).toHaveBeenCalledWith({
+      where: { id: 'canonical-payment', appointmentId },
+    });
+    expect(result.transactionStatus).toBe(PaymentTransactionStatus.SUCCESS);
   });
 });

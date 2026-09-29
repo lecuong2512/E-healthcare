@@ -232,6 +232,7 @@ export class BookingService {
         scheduleId: dto.slotId,
         reservationId: dto.reservationId,
         reservationExpiresAt: new Date(reservation.expiresAt),
+        canonicalPaymentTransactionId: null,
         status: payAtClinic
           ? AppointmentStatus.CONFIRMED
           : AppointmentStatus.PENDING_PAYMENT,

@@ -345,6 +345,7 @@ export class PaymentFinalizerService {
       appointment.status = AppointmentStatus.CONFIRMED;
       appointment.paymentStatus = PaymentStatus.PAID;
       appointment.paidAt = payment.paidAt;
+      appointment.canonicalPaymentTransactionId = payment.id;
       schedule.status = SlotStatus.BOOKED;
     } else {
       payment.status = PaymentTransactionStatus.FAILED;

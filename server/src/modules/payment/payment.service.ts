@@ -172,9 +172,18 @@ export class PaymentService {
     if (appointment.patientId !== patientId) {
       throw new ForbiddenException('Bạn không có quyền xem thanh toán này.');
     }
-    const transaction = await this.dataSource
-      .getRepository(PaymentTransactionEntity)
-      .findOne({ where: { appointmentId }, order: { createdAt: 'DESC' } });
+    const paymentRepository = this.dataSource.getRepository(PaymentTransactionEntity);
+    const transaction = appointment.canonicalPaymentTransactionId
+      ? await paymentRepository.findOne({
+          where: {
+            id: appointment.canonicalPaymentTransactionId,
+            appointmentId,
+          },
+        })
+      : await paymentRepository.findOne({
+          where: { appointmentId },
+          order: { createdAt: 'DESC' },
+        });
     return {
       appointmentId,
       appointmentStatus: appointment.status,
