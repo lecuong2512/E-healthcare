@@ -10,6 +10,7 @@ import { VoucherEntity } from "../src/database/entities/voucher.entity";
 import { UserEntity } from "../src/database/entities/user.entity";
 import { AppointmentStatus, PaymentMethod, PaymentStatus, Role, SlotStatus } from "@shared/enums";
 import { QueueEventsService } from "../src/modules/realtime/queue-events.service";
+import { AuditService } from '../src/modules/audit/audit.service';
 
 describe("AppointmentLifecycleService", () => {
   let service: AppointmentLifecycleService;
@@ -20,6 +21,8 @@ describe("AppointmentLifecycleService", () => {
   let manager: any;
   let producer: jest.Mocked<Pick<NotificationProducerService, "enqueueAppointmentCancellationEmail" | "enqueueAppointmentCancellationSms">>;
   let queueEvents: jest.Mocked<Pick<QueueEventsService, "statusChanged">>;
+  let auditRecord: jest.Mock;
+  let transactionCommitted: boolean;
 
   const vietnamSchedule = (hoursFromNow: number) => {
     const instant = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
@@ -54,6 +57,8 @@ describe("AppointmentLifecycleService", () => {
       enqueueAppointmentCancellationSms: jest.fn().mockResolvedValue({}),
     };
     queueEvents = { statusChanged: jest.fn().mockResolvedValue(undefined) };
+    auditRecord = jest.fn().mockResolvedValue({ id: 'audit-1' });
+    transactionCommitted = false;
 
     const appointmentRepo = {
       createQueryBuilder: () => ({
@@ -87,13 +92,18 @@ describe("AppointmentLifecycleService", () => {
       save: jest.fn().mockImplementation(async (data) => data),
     };
     const dataSource = {
-      transaction: jest.fn().mockImplementation(async (work) => work(manager)),
+      transaction: jest.fn().mockImplementation(async (work) => {
+        const result = await work(manager);
+        transactionCommitted = true;
+        return result;
+      }),
       getRepository: jest.fn().mockImplementation((entity) => entity === VoucherEntity ? voucherRepo : {}),
     } as unknown as DataSource;
     service = new AppointmentLifecycleService(
       dataSource,
       producer as unknown as NotificationProducerService,
       queueEvents as unknown as QueueEventsService,
+      { record: auditRecord } as unknown as AuditService,
     );
   });
 
@@ -118,6 +128,27 @@ describe("AppointmentLifecycleService", () => {
     const result = await service.cancelByPatient(appointment.id, { userId: "patient-1", role: Role.PATIENT }, undefined, true);
     expect(result.refundPercent).toBe(0);
     expect(result.refundAmount).toBe(0);
+  });
+
+  it('writes cancellation audit in the same transaction when request context is supplied', async () => {
+    await service.cancelByPatient(
+      appointment.id,
+      { userId: 'patient-1', role: Role.PATIENT },
+      undefined,
+      true,
+      {
+        actorId: 'patient-1',
+        actorRole: Role.PATIENT,
+        ipAddress: '203.0.113.10',
+        userAgent: 'appointment-test',
+        requestId: 'req-cancel-1',
+      },
+    );
+    expect(auditRecord).toHaveBeenCalledWith(
+      manager,
+      expect.objectContaining({ actorId: 'patient-1' }),
+      expect.objectContaining({ action: 'CANCEL_APPT', resourceId: appointment.id }),
+    );
   });
 
   it("rejects a patient cancelling another patients appointment", async () => {
@@ -145,6 +176,48 @@ describe("AppointmentLifecycleService", () => {
     expect(result.refundRequest?.status).toBe("PENDING");
     expect(producer.enqueueAppointmentCancellationEmail).toHaveBeenCalledWith(expect.objectContaining({ appointmentCode: "APT-001", voucherCode: result.voucher.code }));
     expect(producer.enqueueAppointmentCancellationSms).toHaveBeenCalledTimes(1);
+  });
+
+  it('queues clinic-cancellation notifications only after the database transaction commits', async () => {
+    producer.enqueueAppointmentCancellationEmail.mockImplementation(async () => {
+      expect(transactionCommitted).toBe(true);
+      return {} as never;
+    });
+    producer.enqueueAppointmentCancellationSms.mockImplementation(async () => {
+      expect(transactionCommitted).toBe(true);
+      return {} as never;
+    });
+
+    await service.cancelByClinic(
+      appointment.id,
+      { userId: 'admin-1', role: Role.ADMIN },
+      'Bác sĩ có ca cấp cứu',
+    );
+
+    expect(transactionCommitted).toBe(true);
+  });
+
+  it('does not queue clinic-cancellation notifications when audit persistence fails', async () => {
+    auditRecord.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    await expect(
+      service.cancelByClinic(
+        appointment.id,
+        { userId: 'admin-1', role: Role.ADMIN },
+        'Bác sĩ có ca cấp cứu',
+        {
+          actorId: 'admin-1',
+          actorRole: Role.ADMIN,
+          ipAddress: '203.0.113.10',
+          userAgent: 'appointment-test',
+          requestId: 'req-audit-failure',
+        },
+      ),
+    ).rejects.toThrow('audit unavailable');
+
+    expect(transactionCommitted).toBe(false);
+    expect(producer.enqueueAppointmentCancellationEmail).not.toHaveBeenCalled();
+    expect(producer.enqueueAppointmentCancellationSms).not.toHaveBeenCalled();
   });
 
   it("rejects a doctor cancelling an appointment owned by another doctor", async () => {

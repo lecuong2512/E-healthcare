@@ -11,9 +11,10 @@ import { GoogleAuthService } from "./google-auth.service";
 import { GoogleAuthController } from "./google-auth.controller";
 import { PasswordResetController } from "./password-reset.controller";
 import { PasswordResetService } from "./password-reset.service";
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
-  imports: [DatabaseModule, RedisModule],
+  imports: [DatabaseModule, RedisModule, AuditModule],
   controllers: [AuthController, SessionController, GoogleAuthController, PasswordResetController],
   providers: [
     AuthService,

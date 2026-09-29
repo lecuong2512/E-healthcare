@@ -16,6 +16,7 @@ import { LoginService } from "./login.service";
 import { SessionService, IssuedSession, REFRESH_TTL } from "./session.service";
 import { AuthenticatedRequest } from "../../common/guards/authenticated-request";
 import { refreshCookieOptions } from "./cookie-security";
+import { auditTransportContextFromRequest } from '../audit/audit-context';
 
 export const REFRESH_COOKIE = "ehealth_refresh";
 
@@ -42,9 +43,13 @@ export class SessionController {
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async login(
     @Body() dto: LoginDto,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    return writeSession(response, await this.loginService.login(dto));
+    return writeSession(
+      response,
+      await this.loginService.login(dto, auditTransportContextFromRequest(request)),
+    );
   }
 
   @Public()

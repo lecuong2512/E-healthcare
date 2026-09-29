@@ -47,12 +47,17 @@ import { CreateEmrAddendumsTable1790150000000 } from "./migrations/1790150000000
 import { AddAppointmentConsent1790151600000 } from "./migrations/1790151600000-add-appointment-consent";
 import { DoctorReviewEntity } from "./entities/doctor-review.entity";
 import { CreateDoctorReviews1790586000000 } from "./migrations/1790586000000-create-doctor-reviews";
+import { AuditLogEntity } from './entities/audit-log.entity';
+import { CreateAppendOnlyAuditLogs1790845200000 } from './migrations/1790845200000-create-append-only-audit-logs';
+import { EncryptMedicalDataAtRest1790848800000 } from './migrations/1790848800000-encrypt-medical-data-at-rest';
+import { SafeTypeOrmLogger } from './safe-typeorm.logger';
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
     url,
     synchronize: false,
     logging: false,
+    logger: new SafeTypeOrmLogger(false),
     entities: [
       UserEntity,
       UserRoleEntity,
@@ -77,6 +82,7 @@ export function createDataSource(url: string): DataSource {
       ReceptionAuditLogEntity,
       EmrAddendumEntity,
       DoctorReviewEntity,
+      AuditLogEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -102,6 +108,8 @@ export function createDataSource(url: string): DataSource {
       CreateEmrAddendumsTable1790150000000,
       AddAppointmentConsent1790151600000,
       CreateDoctorReviews1790586000000,
+      CreateAppendOnlyAuditLogs1790845200000,
+      EncryptMedicalDataAtRest1790848800000,
     ],
   });
 }

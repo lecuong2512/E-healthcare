@@ -12,6 +12,8 @@ import { Role, AppointmentStatus } from '@shared/enums';
 import { ClinicalService } from '../src/modules/clinical/clinical.service';
 import { Icd10Service } from '../src/modules/clinical/icd10/icd10.service';
 import { QueueEventsService } from '../src/modules/realtime/queue-events.service';
+import { ClinicalEncryptedStore } from '../src/modules/clinical/clinical-encrypted.store';
+import { AuditService } from '../src/modules/audit/audit.service';
 import {
   CreateMedicalRecordDto,
   UpdateMedicalRecordDto,
@@ -109,6 +111,7 @@ describe('Card 3.3: Clinical Module (EMR, ICD-10, e-Prescription)', () => {
     };
 
     mockDataSource = {
+      manager: mockManager,
       getRepository: jest.fn((entity: any) => {
         const name = entity?.name || '';
         if (name.includes('MedicalRecord')) return mockMedicalRecordRepo;
@@ -750,6 +753,82 @@ describe('Card 3.3: Clinical Module (EMR, ICD-10, e-Prescription)', () => {
   });
 
   describe('7. Data Isolation & Doctor/Patient Read Authorization', () => {
+    it('does not decrypt an EMR before rejecting a patient without ownership', async () => {
+      const auditRecord = jest.fn().mockResolvedValue({ id: 'audit-denied-1' });
+      const encryptedStore = {
+        findMedicalRecordAccessMetadata: jest.fn().mockResolvedValue({
+          id: RECORD_ID,
+          appointmentId: APPOINTMENT_ID,
+          patientId: PATIENT_ID,
+          doctorId: DOCTOR_ID,
+        }),
+        findMedicalRecord: jest.fn(),
+        findPrescription: jest.fn(),
+      };
+      const encryptedService = new ClinicalService(
+        mockDataSource,
+        icd10Service,
+        queueEvents as unknown as QueueEventsService,
+        encryptedStore as unknown as ClinicalEncryptedStore,
+        { record: auditRecord } as unknown as AuditService,
+      );
+
+      await expect(
+        encryptedService.getMedicalRecord(
+          OTHER_PATIENT_ID,
+          Role.PATIENT,
+          RECORD_ID,
+          {
+            actorId: OTHER_PATIENT_ID,
+            actorRole: Role.PATIENT,
+            ipAddress: '203.0.113.20',
+            userAgent: 'clinical-authorization-test',
+            requestId: 'request-denied-1',
+          },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(encryptedStore.findMedicalRecord).not.toHaveBeenCalled();
+      expect(encryptedStore.findPrescription).not.toHaveBeenCalled();
+      expect(auditRecord).toHaveBeenCalledWith(
+        mockManager,
+        expect.objectContaining({ actorId: OTHER_PATIENT_ID }),
+        expect.objectContaining({
+          action: 'VIEW_EMR',
+          outcome: 'DENIED',
+          resourceId: RECORD_ID,
+        }),
+      );
+    });
+
+    it('does not decrypt an appointment EMR before rejecting an unassigned doctor', async () => {
+      const encryptedStore = {
+        findMedicalRecordAccessMetadataByAppointment: jest.fn().mockResolvedValue({
+          id: RECORD_ID,
+          appointmentId: APPOINTMENT_ID,
+          patientId: PATIENT_ID,
+          doctorId: DOCTOR_ID,
+        }),
+        findMedicalRecord: jest.fn(),
+        findPrescription: jest.fn(),
+      };
+      const encryptedService = new ClinicalService(
+        mockDataSource,
+        icd10Service,
+        queueEvents as unknown as QueueEventsService,
+        encryptedStore as unknown as ClinicalEncryptedStore,
+      );
+
+      await expect(
+        encryptedService.getMedicalRecordByAppointment(
+          OTHER_DOCTOR_USER_ID,
+          Role.DOCTOR,
+          APPOINTMENT_ID,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(encryptedStore.findMedicalRecord).not.toHaveBeenCalled();
+      expect(encryptedStore.findPrescription).not.toHaveBeenCalled();
+    });
+
     it('allows patient to view only their own medical record and denies other patient', async () => {
       mockMedicalRecordRepo.findOne.mockResolvedValue({
         id: RECORD_ID,
