@@ -25,6 +25,19 @@ export class AddTransactionRefunds1790766000000 implements MigrationInterface {
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
+    const duplicateAppointments: Array<{ appointment_id: string }> = await queryRunner.query(`
+      SELECT appointment_id
+      FROM refund_requests
+      GROUP BY appointment_id
+      HAVING COUNT(*) > 1
+      LIMIT 1
+    `);
+    if (duplicateAppointments.length > 0) {
+      throw new Error(
+        'Migration cannot be safely reverted after multiple refunds per appointment exist.',
+      );
+    }
+
     await queryRunner.query(`
       DROP INDEX IF EXISTS uq_refund_requests_payment_transaction_id
     `);
