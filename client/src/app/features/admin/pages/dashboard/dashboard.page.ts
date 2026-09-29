@@ -3,4 +3,23 @@ import { CommonModule } from '@angular/common';
 import { AdminDashboardApiService, DashboardKpi } from '../../data-access/admin-dashboard-api.service';
 const EMPTY: DashboardKpi={visits:0,revenue:0,completionRate:0,cancellationRate:0,noShowRate:0,trend:[],paymentBreakdown:[],doctorPerformance:[]};
 @Component({selector:'app-admin-dashboard-page',standalone:true,imports:[CommonModule],templateUrl:'./dashboard.page.html',styleUrl:'./dashboard.page.scss',changeDetection:ChangeDetectionStrategy.OnPush})
-export class AdminDashboardPage { private readonly api=inject(AdminDashboardApiService); readonly days=signal(7); readonly kpi=signal<DashboardKpi>(EMPTY); readonly approved=signal(false); ngOnInit(){this.load();} select(days:number){this.days.set(days);this.approved.set(false);this.load();} load(){this.api.overview(this.days()).subscribe({next:value=>this.kpi.set(value)});} approve(){this.api.approve(this.days()).subscribe({next:()=>this.approved.set(true)});} exportUrl(type:'xlsx'|'pdf'){return this.approved() ? `/api/v1/admin/dashboard/export/${type}?days=${this.days()}` : null;} }
+export class AdminDashboardPage {
+  private readonly api=inject(AdminDashboardApiService);
+  readonly days=signal(7); readonly kpi=signal<DashboardKpi>(EMPTY); readonly approved=signal(false);
+  ngOnInit(){this.load();}
+  select(days:number){this.days.set(days);this.approved.set(false);this.load();}
+  load(){this.api.overview(this.days()).subscribe({next:value=>this.kpi.set(value)});}
+  approve(){this.api.approve(this.days()).subscribe({next:()=>this.approved.set(true)});}
+  exportUrl(type:'xlsx'|'pdf'){return this.approved() ? `/api/v1/admin/dashboard/export/${type}?days=${this.days()}` : null;}
+  chartDay(day:string){return ['CN','T2','T3','T4','T5','T6','T7'][new Date(`${day}T00:00:00Z`).getUTCDay()];}
+  chartX(index:number){const count=this.kpi().trend.length; return 70 + index * (500 / Math.max(1,count-1));}
+  private chartScale(value:number,max:number){return 176 - (value / Math.max(1,max)) * 138;}
+  revenueY(value:number){return this.chartScale(value,this.revenueMaximum());}
+  visitY(value:number){return this.chartScale(value,this.visitMaximum());}
+  revenueHeight(value:number){return Math.max(0,176-this.revenueY(value));}
+  revenueMaximum(){const max=Math.max(...this.kpi().trend.map(point=>point.revenue),0); return Math.max(1000000,Math.ceil(max/1000000)*1000000);}
+  visitMaximum(){return Math.max(1,...this.kpi().trend.map(point=>point.visits));}
+  visitLine(){return this.kpi().trend.map((point,index)=>`${this.chartX(index)},${this.visitY(point.visits)}`).join(' ');}
+  revenueAxisLabel(fraction:number){return `${Math.round((this.revenueMaximum()*fraction)/1000000)}tr`;}
+  visitAxisLabel(fraction:number){return Math.round(this.visitMaximum()*fraction);}
+}

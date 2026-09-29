@@ -11,4 +11,11 @@ describe('AdminDashboardPage', () => {
     expect(api.overview).toHaveBeenCalledWith(7);
     expect(fixture.componentInstance.kpi().revenue).toBe(4800000);
   });
+  it('formats API trend dates into compact Vietnamese weekday labels for the chart', () => {
+    const api = { overview: jasmine.createSpy().and.returnValue(of({ visits: 0, revenue: 0, completionRate: 0, cancellationRate: 0, noShowRate: 0, trend: [] })), approve: jasmine.createSpy().and.returnValue(of({ status: 'APPROVED' })) };
+    TestBed.configureTestingModule({ providers: [{ provide: AdminDashboardApiService, useValue: api }] });
+    const fixture = TestBed.createComponent(AdminDashboardPage);
+    expect(fixture.componentInstance.chartDay('2026-09-27')).toBe('CN');
+    expect(fixture.componentInstance.chartDay('2026-09-28')).toBe('T2');
+  });
 });
