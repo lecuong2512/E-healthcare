@@ -19,12 +19,28 @@ import {
 } from '@shared/interfaces';
 import { Public, Roles } from '../../common/decorators/auth.decorators';
 import { AuthenticatedRequest } from '../../common/guards/authenticated-request';
-import { InitiatePaymentDto } from './dto';
+import { InitiatePaymentDto, ResolveRefundDto } from './dto';
 import { PaymentService } from './payment.service';
 
 @Controller('payments')
 export class PaymentController {
   constructor(private readonly payments: PaymentService) {}
+
+  @Roles(Role.ADMIN)
+  @Get('refunds/pending')
+  pendingRefunds() {
+    return this.payments.pendingRefunds();
+  }
+
+  @Roles(Role.ADMIN)
+  @Post('refunds/:refundId/resolve')
+  resolveRefund(
+    @Param('refundId', new ParseUUIDPipe()) refundId: string,
+    @Body() dto: ResolveRefundDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.payments.resolveRefund(refundId, request.auth!.userId, dto);
+  }
 
   @Roles(Role.PATIENT)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })

@@ -54,6 +54,7 @@ import { AddPaymentSourceValidation1790762400000 } from './migrations/1790762400
 import { AddTransactionRefunds1790766000000 } from './migrations/1790766000000-add-transaction-refunds';
 import { AddReconciliationRetry1790769600000 } from './migrations/1790769600000-add-reconciliation-retry';
 import { AddCanonicalPayment1790773200000 } from './migrations/1790773200000-add-canonical-payment';
+import { AddRefundResolutionAudit1790776800000 } from './migrations/1790776800000-add-refund-resolution-audit';
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -116,6 +117,7 @@ export function createDataSource(url: string): DataSource {
       AddTransactionRefunds1790766000000,
       AddReconciliationRetry1790769600000,
       AddCanonicalPayment1790773200000,
+      AddRefundResolutionAudit1790776800000,
     ],
   });
 }

@@ -63,6 +63,8 @@ describe('Payment HTTP authorization and DTO contract', () => {
     status: jest.fn().mockResolvedValue({}),
     handleVnpayIpn: jest.fn().mockResolvedValue('SUCCESS'),
     handleMomoIpn: jest.fn().mockResolvedValue('SUCCESS'),
+    pendingRefunds: jest.fn().mockResolvedValue([]),
+    resolveRefund: jest.fn().mockResolvedValue({ status: 'SUCCEEDED' }),
   };
 
   beforeAll(async () => {
@@ -141,5 +143,16 @@ describe('Payment HTTP authorization and DTO contract', () => {
       .post('/api/v1/payments/momo/ipn')
       .send({ orderId: 'PAY01' })
       .expect(204, '');
+  });
+
+  it('restricts manual refund workflow to administrators', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/payments/refunds/pending')
+      .set('x-test-role', Role.PATIENT)
+      .expect(403);
+    await request(app.getHttpServer())
+      .get('/api/v1/payments/refunds/pending')
+      .set('x-test-role', Role.ADMIN)
+      .expect(200);
   });
 });

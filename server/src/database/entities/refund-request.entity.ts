@@ -19,6 +19,8 @@ export class RefundRequestEntity {
   @Column({ type: 'int', default: 0 }) attempts!: number;
   @Column({ name: 'failure_reason', type: 'text', nullable: true }) failureReason!: string | null;
   @Column({ name: 'processed_at', type: 'timestamptz', nullable: true }) processedAt!: Date | null;
+  @Column({ name: 'provider_refund_id', type: 'varchar', length: 100, nullable: true }) providerRefundId!: string | null;
+  @Column({ name: 'processed_by', type: 'uuid', nullable: true }) processedBy!: string | null;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' }) createdAt!: Date;
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' }) updatedAt!: Date;
 }

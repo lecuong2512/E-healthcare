@@ -11,6 +11,7 @@ import { DataSource } from 'typeorm';
 import {
   AppointmentStatus,
   PaymentMethod,
+  PaymentStatus,
   PaymentTransactionStatus,
 } from '@shared/enums';
 import {
@@ -19,7 +20,8 @@ import {
 } from '@shared/interfaces';
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
 import { PaymentTransactionEntity } from '../../database/entities/payment-trans.entity';
-import { InitiatePaymentDto } from './dto';
+import { RefundRequestEntity } from '../../database/entities/refund-request.entity';
+import { InitiatePaymentDto, ResolveRefundDto } from './dto';
 import {
   MOMO_PROVIDER,
   VNPAY_PROVIDER,
@@ -193,6 +195,67 @@ export class PaymentService {
       expiresAt: transaction?.expiresAt ?? null,
       paidAt: transaction?.paidAt ?? appointment.paidAt,
     };
+  }
+
+  pendingRefunds(): Promise<RefundRequestEntity[]> {
+    return this.dataSource.getRepository(RefundRequestEntity).find({
+      where: { status: 'PENDING' },
+      order: { createdAt: 'ASC' },
+      take: 100,
+    });
+  }
+
+  async resolveRefund(
+    refundId: string,
+    adminId: string,
+    dto: ResolveRefundDto,
+  ): Promise<RefundRequestEntity> {
+    if (dto.outcome === 'SUCCEEDED' && !dto.providerRefundId?.trim()) {
+      throw new BadRequestException('providerRefundId is required for a successful refund.');
+    }
+    if (dto.outcome === 'FAILED' && !dto.failureReason?.trim()) {
+      throw new BadRequestException('failureReason is required for a failed refund.');
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(RefundRequestEntity);
+      const snapshot = await repository.findOne({ where: { id: refundId } });
+      if (!snapshot) throw new NotFoundException('Refund request not found.');
+
+      const appointment = await manager
+        .getRepository(AppointmentEntity)
+        .createQueryBuilder('appointment')
+        .setLock('pessimistic_write')
+        .where('appointment.id = :appointmentId', {
+          appointmentId: snapshot.appointmentId,
+        })
+        .getOneOrFail();
+      const refund = await repository
+        .createQueryBuilder('refund')
+        .setLock('pessimistic_write')
+        .where('refund.id = :refundId', { refundId })
+        .getOneOrFail();
+      if (refund.status !== 'PENDING' && refund.status !== 'PROCESSING') {
+        throw new ConflictException('Refund request has already been resolved.');
+      }
+
+      refund.attempts += 1;
+      refund.processedAt = new Date();
+      refund.processedBy = adminId;
+      refund.status = dto.outcome;
+      refund.providerRefundId = dto.providerRefundId?.trim() || null;
+      refund.failureReason = dto.failureReason?.trim() || null;
+
+      if (
+        dto.outcome === 'SUCCEEDED' &&
+        (!refund.paymentTransactionId ||
+          refund.paymentTransactionId === appointment.canonicalPaymentTransactionId)
+      ) {
+        appointment.paymentStatus = PaymentStatus.REFUNDED;
+        await manager.save(appointment);
+      }
+      return manager.save(refund);
+    });
   }
 
   private provider(method: PaymentMethod): PaymentProvider {
