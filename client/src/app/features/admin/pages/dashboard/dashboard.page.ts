@@ -22,4 +22,10 @@ export class AdminDashboardPage {
   visitLine(){return this.kpi().trend.map((point,index)=>`${this.chartX(index)},${this.visitY(point.visits)}`).join(' ');}
   revenueAxisLabel(fraction:number){return `${Math.round((this.revenueMaximum()*fraction)/1000000)}tr`;}
   visitAxisLabel(fraction:number){return Math.round(this.visitMaximum()*fraction);}
+  paymentName(method:string){return ({ VNPAY:'VNPAY QR', MOMO:'Ví MoMo', PAY_AT_CLINIC:'Tiền mặt tại quầy' } as Record<string,string>)[method] ?? method;}
+  revenueMillions(){return `${(this.kpi().revenue/1000000).toFixed(1).replace(/\.0$/, '')}tr`;}
+  paymentSlices(){
+    const styles=[{method:'VNPAY',color:'#078dcc'},{method:'MOMO',color:'#7a23d3'},{method:'PAY_AT_CLINIC',color:'#f29a14'}]; let offset=0;
+    return styles.map(style=>{const payment=this.kpi().paymentBreakdown.find(item=>item.method===style.method); const percentage=payment?.percentage ?? 0; const slice={...style,percentage,offset}; offset+=percentage; return slice;}).filter(slice=>slice.percentage>0);
+  }
 }
