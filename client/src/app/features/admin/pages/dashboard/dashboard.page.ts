@@ -28,4 +28,7 @@ export class AdminDashboardPage {
     const styles=[{method:'VNPAY',color:'#078dcc'},{method:'MOMO',color:'#7a23d3'},{method:'PAY_AT_CLINIC',color:'#f29a14'}]; let offset=0;
     return styles.map(style=>{const payment=this.kpi().paymentBreakdown.find(item=>item.method===style.method); const percentage=payment?.percentage ?? 0; const slice={...style,percentage,offset}; offset+=percentage; return slice;}).filter(slice=>slice.percentage>0);
   }
+  deltaText(value:number|null|undefined){if(value===null||value===undefined)return '—'; return `${value >= 0 ? '↑' : '↓'} ${Math.abs(value).toFixed(1)}%`;}
+  isNegative(value:number|null|undefined){return value !== null && value !== undefined && value < 0;}
+  serviceQualityChange(){const comparison=this.kpi().comparison; return comparison ? comparison.noShowRate + comparison.cancellationRate : null;}
 }
