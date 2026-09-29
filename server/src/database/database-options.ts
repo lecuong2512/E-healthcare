@@ -45,6 +45,8 @@ import { EmrAddendumEntity } from "./entities/emr-addendum.entity";
 import { AddEmrPrescriptionTables1790065218000 } from "./migrations/1790065218000-add-emr-prescription-tables";
 import { CreateEmrAddendumsTable1790150000000 } from "./migrations/1790150000000-create-emr-addendums-table";
 import { AddAppointmentConsent1790151600000 } from "./migrations/1790151600000-add-appointment-consent";
+import { DoctorSpecialtyEntity } from './entities/doctor-specialty.entity';
+import { AddDoctorSpecialties1790310000000 } from './migrations/1790310000000-add-doctor-specialties';
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -62,6 +64,7 @@ export function createDataSource(url: string): DataSource {
       GoogleRegistrationSessionEntity,
       SpecialtyEntity,
       DoctorEntity,
+      DoctorSpecialtyEntity,
       DoctorScheduleEntity,
       AppointmentEntity,
       VoucherEntity,
@@ -98,6 +101,7 @@ export function createDataSource(url: string): DataSource {
       UniquePatientCitizenId1789938000000,
       CreateEmrAddendumsTable1790150000000,
       AddAppointmentConsent1790151600000,
+      AddDoctorSpecialties1790310000000,
     ],
   });
 }

@@ -15,7 +15,16 @@ describe('StaffAdminService', () => {
     const manager = { getRepository: jest.fn(), create: jest.fn((_: unknown, value: unknown) => value), save: jest.fn(async (value: unknown) => value) };
     const dataSource = { transaction: jest.fn(async (work: (m: typeof manager) => unknown) => work(manager)) } as unknown as DataSource;
     const service = new StaffAdminService(dataSource);
-    await expect(service.create({ fullName: 'BS Nguyễn An', email: 'an@example.test', password: 'Secret!123', role: Role.DOCTOR, gender: Gender.MALE, dateOfBirth: '1980-01-01', specialtyId: '11111111-1111-4111-8111-111111111111', licenseNumber: 'CCHN-01', roomNumber: 'P.201' })).resolves.toMatchObject({ fullName: 'BS Nguyễn An' });
+    await expect(service.create({ fullName: 'BS Nguyễn An', email: 'an@example.test', password: 'Secret!123', role: Role.DOCTOR, gender: Gender.MALE, dateOfBirth: '1980-01-01', specialtyId: '11111111-1111-4111-8111-111111111111', licenseNumber: 'CCHN-01', roomNumber: 'P.201', yearsExperience: 5 })).resolves.toMatchObject({ fullName: 'BS Nguyễn An' });
     expect(manager.save).toHaveBeenCalled();
+  });
+
+  it('stores each unique specialty when creating a doctor', async () => {
+    const manager = { getRepository: jest.fn(), create: jest.fn((_: unknown, value: unknown) => value), save: jest.fn(async (value: any) => value.userId ? { ...value, id: value.id ?? 'doctor-1' } : value) };
+    const dataSource = { transaction: jest.fn(async (work: (m: typeof manager) => unknown) => work(manager)) } as unknown as DataSource;
+    const service = new StaffAdminService(dataSource);
+    await service.create({ fullName: 'BS An', email: 'multi@example.test', password: 'Secret!123', role: Role.DOCTOR, gender: Gender.MALE, dateOfBirth: '1980-01-01', specialtyIds: ['sp-1', 'sp-2', 'sp-1'], licenseNumber: 'CCHN-02', roomNumber: 'P.202', yearsExperience: 8 } as any);
+    expect(manager.save).toHaveBeenCalledWith(expect.objectContaining({ specialtyId: 'sp-1', isPrimary: true }));
+    expect(manager.save).toHaveBeenCalledWith(expect.objectContaining({ specialtyId: 'sp-2', isPrimary: false }));
   });
 });
