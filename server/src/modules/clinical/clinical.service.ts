@@ -4,10 +4,12 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
-import { Role, AppointmentStatus } from '@shared/enums';
+import { Role, AppointmentStatus, AuditAction, AuditOutcome } from '@shared/enums';
 import {
   DrugSafetyWarning,
   DrugSafetyCheckResult,
@@ -27,6 +29,13 @@ import { PersonalHealthProfileEntity } from '../../database/entities/auth.entity
 import { EmrAddendumEntity } from '../../database/entities/emr-addendum.entity';
 import { Icd10Service } from './icd10/icd10.service';
 import { QueueEventsService } from '../realtime/queue-events.service';
+import { AuditContext } from '../audit/audit-context';
+import { AuditEvent, AuditService } from '../audit/audit.service';
+import {
+  ClinicalEncryptedStore,
+  MedicalRecordAccessMetadata,
+} from './clinical-encrypted.store';
+import { environment } from '../../config/environment';
 import {
   CreateMedicalRecordDto,
   UpdateMedicalRecordDto,
@@ -73,7 +82,188 @@ export class ClinicalService {
     private readonly dataSource: DataSource,
     private readonly icd10Service: Icd10Service,
     private readonly queueEvents: QueueEventsService,
+    @Optional() private readonly encryptedStore?: ClinicalEncryptedStore,
+    @Optional() private readonly audit?: AuditService,
   ) {}
+
+  private async findMedicalRecord(
+    id: string,
+    manager?: EntityManager,
+  ): Promise<MedicalRecordEntity | null> {
+    if (!this.encryptedStore) {
+      return manager
+        ? manager.getRepository(MedicalRecordEntity).findOne({ where: { id } })
+        : this.medicalRecordRepo.findOne({ where: { id } });
+    }
+    const activeManager = manager ?? this.dataSource.manager;
+    const exists = await activeManager
+      .getRepository(MedicalRecordEntity)
+      .findOne({ where: { id } });
+    return exists
+      ? this.encryptedStore.findMedicalRecord(activeManager, id)
+      : null;
+  }
+
+  private async findMedicalRecordAccessMetadata(
+    id: string,
+    manager?: EntityManager,
+  ): Promise<MedicalRecordAccessMetadata | null> {
+    if (this.encryptedStore) {
+      const activeManager = manager ?? this.dataSource.manager;
+      return this.encryptedStore.findMedicalRecordAccessMetadata(activeManager, id);
+    }
+    return manager
+      ? manager.getRepository(MedicalRecordEntity).findOne({ where: { id } })
+      : this.medicalRecordRepo.findOne({ where: { id } });
+  }
+
+  private async findMedicalRecordAccessMetadataByAppointment(
+    appointmentId: string,
+    manager?: EntityManager,
+  ): Promise<MedicalRecordAccessMetadata | null> {
+    if (this.encryptedStore) {
+      const activeManager = manager ?? this.dataSource.manager;
+      return this.encryptedStore.findMedicalRecordAccessMetadataByAppointment(
+        activeManager,
+        appointmentId,
+      );
+    }
+    return manager
+      ? manager
+          .getRepository(MedicalRecordEntity)
+          .findOne({ where: { appointmentId } })
+      : this.medicalRecordRepo.findOne({ where: { appointmentId } });
+  }
+
+  private async authorizeMedicalRecordAccess(
+    userId: string,
+    role: Role,
+    record: MedicalRecordAccessMetadata,
+    manager?: EntityManager,
+  ): Promise<void> {
+    if (role === Role.PATIENT && record.patientId !== userId) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN_ACCESS',
+        message: 'Bạn chỉ có thể xem hồ sơ bệnh án của chính mình.',
+      });
+    }
+    if (role === Role.DOCTOR) {
+      const doctor = await this.getDoctorByUserId(userId, manager);
+      if (record.doctorId !== doctor.id) {
+        throw new ForbiddenException({
+          code: 'FORBIDDEN_ACCESS',
+          message:
+            'Bác sĩ không có quyền xem hồ sơ bệnh án của ca khám do bác sĩ khác phụ trách.',
+        });
+      }
+    }
+  }
+
+  private async getAuthorizedMedicalRecord(
+    userId: string,
+    role: Role,
+    metadata: MedicalRecordAccessMetadata,
+    manager?: EntityManager,
+    auditContext?: AuditContext,
+  ): Promise<MedicalRecordDetailResponse> {
+    try {
+      await this.authorizeMedicalRecordAccess(userId, role, metadata, manager);
+    } catch (error) {
+      if (error instanceof ForbiddenException) {
+        await this.auditDeniedOrFail(auditContext, {
+          action: AuditAction.VIEW_EMR,
+          resourceType: 'MEDICAL_RECORD',
+          resourceId: metadata.id,
+        });
+      }
+      throw error;
+    }
+
+    const record = await this.findMedicalRecord(metadata.id, manager);
+    if (!record) {
+      throw new NotFoundException({
+        code: 'MEDICAL_RECORD_NOT_FOUND',
+        message: 'Không tìm thấy hồ sơ bệnh án.',
+      });
+    }
+
+    await this.applyLazyLockIfNeeded(record, manager);
+    const prescription = await this.findPrescription(record.id, manager);
+    if (manager) {
+      await this.auditOrFail(manager, auditContext, {
+        action: AuditAction.VIEW_EMR,
+        resourceType: 'MEDICAL_RECORD',
+        resourceId: record.id,
+      });
+    }
+    return this.mapToDetailResponse(record, prescription);
+  }
+
+  private async saveMedicalRecord(
+    record: MedicalRecordEntity,
+    manager?: EntityManager,
+  ): Promise<MedicalRecordEntity> {
+    if (!this.encryptedStore) {
+      return manager
+        ? manager.getRepository(MedicalRecordEntity).save(record)
+        : this.medicalRecordRepo.save(record);
+    }
+    const activeManager = manager ?? this.dataSource.manager;
+    return this.encryptedStore.saveMedicalRecord(activeManager, record);
+  }
+
+  private async findPrescription(
+    medicalRecordId: string,
+    manager?: EntityManager,
+  ): Promise<PrescriptionEntity | null> {
+    if (this.encryptedStore) {
+      const activeManager = manager ?? this.dataSource.manager;
+      return this.encryptedStore.findPrescription(activeManager, medicalRecordId);
+    }
+    return manager
+      ? manager.getRepository(PrescriptionEntity).findOne({
+          where: { medicalRecordId },
+          relations: ['items'],
+        })
+      : this.prescriptionRepo.findOne({
+          where: { medicalRecordId },
+          relations: ['items'],
+        });
+  }
+
+  private async auditOrFail(
+    manager: EntityManager,
+    context: AuditContext | undefined,
+    event: AuditEvent,
+  ): Promise<void> {
+    if (!this.audit || !context) {
+      if (environment.NODE_ENV === 'test') return;
+      throw new ServiceUnavailableException({
+        code: 'AUDIT_UNAVAILABLE',
+        message: 'Không thể ghi nhật ký kiểm toán cho thao tác nhạy cảm.',
+      });
+    }
+    await this.audit.record(manager, context, event);
+  }
+
+  private async auditDeniedOrFail(
+    context: AuditContext | undefined,
+    event: AuditEvent,
+  ): Promise<void> {
+    if (!this.audit || !context) {
+      if (environment.NODE_ENV === 'test') return;
+      throw new ServiceUnavailableException({
+        code: 'AUDIT_UNAVAILABLE',
+        message: 'Không thể ghi nhật ký kiểm toán cho thao tác nhạy cảm.',
+      });
+    }
+    await this.dataSource.transaction((manager) =>
+      this.audit!.record(manager, context, {
+        ...event,
+        outcome: AuditOutcome.DENIED,
+      }),
+    );
+  }
 
   private get medicalRecordRepo(): Repository<MedicalRecordEntity> {
     return this.dataSource.getRepository(MedicalRecordEntity);
@@ -358,6 +548,7 @@ export class ClinicalService {
    */
   private async applyLazyLockIfNeeded(
     record: MedicalRecordEntity,
+    manager?: EntityManager,
   ): Promise<MedicalRecordEntity> {
     if (!record.isLocked && record.completedAt) {
       const completedTime = new Date(record.completedAt).getTime();
@@ -365,7 +556,13 @@ export class ClinicalService {
       if (Date.now() - completedTime >= twentyFourHoursMs) {
         record.isLocked = true;
         record.lockedAt = new Date(completedTime + twentyFourHoursMs);
-        await this.medicalRecordRepo.save(record);
+        if (this.encryptedStore) {
+          await this.saveMedicalRecord(record, manager);
+        } else if (manager) {
+          await manager.getRepository(MedicalRecordEntity).save(record);
+        } else {
+          await this.medicalRecordRepo.save(record);
+        }
       }
     }
     return record;
@@ -402,6 +599,7 @@ export class ClinicalService {
   async createMedicalRecord(
     userId: string,
     dto: CreateMedicalRecordDto,
+    auditContext?: AuditContext,
   ): Promise<MedicalRecordDetailResponse> {
     return this.dataSource.transaction(async (manager) => {
       const doctor = await this.getDoctorByUserId(userId, manager);
@@ -463,7 +661,7 @@ export class ClinicalService {
 
       const vitalSigns = this.buildVitalSigns(dto.vitalSigns);
 
-      const newRecord = medicalRecordRepo.create({
+      const recordInput = {
         appointmentId: dto.appointmentId,
         patientId: appointment.patientId,
         doctorId: doctor.id,
@@ -478,45 +676,60 @@ export class ClinicalService {
         isLocked: false,
         lockedAt: null,
         completedAt: null,
-      });
+      };
 
-      const savedRecord = await medicalRecordRepo.save(newRecord);
+      const savedRecord = this.encryptedStore
+        ? await this.encryptedStore.insertMedicalRecord(manager, recordInput)
+        : await medicalRecordRepo.save(medicalRecordRepo.create(recordInput));
 
       let savedPrescription: PrescriptionEntity | null = null;
       if (dto.prescriptionItems && dto.prescriptionItems.length > 0) {
         const prescriptionRepo = manager.getRepository(PrescriptionEntity);
-        const prescriptionItemRepo =
-          manager.getRepository(PrescriptionItemEntity);
-
         const prescription = prescriptionRepo.create({
           medicalRecordId: savedRecord.id,
           prescriptionCode: this.generatePrescriptionCode(),
         });
         savedPrescription = await prescriptionRepo.save(prescription);
 
-        const items = dto.prescriptionItems.map((itemDto) =>
-          prescriptionItemRepo.create({
-            prescriptionId: savedPrescription!.id,
-            medicineName: itemDto.medicineName.trim(),
-            activeIngredient: itemDto.activeIngredient
-              ? itemDto.activeIngredient.trim()
-              : null,
-            dosageMorning: itemDto.dosageMorning
-              ? itemDto.dosageMorning.trim()
-              : null,
-            dosageNoon: itemDto.dosageNoon ? itemDto.dosageNoon.trim() : null,
-            dosageAfternoon: itemDto.dosageAfternoon
-              ? itemDto.dosageAfternoon.trim()
-              : null,
-            dosageNight: itemDto.dosageNight ? itemDto.dosageNight.trim() : null,
-            totalQuantity: itemDto.totalQuantity,
-            unit: itemDto.unit.trim(),
-            usageInstructions: itemDto.usageInstructions
-              ? itemDto.usageInstructions.trim()
-              : null,
-          }),
-        );
-        savedPrescription.items = await prescriptionItemRepo.save(items);
+        if (this.encryptedStore) {
+          savedPrescription.items = await this.encryptedStore.replacePrescriptionItems(
+            manager,
+            savedPrescription.id,
+            dto.prescriptionItems,
+          );
+        } else {
+          const prescriptionItemRepo = manager.getRepository(PrescriptionItemEntity);
+          const items = dto.prescriptionItems.map((itemDto) =>
+            prescriptionItemRepo.create({
+              prescriptionId: savedPrescription!.id,
+              medicineName: itemDto.medicineName.trim(),
+              activeIngredient: itemDto.activeIngredient?.trim() || null,
+              dosageMorning: itemDto.dosageMorning?.trim() || null,
+              dosageNoon: itemDto.dosageNoon?.trim() || null,
+              dosageAfternoon: itemDto.dosageAfternoon?.trim() || null,
+              dosageNight: itemDto.dosageNight?.trim() || null,
+              totalQuantity: itemDto.totalQuantity,
+              unit: itemDto.unit.trim(),
+              usageInstructions: itemDto.usageInstructions?.trim() || null,
+            }),
+          );
+          savedPrescription.items = await prescriptionItemRepo.save(items);
+        }
+      }
+
+      await this.auditOrFail(manager, auditContext, {
+        action: AuditAction.CREATE_EMR,
+        resourceType: 'MEDICAL_RECORD',
+        resourceId: savedRecord.id,
+        metadata: { hasPrescription: Boolean(savedPrescription) },
+      });
+      if (savedPrescription) {
+        await this.auditOrFail(manager, auditContext, {
+          action: AuditAction.UPDATE_RX,
+          resourceType: 'PRESCRIPTION',
+          resourceId: savedPrescription.id,
+          metadata: { operation: 'CREATE' },
+        });
       }
 
       return this.mapToDetailResponse(
@@ -534,15 +747,33 @@ export class ClinicalService {
     userId: string,
     recordId: string,
     dto: UpdateMedicalRecordDto,
+    auditContext?: AuditContext,
   ): Promise<MedicalRecordDetailResponse> {
     return this.dataSource.transaction(async (manager) => {
       const doctor = await this.getDoctorByUserId(userId, manager);
       const medicalRecordRepo = manager.getRepository(MedicalRecordEntity);
 
-      const record = await medicalRecordRepo.findOne({
-        where: { id: recordId },
-      });
-
+      const metadata = await this.findMedicalRecordAccessMetadata(recordId, manager);
+      if (!metadata) {
+        throw new NotFoundException({
+          code: 'MEDICAL_RECORD_NOT_FOUND',
+          message: 'Không tìm thấy hồ sơ bệnh án.',
+        });
+      }
+      if (metadata.doctorId !== doctor.id) {
+        await this.auditDeniedOrFail(auditContext, {
+          action: AuditAction.UPDATE_EMR,
+          resourceType: 'MEDICAL_RECORD',
+          resourceId: metadata.id,
+        });
+        throw new ForbiddenException({
+          code: 'UNAUTHORIZED_DOCTOR',
+          message: 'Bác sĩ không có quyền chỉnh sửa hồ sơ bệnh án này.',
+        });
+      }
+      const record = this.encryptedStore
+        ? await this.findMedicalRecord(recordId, manager)
+        : await medicalRecordRepo.findOne({ where: { id: recordId } });
       if (!record) {
         throw new NotFoundException({
           code: 'MEDICAL_RECORD_NOT_FOUND',
@@ -575,7 +806,9 @@ export class ClinicalService {
         record.followUpDate = dto.followUpDate || null;
       }
 
-      const savedRecord = await medicalRecordRepo.save(record);
+      const savedRecord = this.encryptedStore
+        ? await this.saveMedicalRecord(record, manager)
+        : await medicalRecordRepo.save(record);
 
       let safetyResult: DrugSafetyCheckResult = {
         hasWarning: false,
@@ -586,10 +819,7 @@ export class ClinicalService {
       const prescriptionItemRepo =
         manager.getRepository(PrescriptionItemEntity);
 
-      let prescription = await prescriptionRepo.findOne({
-        where: { medicalRecordId: record.id },
-        relations: ['items'],
-      });
+      let prescription = await this.findPrescription(record.id, manager);
 
       if (dto.prescriptionItems !== undefined) {
         if (dto.prescriptionItems.length > 0) {
@@ -606,43 +836,55 @@ export class ClinicalService {
               prescriptionCode: this.generatePrescriptionCode(),
             });
             prescription = await prescriptionRepo.save(prescription);
-          } else {
-            await prescriptionItemRepo.delete({
-              prescriptionId: prescription.id,
-            });
           }
 
-          const items = dto.prescriptionItems.map((itemDto) =>
-            prescriptionItemRepo.create({
-              prescriptionId: prescription!.id,
-              medicineName: itemDto.medicineName.trim(),
-              activeIngredient: itemDto.activeIngredient
-                ? itemDto.activeIngredient.trim()
-                : null,
-              dosageMorning: itemDto.dosageMorning
-                ? itemDto.dosageMorning.trim()
-                : null,
-              dosageNoon: itemDto.dosageNoon ? itemDto.dosageNoon.trim() : null,
-              dosageAfternoon: itemDto.dosageAfternoon
-                ? itemDto.dosageAfternoon.trim()
-                : null,
-              dosageNight: itemDto.dosageNight
-                ? itemDto.dosageNight.trim()
-                : null,
-              totalQuantity: itemDto.totalQuantity,
-              unit: itemDto.unit.trim(),
-              usageInstructions: itemDto.usageInstructions
-                ? itemDto.usageInstructions.trim()
-                : null,
-            }),
-          );
-          prescription.items = await prescriptionItemRepo.save(items);
+          if (this.encryptedStore) {
+            prescription.items = await this.encryptedStore.replacePrescriptionItems(
+              manager,
+              prescription.id,
+              dto.prescriptionItems,
+            );
+          } else {
+            await prescriptionItemRepo.delete({ prescriptionId: prescription.id });
+            const items = dto.prescriptionItems.map((itemDto) =>
+              prescriptionItemRepo.create({
+                prescriptionId: prescription!.id,
+                medicineName: itemDto.medicineName.trim(),
+                activeIngredient: itemDto.activeIngredient?.trim() || null,
+                dosageMorning: itemDto.dosageMorning?.trim() || null,
+                dosageNoon: itemDto.dosageNoon?.trim() || null,
+                dosageAfternoon: itemDto.dosageAfternoon?.trim() || null,
+                dosageNight: itemDto.dosageNight?.trim() || null,
+                totalQuantity: itemDto.totalQuantity,
+                unit: itemDto.unit.trim(),
+                usageInstructions: itemDto.usageInstructions?.trim() || null,
+              }),
+            );
+            prescription.items = await prescriptionItemRepo.save(items);
+          }
         } else if (prescription) {
           await prescriptionItemRepo.delete({
             prescriptionId: prescription.id,
           });
           prescription.items = [];
         }
+      }
+
+      await this.auditOrFail(manager, auditContext, {
+        action: AuditAction.UPDATE_EMR,
+        resourceType: 'MEDICAL_RECORD',
+        resourceId: record.id,
+        metadata: { operation: 'UPDATE' },
+      });
+      if (dto.prescriptionItems !== undefined) {
+        await this.auditOrFail(manager, auditContext, {
+          action: AuditAction.UPDATE_RX,
+          resourceType: 'PRESCRIPTION',
+          resourceId: prescription?.id ?? record.id,
+          metadata: {
+            operation: dto.prescriptionItems.length ? 'REPLACE' : 'CLEAR',
+          },
+        });
       }
 
       return this.mapToDetailResponse(
@@ -659,16 +901,34 @@ export class ClinicalService {
   async completeConsultation(
     userId: string,
     recordId: string,
+    auditContext?: AuditContext,
   ): Promise<MedicalRecordDetailResponse> {
     const result = await this.dataSource.transaction(async (manager) => {
       const doctor = await this.getDoctorByUserId(userId, manager);
       const medicalRecordRepo = manager.getRepository(MedicalRecordEntity);
       const appointmentRepo = manager.getRepository(AppointmentEntity);
 
-      const record = await medicalRecordRepo.findOne({
-        where: { id: recordId },
-      });
-
+      const metadata = await this.findMedicalRecordAccessMetadata(recordId, manager);
+      if (!metadata) {
+        throw new NotFoundException({
+          code: 'MEDICAL_RECORD_NOT_FOUND',
+          message: 'Không tìm thấy hồ sơ bệnh án.',
+        });
+      }
+      if (metadata.doctorId !== doctor.id) {
+        await this.auditDeniedOrFail(auditContext, {
+          action: AuditAction.UPDATE_EMR,
+          resourceType: 'MEDICAL_RECORD',
+          resourceId: metadata.id,
+        });
+        throw new ForbiddenException({
+          code: 'UNAUTHORIZED_DOCTOR',
+          message: 'Bác sĩ không có quyền hoàn tất hồ sơ bệnh án này.',
+        });
+      }
+      const record = this.encryptedStore
+        ? await this.findMedicalRecord(recordId, manager)
+        : await medicalRecordRepo.findOne({ where: { id: recordId } });
       if (!record) {
         throw new NotFoundException({
           code: 'MEDICAL_RECORD_NOT_FOUND',
@@ -703,12 +963,17 @@ export class ClinicalService {
       appointment.completedAt = now;
 
       await appointmentRepo.save(appointment);
-      const savedRecord = await medicalRecordRepo.save(record);
+      const savedRecord = this.encryptedStore
+        ? await this.saveMedicalRecord(record, manager)
+        : await medicalRecordRepo.save(record);
 
-      const prescriptionRepo = manager.getRepository(PrescriptionEntity);
-      const prescription = await prescriptionRepo.findOne({
-        where: { medicalRecordId: record.id },
-        relations: ['items'],
+      const prescription = await this.findPrescription(record.id, manager);
+
+      await this.auditOrFail(manager, auditContext, {
+        action: AuditAction.UPDATE_EMR,
+        resourceType: 'MEDICAL_RECORD',
+        resourceId: record.id,
+        metadata: { operation: 'COMPLETE' },
       });
 
       return this.mapToDetailResponse(savedRecord, prescription);
@@ -728,45 +993,40 @@ export class ClinicalService {
     userId: string,
     role: Role,
     recordId: string,
+    auditContext?: AuditContext,
   ): Promise<MedicalRecordDetailResponse> {
-    const record = await this.medicalRecordRepo.findOne({
-      where: { id: recordId },
-    });
-
-    if (!record) {
-      throw new NotFoundException({
-        code: 'MEDICAL_RECORD_NOT_FOUND',
-        message: 'Không tìm thấy hồ sơ bệnh án.',
+    if (role === Role.ADMIN) {
+      await this.auditDeniedOrFail(auditContext, {
+        action: AuditAction.VIEW_EMR,
+        resourceType: 'MEDICAL_RECORD',
+        resourceId: recordId,
       });
-    }
-
-    await this.applyLazyLockIfNeeded(record);
-
-    // Check authorization:
-    if (role === Role.PATIENT && record.patientId !== userId) {
       throw new ForbiddenException({
         code: 'FORBIDDEN_ACCESS',
-        message: 'Bạn chỉ có thể xem hồ sơ bệnh án của chính mình.',
+        message: 'Quản trị viên không có quyền xem nội dung hồ sơ bệnh án.',
       });
     }
 
-    if (role === Role.DOCTOR) {
-      const doctor = await this.getDoctorByUserId(userId);
-      if (record.doctorId !== doctor.id) {
-        throw new ForbiddenException({
-          code: 'FORBIDDEN_ACCESS',
-          message:
-            'Bác sĩ không có quyền xem hồ sơ bệnh án của ca khám do bác sĩ khác phụ trách.',
+    const work = async (manager?: EntityManager) => {
+      const metadata = await this.findMedicalRecordAccessMetadata(recordId, manager);
+      if (!metadata) {
+        throw new NotFoundException({
+          code: 'MEDICAL_RECORD_NOT_FOUND',
+          message: 'Không tìm thấy hồ sơ bệnh án.',
         });
       }
-    }
+      return this.getAuthorizedMedicalRecord(
+        userId,
+        role,
+        metadata,
+        manager,
+        auditContext,
+      );
+    };
 
-    const prescription = await this.prescriptionRepo.findOne({
-      where: { medicalRecordId: record.id },
-      relations: ['items'],
-    });
-
-    return this.mapToDetailResponse(record, prescription);
+    return auditContext
+      ? this.dataSource.transaction((manager) => work(manager))
+      : work();
   }
 
   /**
@@ -776,19 +1036,42 @@ export class ClinicalService {
     userId: string,
     role: Role,
     appointmentId: string,
+    auditContext?: AuditContext,
   ): Promise<MedicalRecordDetailResponse> {
-    const record = await this.medicalRecordRepo.findOne({
-      where: { appointmentId },
-    });
-
-    if (!record) {
-      throw new NotFoundException({
-        code: 'MEDICAL_RECORD_NOT_FOUND',
-        message: 'Không tìm thấy hồ sơ bệnh án cho ca khám này.',
+    if (role === Role.ADMIN) {
+      await this.auditDeniedOrFail(auditContext, {
+        action: AuditAction.VIEW_EMR,
+        resourceType: 'APPOINTMENT',
+        resourceId: appointmentId,
+      });
+      throw new ForbiddenException({
+        code: 'FORBIDDEN_ACCESS',
+        message: 'Quản trị viên không có quyền xem nội dung hồ sơ bệnh án.',
       });
     }
+    const work = async (manager?: EntityManager) => {
+      const metadata = await this.findMedicalRecordAccessMetadataByAppointment(
+        appointmentId,
+        manager,
+      );
+      if (!metadata) {
+        throw new NotFoundException({
+          code: 'MEDICAL_RECORD_NOT_FOUND',
+          message: 'Không tìm thấy hồ sơ bệnh án cho ca khám này.',
+        });
+      }
+      return this.getAuthorizedMedicalRecord(
+        userId,
+        role,
+        metadata,
+        manager,
+        auditContext,
+      );
+    };
 
-    return this.getMedicalRecord(userId, role, record.id);
+    return auditContext
+      ? this.dataSource.transaction((manager) => work(manager))
+      : work();
   }
 
   /**
@@ -888,13 +1171,40 @@ export class ClinicalService {
     userId: string,
     recordId: string,
     dto: CreateEmrAddendumDto,
+    auditContext?: AuditContext,
+    transactionManager?: EntityManager,
   ): Promise<EmrAddendumData> {
-    const doctor = await this.getDoctorByUserId(userId);
+    if (auditContext && !transactionManager) {
+      return this.dataSource.transaction((manager) =>
+        this.createEmrAddendum(userId, recordId, dto, auditContext, manager),
+      );
+    }
+    const doctor = await this.getDoctorByUserId(userId, transactionManager);
 
-    const record = await this.medicalRecordRepo.findOne({
-      where: { id: recordId },
-    });
-
+    const metadata = await this.findMedicalRecordAccessMetadata(
+      recordId,
+      transactionManager,
+    );
+    if (!metadata) {
+      throw new NotFoundException({
+        code: 'MEDICAL_RECORD_NOT_FOUND',
+        message: 'Không tìm thấy hồ sơ bệnh án.',
+      });
+    }
+    if (metadata.doctorId !== doctor.id) {
+      await this.auditDeniedOrFail(auditContext, {
+        action: AuditAction.CREATE_EMR_ADDENDUM,
+        resourceType: 'MEDICAL_RECORD',
+        resourceId: metadata.id,
+      });
+      throw new ForbiddenException({
+        code: 'UNAUTHORIZED_DOCTOR',
+        message: 'Bác sĩ không có quyền tạo phụ lục cho hồ sơ bệnh án này.',
+      });
+    }
+    const record = this.encryptedStore
+      ? await this.findMedicalRecord(recordId, transactionManager)
+      : await this.medicalRecordRepo.findOne({ where: { id: recordId } });
     if (!record) {
       throw new NotFoundException({
         code: 'MEDICAL_RECORD_NOT_FOUND',
@@ -902,15 +1212,8 @@ export class ClinicalService {
       });
     }
 
-    if (record.doctorId !== doctor.id) {
-      throw new ForbiddenException({
-        code: 'UNAUTHORIZED_DOCTOR',
-        message: 'Bác sĩ không có quyền tạo phụ lục cho hồ sơ bệnh án này.',
-      });
-    }
-
     // Lazy lock evaluation: lock if 24 hours have elapsed since completedAt
-    await this.applyLazyLockIfNeeded(record);
+    await this.applyLazyLockIfNeeded(record, transactionManager);
 
     if (!record.isLocked) {
       throw new BadRequestException({
@@ -921,10 +1224,15 @@ export class ClinicalService {
     }
 
     // Full snapshot chaining:
-    const existingAddendums = await this.emrAddendumRepo.find({
-      where: { medicalRecordId: record.id },
-      order: { createdAt: 'ASC', id: 'ASC' },
-    });
+    const existingAddendums = this.encryptedStore
+      ? await this.encryptedStore.findAddendums(
+          transactionManager ?? this.dataSource.manager,
+          record.id,
+        )
+      : await this.emrAddendumRepo.find({
+          where: { medicalRecordId: record.id },
+          order: { createdAt: 'ASC', id: 'ASC' },
+        });
 
     const previousContent: EmrClinicalSnapshot =
       existingAddendums.length > 0
@@ -957,15 +1265,30 @@ export class ClinicalService {
         : null;
     }
 
-    const addendum = this.emrAddendumRepo.create({
+    const addendumInput = {
       medicalRecordId: record.id,
       doctorId: doctor.id,
       reason: dto.reason.trim(),
       previousContent,
       updatedContent,
-    });
+    };
+    const savedAddendum = this.encryptedStore
+      ? await this.encryptedStore.insertAddendum(
+          transactionManager ?? this.dataSource.manager,
+          addendumInput,
+        )
+      : await this.emrAddendumRepo.save(
+          this.emrAddendumRepo.create(addendumInput),
+        );
 
-    const savedAddendum = await this.emrAddendumRepo.save(addendum);
+    if (transactionManager) {
+      await this.auditOrFail(transactionManager, auditContext, {
+        action: AuditAction.CREATE_EMR_ADDENDUM,
+        resourceType: 'MEDICAL_RECORD',
+        resourceId: record.id,
+        metadata: { addendumId: savedAddendum.id },
+      });
+    }
 
     return {
       id: savedAddendum.id,
@@ -993,18 +1316,59 @@ export class ClinicalService {
     userId: string,
     role: Role,
     recordId: string,
+    auditContext?: AuditContext,
+    transactionManager?: EntityManager,
   ): Promise<EmrHistoryResponse> {
     if (role === Role.ADMIN) {
+      await this.auditDeniedOrFail(auditContext, {
+        action: AuditAction.VIEW_EMR,
+        resourceType: 'MEDICAL_RECORD',
+        resourceId: recordId,
+        metadata: { view: 'HISTORY' },
+      });
       throw new ForbiddenException({
         code: 'FORBIDDEN_ACCESS',
         message: 'Quản trị viên không có quyền truy cập lịch sử hồ sơ bệnh án.',
       });
     }
 
-    const record = await this.medicalRecordRepo.findOne({
-      where: { id: recordId },
-    });
+    if (auditContext && !transactionManager) {
+      return this.dataSource.transaction((manager) =>
+        this.getEmrHistory(userId, role, recordId, auditContext, manager),
+      );
+    }
 
+    const metadata = await this.findMedicalRecordAccessMetadata(
+      recordId,
+      transactionManager,
+    );
+    if (!metadata) {
+      throw new NotFoundException({
+        code: 'MEDICAL_RECORD_NOT_FOUND',
+        message: 'Không tìm thấy hồ sơ bệnh án.',
+      });
+    }
+    try {
+      await this.authorizeMedicalRecordAccess(
+        userId,
+        role,
+        metadata,
+        transactionManager,
+      );
+    } catch (error) {
+      if (error instanceof ForbiddenException) {
+        await this.auditDeniedOrFail(auditContext, {
+          action: AuditAction.VIEW_EMR,
+          resourceType: 'MEDICAL_RECORD',
+          resourceId: metadata.id,
+          metadata: { view: 'HISTORY' },
+        });
+      }
+      throw error;
+    }
+    const record = this.encryptedStore
+      ? await this.findMedicalRecord(recordId, transactionManager)
+      : await this.medicalRecordRepo.findOne({ where: { id: recordId } });
     if (!record) {
       throw new NotFoundException({
         code: 'MEDICAL_RECORD_NOT_FOUND',
@@ -1012,31 +1376,28 @@ export class ClinicalService {
       });
     }
 
-    if (role === Role.PATIENT && record.patientId !== userId) {
-      throw new ForbiddenException({
-        code: 'FORBIDDEN_ACCESS',
-        message: 'Bạn chỉ có thể xem lịch sử hồ sơ bệnh án của chính mình.',
+    await this.applyLazyLockIfNeeded(record, transactionManager);
+
+    const addendums = this.encryptedStore
+      ? await this.encryptedStore.findAddendums(
+          transactionManager ?? this.dataSource.manager,
+          record.id,
+          true,
+        )
+      : await this.emrAddendumRepo.find({
+          where: { medicalRecordId: record.id },
+          relations: ['doctor', 'doctor.user'],
+          order: { createdAt: 'ASC', id: 'ASC' },
+        });
+
+    if (transactionManager) {
+      await this.auditOrFail(transactionManager, auditContext, {
+        action: AuditAction.VIEW_EMR,
+        resourceType: 'MEDICAL_RECORD',
+        resourceId: record.id,
+        metadata: { view: 'HISTORY' },
       });
     }
-
-    if (role === Role.DOCTOR) {
-      const doctor = await this.getDoctorByUserId(userId);
-      if (record.doctorId !== doctor.id) {
-        throw new ForbiddenException({
-          code: 'FORBIDDEN_ACCESS',
-          message:
-            'Bác sĩ không có quyền xem lịch sử hồ sơ bệnh án của ca khám do bác sĩ khác phụ trách.',
-        });
-      }
-    }
-
-    await this.applyLazyLockIfNeeded(record);
-
-    const addendums = await this.emrAddendumRepo.find({
-      where: { medicalRecordId: record.id },
-      relations: ['doctor', 'doctor.user'],
-      order: { createdAt: 'ASC', id: 'ASC' },
-    });
 
     const originalSnapshot = this.extractClinicalSnapshot(record);
     const currentSnapshot =

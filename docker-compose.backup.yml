@@ -1,0 +1,53 @@
+services:
+  postgres:
+    build:
+      context: ./docker/postgres/pgbackrest
+    image: ehealth-postgres-pgbackrest:16
+    environment:
+      PGBACKREST_REPO_CIPHER_PASS: ${PGBACKREST_REPO_CIPHER_PASS:?Set PGBACKREST_REPO_CIPHER_PASS outside Git}
+      PGBACKREST_RETENTION_FULL: ${PGBACKREST_RETENTION_FULL:-7}
+      PGBACKREST_PROCESS_MAX: ${PGBACKREST_PROCESS_MAX:-2}
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_timeout=300s
+      - -c
+      - archive_command=pgbackrest --config=/tmp/ehealth-pgbackrest.conf --stanza=ehealth archive-push %p
+    volumes:
+      - pgbackrest_repo:/var/lib/pgbackrest
+      - postgres_socket:/var/run/postgresql
+
+  pgbackrest-scheduler:
+    image: ehealth-postgres-pgbackrest:16
+    container_name: ehealth-pgbackrest-scheduler
+    restart: unless-stopped
+    user: postgres
+    entrypoint: ["ehealth-pgbackrest-scheduler"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ehealth_db}
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      PGBACKREST_REPO_CIPHER_PASS: ${PGBACKREST_REPO_CIPHER_PASS:?Set PGBACKREST_REPO_CIPHER_PASS outside Git}
+      PGBACKREST_RETENTION_FULL: ${PGBACKREST_RETENTION_FULL:-7}
+      PGBACKREST_PROCESS_MAX: ${PGBACKREST_PROCESS_MAX:-2}
+      EHEALTH_BACKUP_FULL_TIME: ${EHEALTH_BACKUP_FULL_TIME:-02:00}
+      EHEALTH_BACKUP_RUN_FULL_ON_START: ${EHEALTH_BACKUP_RUN_FULL_ON_START:-false}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:ro
+      - pgbackrest_repo:/var/lib/pgbackrest
+      - postgres_socket:/var/run/postgresql
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ehealth-network
+
+volumes:
+  pgbackrest_repo:
+    name: ehealth-pgbackrest-repo
+  postgres_socket:
+    name: ehealth-postgres-socket

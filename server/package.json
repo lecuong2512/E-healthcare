@@ -7,8 +7,10 @@
     "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/assets', 'dist/server/src/assets', { recursive: true })\"",
     "start": "node dist/server/src/main.js",
     "start:dev": "ts-node -r tsconfig-paths/register src/main.ts",
+    "migration:generate": "node -r ts-node/register -r tsconfig-paths/register ../node_modules/typeorm/cli.js migration:generate -d src/database/data-source.ts",
     "migration:run": "node -r ts-node/register -r tsconfig-paths/register ../node_modules/typeorm/cli.js migration:run -d src/database/data-source.ts",
     "migration:revert": "node -r ts-node/register -r tsconfig-paths/register ../node_modules/typeorm/cli.js migration:revert -d src/database/data-source.ts",
+    "security:key-rotate": "ts-node -r tsconfig-paths/register src/commands/rotate-medical-encryption.ts",
     "test": "jest --runInBand",
     "test:integration": "jest --runInBand --config jest.integration.config.cjs"
   },
