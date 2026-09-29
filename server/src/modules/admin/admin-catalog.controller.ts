@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Res, StreamableFile, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Response } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@shared/enums';
 import { Roles } from '../../common/decorators/auth.decorators';
 import { CatalogAdminService } from './admin-catalog.service';
@@ -9,6 +11,23 @@ import { CatalogListDto, CatalogMutationDto, CatalogVisibilityDto } from './dto/
 @Roles(Role.ADMIN)
 export class CatalogAdminController {
   constructor(private readonly service: CatalogAdminService) {}
+
+  @Get('summary') summary() { return this.service.summary(); }
+
+  @Post('specialties/icon')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 2 * 1024 * 1024 } }))
+  uploadSpecialtyIcon(@UploadedFile() file?: { mimetype: string; buffer: Buffer; originalname: string; size: number }) {
+    return this.service.storeSpecialtyIcon(file);
+  }
+
+  @Get(':type/export/:format')
+  async export(@Param('type') type: AdminCatalogType, @Param('format') format: string, @Query('search') search: string | undefined, @Res({ passthrough: true }) response: Response): Promise<StreamableFile> {
+    if (format !== 'csv' && format !== 'xlsx') throw new BadRequestException('Định dạng xuất không được hỗ trợ.');
+    const file = await this.service.export(type, format, { search });
+    response.setHeader('Content-Type', file.contentType);
+    response.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    return new StreamableFile(file.content);
+  }
 
   @Get(':type')
   list(@Param('type') type: AdminCatalogType, @Query('search') search?: string, @Query('page') page?: number, @Query('limit') limit?: number, @Query('active') active?: boolean) {
