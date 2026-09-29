@@ -108,6 +108,28 @@ describe('BookingStepperPage payment flow', () => {
     discardPeriodicTasks();
   }));
 
+  it('maps held and booked schedules as unavailable and counts only available slots', () => {
+    api.getDoctor.and.returnValue(of({
+      ...doctor,
+      availableSchedules: [
+        doctor.availableSchedules[0],
+        { ...doctor.availableSchedules[0], id: 'held-slot', startTime: '09:00:00', status: 'HOLDING' },
+        { ...doctor.availableSchedules[0], id: 'booked-slot', startTime: '10:00:00', status: 'BOOKED' },
+      ],
+    }));
+
+    component.selectDoctorAndContinue(component.doctors()[0]);
+
+    expect(component.days[0].slotsCount).toBe(1);
+    expect(component.morningSlots.map((slot) => slot.status)).toEqual([
+      'available',
+      'holding',
+      'booked',
+    ]);
+    component.chooseSlot(component.morningSlots[1]);
+    expect(api.reserveSlot).not.toHaveBeenCalled();
+  });
+
   it('confirms booking, creates one idempotent payment, and redirects to MoMo', () => {
     component.selectDoctorAndContinue(component.doctors()[0]);
     component.chooseSlot(component.morningSlots[0]);

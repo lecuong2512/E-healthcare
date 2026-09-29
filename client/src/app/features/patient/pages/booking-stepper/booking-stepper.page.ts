@@ -305,7 +305,12 @@ export class BookingStepperPage implements OnDestroy {
 
   private buildDays(schedules: PatientDoctorSchedule[]): DayOption[] {
     const counts = new Map<string, number>();
-    for (const schedule of schedules) counts.set(schedule.date, (counts.get(schedule.date) || 0) + 1);
+    for (const schedule of schedules) {
+      if (!counts.has(schedule.date)) counts.set(schedule.date, 0);
+      if (schedule.status === 'AVAILABLE') {
+        counts.set(schedule.date, (counts.get(schedule.date) || 0) + 1);
+      }
+    }
     return [...counts.entries()].map(([fullDate, slotsCount]) => {
       const date = new Date(`${fullDate}T00:00:00+07:00`);
       return {
@@ -321,11 +326,17 @@ export class BookingStepperPage implements OnDestroy {
     const slots = this.schedules.filter((schedule) => schedule.date === fullDate).map((schedule) => ({
       id: schedule.id,
       time: schedule.startTime.slice(0, 5),
-      status: 'available' as const,
+      status: this.mapSlotStatus(schedule.status),
       date: schedule.date,
     }));
     this.morningSlots = slots.filter((slot) => Number(slot.time.slice(0, 2)) < 12);
     this.afternoonSlots = slots.filter((slot) => Number(slot.time.slice(0, 2)) >= 12);
+  }
+
+  private mapSlotStatus(status: string): SlotItem['status'] {
+    if (status === 'AVAILABLE') return 'available';
+    if (status === 'HOLDING') return 'holding';
+    return 'booked';
   }
 
   private calcEndTime(start: string): string {

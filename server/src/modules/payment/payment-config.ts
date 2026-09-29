@@ -8,10 +8,15 @@ type PaymentEnvironment = 'sandbox' | 'production';
 @Injectable()
 export class PaymentConfiguration implements OnModuleInit {
   onModuleInit(): void {
-    if (environment.PAYMENT_ENV) this.validateAll();
+    const enabled = environment.PAYMENT_ENABLED;
+    if (enabled !== 'true' && enabled !== 'false') {
+      throw new Error('PAYMENT_ENABLED must be explicitly set to true or false.');
+    }
+    if (enabled === 'true') this.validateAll();
   }
 
   vnpay(): VnpayConfig {
+    this.assertEnabled();
     const mode = this.mode();
     const config: VnpayConfig = {
       tmnCode: this.required('VNPAY_TMN_CODE'),
@@ -25,12 +30,18 @@ export class PaymentConfiguration implements OnModuleInit {
     this.assertHttps(config.returnUrl, 'VNPAY_RETURN_URL');
     this.assertHttps(config.ipnUrl, 'VNPAY_IPN_URL');
     this.assertHttps(config.queryUrl, 'VNPAY_QUERY_URL');
-    this.assertEnvironmentHost(mode, config.payUrl, 'sandbox.vnpayment.vn');
-    this.assertEnvironmentHost(mode, config.queryUrl, 'sandbox.vnpayment.vn');
+    this.assertEnvironmentHost(mode, config.payUrl, 'sandbox.vnpayment.vn', 'pay.vnpay.vn');
+    this.assertEnvironmentHost(
+      mode,
+      config.queryUrl,
+      'sandbox.vnpayment.vn',
+      'merchant.vnpay.vn',
+    );
     return config;
   }
 
   momo(): MomoConfig {
+    this.assertEnabled();
     const mode = this.mode();
     const config: MomoConfig = {
       partnerCode: this.required('MOMO_PARTNER_CODE'),
@@ -51,8 +62,18 @@ export class PaymentConfiguration implements OnModuleInit {
     ] as const) {
       this.assertHttps(value, name);
     }
-    this.assertEnvironmentHost(mode, config.endpoint, 'test-payment.momo.vn');
-    this.assertEnvironmentHost(mode, config.queryEndpoint, 'test-payment.momo.vn');
+    this.assertEnvironmentHost(
+      mode,
+      config.endpoint,
+      'test-payment.momo.vn',
+      'payment.momo.vn',
+    );
+    this.assertEnvironmentHost(
+      mode,
+      config.queryEndpoint,
+      'test-payment.momo.vn',
+      'payment.momo.vn',
+    );
     return config;
   }
 
@@ -93,13 +114,18 @@ export class PaymentConfiguration implements OnModuleInit {
     mode: PaymentEnvironment,
     value: string,
     sandboxHost: string,
+    productionHost: string,
   ): void {
     const host = new URL(value).hostname;
-    if (mode === 'sandbox' && host !== sandboxHost) {
-      throw new Error(`Sandbox payment endpoint must use ${sandboxHost}.`);
+    const expected = mode === 'sandbox' ? sandboxHost : productionHost;
+    if (host !== expected) {
+      throw new Error(`${mode} payment endpoint must use ${expected}.`);
     }
-    if (mode === 'production' && host === sandboxHost) {
-      throw new Error('Production payment configuration cannot use sandbox endpoints.');
+  }
+
+  private assertEnabled(): void {
+    if (environment.PAYMENT_ENABLED !== 'true') {
+      throw new Error('Online payment is disabled. Set PAYMENT_ENABLED=true to enable it.');
     }
   }
 }

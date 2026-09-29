@@ -2,6 +2,7 @@ import { PaymentConfiguration } from '../src/modules/payment/payment-config';
 
 describe('PaymentConfiguration isolation', () => {
   const keys = [
+    'PAYMENT_ENABLED',
     'PAYMENT_ENV',
     'PAYMENT_TIMEOUT_SECONDS',
     'VNPAY_TMN_CODE',
@@ -22,6 +23,7 @@ describe('PaymentConfiguration isolation', () => {
 
   beforeEach(() => {
     Object.assign(process.env, {
+      PAYMENT_ENABLED: 'true',
       PAYMENT_ENV: 'sandbox',
       PAYMENT_TIMEOUT_SECONDS: '600',
       VNPAY_TMN_CODE: 'TESTCODE',
@@ -64,6 +66,30 @@ describe('PaymentConfiguration isolation', () => {
     process.env.PAYMENT_ENV = 'production';
     expect(() => new PaymentConfiguration().vnpay()).toThrow(/production/i);
     expect(() => new PaymentConfiguration().momo()).toThrow(/production/i);
+  });
+
+  it('accepts only exact production provider hosts', () => {
+    Object.assign(process.env, {
+      PAYMENT_ENV: 'production',
+      VNPAY_PAY_URL: 'https://pay.vnpay.vn/vpcpay.html',
+      VNPAY_QUERY_URL: 'https://merchant.vnpay.vn/merchant_webapi/api/transaction',
+      MOMO_ENDPOINT: 'https://payment.momo.vn/v2/gateway/api/create',
+      MOMO_QUERY_ENDPOINT: 'https://payment.momo.vn/v2/gateway/api/query',
+    });
+    expect(() => new PaymentConfiguration().onModuleInit()).not.toThrow();
+
+    process.env.VNPAY_PAY_URL = 'https://payments.attacker.example/vpcpay.html';
+    expect(() => new PaymentConfiguration().vnpay()).toThrow(/pay\.vnpay\.vn/i);
+  });
+
+  it('requires an explicit enable or disable switch', () => {
+    delete process.env.PAYMENT_ENABLED;
+    expect(() => new PaymentConfiguration().onModuleInit()).toThrow(/PAYMENT_ENABLED/);
+
+    process.env.PAYMENT_ENABLED = 'false';
+    delete process.env.VNPAY_HASH_SECRET;
+    expect(() => new PaymentConfiguration().onModuleInit()).not.toThrow();
+    expect(() => new PaymentConfiguration().vnpay()).toThrow(/disabled/i);
   });
 
   it('fails closed for missing secrets, non-HTTPS URLs, and unsafe timeout values', () => {
