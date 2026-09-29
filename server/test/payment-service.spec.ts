@@ -18,6 +18,7 @@ describe('PaymentService initiation and status', () => {
   const idempotencyKey = 'a752752f-190f-4307-b229-afb0b7ff609d';
   let appointment: AppointmentEntity;
   let existing: PaymentTransactionEntity | null;
+  let active: PaymentTransactionEntity | null;
   let manager: { getRepository: jest.Mock; create: jest.Mock; save: jest.Mock };
   let dataSource: DataSource;
   let vnpay: jest.Mocked<PaymentProvider>;
@@ -39,6 +40,7 @@ describe('PaymentService initiation and status', () => {
       paidAt: null,
     } as AppointmentEntity;
     existing = null;
+    active = null;
     const appointmentQuery = {
       setLock: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -48,7 +50,7 @@ describe('PaymentService initiation and status', () => {
       setLock: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
-      getOne: jest.fn().mockResolvedValue(null),
+      getOne: jest.fn(async () => active),
     };
     const paymentRepository = {
       findOne: jest.fn(async () => existing),
@@ -141,6 +143,47 @@ describe('PaymentService initiation and status', () => {
     expect(result.transactionId).toBe('existing-payment');
     expect(result.provider).toBe(PaymentMethod.VNPAY);
     expect(manager.create).not.toHaveBeenCalled();
+  });
+
+  it('does not silently supersede an active transaction for the same provider', async () => {
+    active = {
+      id: 'active-payment',
+      appointmentId,
+      provider: PaymentMethod.VNPAY,
+      status: PaymentTransactionStatus.PENDING,
+    } as PaymentTransactionEntity;
+
+    await expect(
+      service.initiate(
+        appointmentId,
+        patientId,
+        idempotencyKey,
+        { provider: PaymentMethod.VNPAY },
+        '127.0.0.1',
+      ),
+    ).rejects.toThrow(/active transaction/i);
+    expect(active.status).toBe(PaymentTransactionStatus.PENDING);
+    expect(manager.create).not.toHaveBeenCalled();
+  });
+
+  it('supersedes an active transaction only for an explicitly confirmed provider switch', async () => {
+    active = {
+      id: 'active-payment',
+      appointmentId,
+      provider: PaymentMethod.VNPAY,
+      status: PaymentTransactionStatus.PENDING,
+    } as PaymentTransactionEntity;
+
+    await service.initiate(
+      appointmentId,
+      patientId,
+      idempotencyKey,
+      { provider: PaymentMethod.MOMO, supersedeActive: true },
+      '127.0.0.1',
+    );
+
+    expect(active.status).toBe(PaymentTransactionStatus.SUPERSEDED);
+    expect(manager.save).toHaveBeenCalledWith(active);
   });
 
   it('rejects malformed idempotency keys before touching the database', async () => {

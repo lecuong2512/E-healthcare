@@ -2,6 +2,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import { AppointmentStatus, PaymentMethod, PaymentStatus } from '@shared/enums';
 import { AppointmentEntity } from '../src/database/entities/appointment.entity';
 import { RefundRequestEntity } from '../src/database/entities/refund-request.entity';
+import { PaymentTransactionEntity } from '../src/database/entities/payment-trans.entity';
 import { PaymentFinalizerService } from '../src/modules/payment/payment-finalizer.service';
 import { PaymentService } from '../src/modules/payment/payment.service';
 import { PaymentProvider } from '../src/modules/payment/providers/payment-provider.interface';
@@ -40,14 +41,23 @@ describe('Payment manual refund workflow', () => {
       getOneOrFail: jest.fn().mockResolvedValue(value),
     });
     manager = {
-      getRepository: jest.fn((entity) =>
-        entity === RefundRequestEntity
-          ? {
+      getRepository: jest.fn((entity) => {
+        if (entity === RefundRequestEntity) {
+          return {
               findOne: jest.fn().mockResolvedValue(refund),
               createQueryBuilder: jest.fn(() => locked(refund)),
-            }
-          : { createQueryBuilder: jest.fn(() => locked(appointment)) },
-      ),
+          };
+        }
+        if (entity === PaymentTransactionEntity) {
+          return {
+            findOneBy: jest.fn().mockResolvedValue({
+              id: refund.paymentTransactionId,
+              status: 'LATE_SUCCESS',
+            }),
+          };
+        }
+        return { createQueryBuilder: jest.fn(() => locked(appointment)) };
+      }),
       save: jest.fn(async (value) => value),
     };
     const dataSource = {
@@ -81,6 +91,20 @@ describe('Payment manual refund workflow', () => {
     await service.resolveRefund(refundId, adminId, {
       outcome: 'SUCCEEDED',
       providerRefundId: 'VNP-REFUND-02',
+    });
+
+    expect(appointment.paymentStatus).toBe(PaymentStatus.REFUNDED);
+    expect(manager.save).toHaveBeenCalledWith(appointment);
+  });
+
+  it('closes refund pending after the only late-success payment is refunded', async () => {
+    appointment.status = AppointmentStatus.CANCELLED;
+    appointment.paymentStatus = PaymentStatus.REFUND_PENDING;
+    appointment.canonicalPaymentTransactionId = null;
+
+    await service.resolveRefund(refundId, adminId, {
+      outcome: 'SUCCEEDED',
+      providerRefundId: 'VNP-REFUND-LATE',
     });
 
     expect(appointment.paymentStatus).toBe(PaymentStatus.REFUNDED);

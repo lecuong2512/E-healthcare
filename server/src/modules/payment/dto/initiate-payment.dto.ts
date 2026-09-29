@@ -1,4 +1,4 @@
-import { IsIn } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional } from 'class-validator';
 import { PaymentMethod } from '@shared/enums';
 import { InitiatePaymentRequest } from '@shared/interfaces';
 
@@ -7,4 +7,8 @@ export class InitiatePaymentDto implements InitiatePaymentRequest {
     message: 'Provider phải là VNPAY hoặc MOMO.',
   })
   provider!: PaymentMethod.VNPAY | PaymentMethod.MOMO;
+
+  @IsOptional()
+  @IsBoolean()
+  supersedeActive?: boolean;
 }

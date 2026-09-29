@@ -103,6 +103,16 @@ export class PaymentService {
         })
         .getOne();
       if (active) {
+        if (active.provider === dto.provider) {
+          throw new ConflictException(
+            'An active transaction already exists for this payment provider.',
+          );
+        }
+        if (dto.supersedeActive !== true) {
+          throw new ConflictException(
+            'Explicit confirmation is required to switch payment provider.',
+          );
+        }
         active.status = PaymentTransactionStatus.SUPERSEDED;
         await manager.save(active);
       }
@@ -246,10 +256,25 @@ export class PaymentService {
       refund.providerRefundId = dto.providerRefundId?.trim() || null;
       refund.failureReason = dto.failureReason?.trim() || null;
 
+      let refundsOnlyLatePayment = false;
+      if (
+        dto.outcome === 'SUCCEEDED' &&
+        refund.paymentTransactionId &&
+        !appointment.canonicalPaymentTransactionId &&
+        appointment.paymentStatus === PaymentStatus.REFUND_PENDING
+      ) {
+        const refundPayment = await manager
+          .getRepository(PaymentTransactionEntity)
+          .findOneBy({ id: refund.paymentTransactionId });
+        refundsOnlyLatePayment =
+          refundPayment?.status === PaymentTransactionStatus.LATE_SUCCESS;
+      }
+
       if (
         dto.outcome === 'SUCCEEDED' &&
         (!refund.paymentTransactionId ||
-          refund.paymentTransactionId === appointment.canonicalPaymentTransactionId)
+          refund.paymentTransactionId === appointment.canonicalPaymentTransactionId ||
+          refundsOnlyLatePayment)
       ) {
         appointment.paymentStatus = PaymentStatus.REFUNDED;
         await manager.save(appointment);
