@@ -9,7 +9,7 @@ export class AdminDashboardPage {
   ngOnInit(){this.load();}
   select(days:number){this.days.set(days);this.load();}
   load(){this.api.overview(this.days()).subscribe({next:value=>this.kpi.set(value)});}
-  exportUrl(type:'xlsx'|'pdf'){return `/api/v1/admin/dashboard/export/${type}?days=${this.days()}`;}
+  download(type:'xlsx'|'pdf'){this.api.export(this.days(),type).subscribe({next:blob=>{const url=URL.createObjectURL(blob); const link=document.createElement('a'); link.href=url; link.download=`ehealth-kpi.${type}`; link.click(); URL.revokeObjectURL(url);}});}
   chartDay(day:string){return ['CN','T2','T3','T4','T5','T6','T7'][new Date(`${day}T00:00:00Z`).getUTCDay()];}
   chartX(index:number){const count=this.kpi().trend.length; return 70 + index * (500 / Math.max(1,count-1));}
   private chartScale(value:number,max:number){return 176 - (value / Math.max(1,max)) * 138;}

@@ -25,4 +25,11 @@ describe('AdminDashboardPage', () => {
     expect(fixture.componentInstance.paymentName('PAY_AT_CLINIC')).toBe('Tiền mặt tại quầy');
     expect(fixture.componentInstance.revenueMillions()).toBe('13.5tr');
   });
+  it('requests report exports through the authenticated dashboard API', () => {
+    const api = { overview: jasmine.createSpy().and.returnValue(of({ visits: 0, revenue: 0, completionRate: 0, cancellationRate: 0, noShowRate: 0, trend: [], paymentBreakdown: [] })), export: jasmine.createSpy().and.returnValue(of(new Blob(['report']))) };
+    TestBed.configureTestingModule({ providers: [{ provide: AdminDashboardApiService, useValue: api }] });
+    const fixture = TestBed.createComponent(AdminDashboardPage);
+    fixture.componentInstance.download('xlsx');
+    expect(api.export).toHaveBeenCalledWith(7, 'xlsx');
+  });
 });
