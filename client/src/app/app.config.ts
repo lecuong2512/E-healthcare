@@ -9,7 +9,6 @@ import { AuthService } from './core/services/auth.service';
 import { registerLocaleData } from '@angular/common';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import localeVi from '@angular/common/locales/vi';
-import { provideAnimations } from '@angular/platform-browser/animations';
 // Gọi /auth/refresh 1 lần khi app khởi động để phục hồi phiên đăng nhập
 // từ HttpOnly cookie (access token chỉ sống trong bộ nhớ nên mất khi F5).
 function initializeSession(authService: AuthService) {
