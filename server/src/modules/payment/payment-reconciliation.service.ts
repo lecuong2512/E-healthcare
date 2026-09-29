@@ -16,6 +16,7 @@ import { PaymentProvider } from './providers/payment-provider.interface';
 export class PaymentReconciliationService {
   private readonly logger = new Logger(PaymentReconciliationService.name);
   private running = false;
+  private static readonly ADVISORY_LOCK_KEY = 1_347_439_185;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -27,6 +28,23 @@ export class PaymentReconciliationService {
   @Cron('*/2 * * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
   async reconcileExpired(now = new Date()): Promise<number> {
     if (this.running || !this.dataSource.isInitialized) return 0;
+    const lockRunner = this.dataSource.createQueryRunner();
+    let acquired = false;
+    await lockRunner.connect();
+    try {
+      const rows = (await lockRunner.query(
+        'SELECT pg_try_advisory_lock($1) AS acquired',
+        [PaymentReconciliationService.ADVISORY_LOCK_KEY],
+      )) as Array<{ acquired: boolean }>;
+      acquired = rows[0]?.acquired === true;
+      if (!acquired) {
+        await lockRunner.release();
+        return 0;
+      }
+    } catch (error) {
+      await lockRunner.release();
+      throw error;
+    }
     this.running = true;
     try {
       const transactions = await this.dataSource
@@ -69,6 +87,12 @@ export class PaymentReconciliationService {
       return processed;
     } finally {
       this.running = false;
+      if (acquired) {
+        await lockRunner.query('SELECT pg_advisory_unlock($1)', [
+          PaymentReconciliationService.ADVISORY_LOCK_KEY,
+        ]);
+      }
+      await lockRunner.release();
     }
   }
 

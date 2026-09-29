@@ -26,6 +26,7 @@ import { DoctorEntity } from '../../database/entities/doctor.entity';
 import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
 import { VoucherEntity } from '../../database/entities/voucher.entity';
 import { ConfirmBookingDto, ReleaseSlotDto, ReserveSlotDto } from './dto';
+import { paymentTimeoutSeconds } from '../payment/payment-timeout';
 
 interface ReservationMetadata {
   reservationId: string;
@@ -38,8 +39,6 @@ interface ReservationMetadata {
 @Injectable()
 export class BookingService {
   private readonly logger = new Logger(BookingService.name);
-  static readonly LOCK_TTL_SECONDS = 600;
-
   constructor(
     private readonly redisService: RedisService,
     private readonly dataSource: DataSource,
@@ -64,8 +63,10 @@ export class BookingService {
       const slot = await this.dataSource.getRepository(DoctorScheduleEntity).findOne({
         where: { id: dto.slotId, doctorId: dto.doctorId },
       });
+      if (!slot) {
+        throw new NotFoundException('Không tìm thấy khung giờ khám.');
+      }
       if (
-        slot &&
         [SlotStatus.HOLDING, SlotStatus.BOOKED, SlotStatus.OFF].includes(slot.status)
       ) {
         throw new HttpException(
@@ -76,9 +77,8 @@ export class BookingService {
     }
 
     const reservationId = randomUUID();
-    const expiresAt = new Date(
-      Date.now() + BookingService.LOCK_TTL_SECONDS * 1000,
-    ).toISOString();
+    const ttlSeconds = paymentTimeoutSeconds();
+    const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
     const lockKey = BookingService.formatSlotLockKey(dto.doctorId, dto.slotId);
     const metadataKey = BookingService.formatReservationKey(reservationId);
     const metadata: ReservationMetadata = {
@@ -93,7 +93,7 @@ export class BookingService {
       metadataKey,
       reservationId,
       JSON.stringify(metadata),
-      BookingService.LOCK_TTL_SECONDS,
+      ttlSeconds,
     );
     if (!acquired) {
       this.logger.warn(
@@ -112,7 +112,7 @@ export class BookingService {
         slotId: dto.slotId,
         reservationId,
         expiresAt,
-        ttlSeconds: BookingService.LOCK_TTL_SECONDS,
+        ttlSeconds,
       },
     };
   }
@@ -187,6 +187,22 @@ export class BookingService {
         })
         .getOne();
       if (!slot) throw new NotFoundException('Không tìm thấy khung giờ khám.');
+      const currentReservation = await this.loadReservation(dto.reservationId);
+      if (!currentReservation) {
+        throw new HttpException('Reservation đã hết hạn.', HttpStatus.CONFLICT);
+      }
+      this.assertReservationOwner(
+        currentReservation,
+        patientId,
+        dto.doctorId,
+        dto.slotId,
+      );
+      if ((await this.redisService.get(lockKey)) !== dto.reservationId) {
+        throw new HttpException(
+          'Reservation không còn sở hữu khóa giữ chỗ.',
+          HttpStatus.CONFLICT,
+        );
+      }
       if (
         [SlotStatus.HOLDING, SlotStatus.BOOKED, SlotStatus.OFF].includes(slot.status)
       ) {

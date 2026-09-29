@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   INestApplication,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { APP_GUARD, Reflector } from '@nestjs/core';
@@ -116,17 +117,22 @@ describe('Secure distributed slot reservation', () => {
   let service: BookingService;
   let queryRunner: Partial<QueryRunner>;
   let slotStatus: SlotStatus;
+  let slotExists: boolean;
+  const originalPaymentTimeout = process.env.PAYMENT_TIMEOUT_SECONDS;
 
   beforeEach(() => {
     slotStatus = SlotStatus.AVAILABLE;
+    slotExists = true;
     redis = new RedisService(new MockRedisClient() as never);
     const slotRepository: Partial<Repository<DoctorScheduleEntity>> = {
       findOne: jest.fn(async () =>
-        ({
-          id: slotId,
-          doctorId,
-          status: slotStatus,
-        }) as DoctorScheduleEntity,
+        slotExists
+          ? (({
+              id: slotId,
+              doctorId,
+              status: slotStatus,
+            }) as DoctorScheduleEntity)
+          : null,
       ),
     };
     const scheduleQuery = {
@@ -170,6 +176,11 @@ describe('Secure distributed slot reservation', () => {
     service = new BookingService(redis, dataSource);
   });
 
+  afterEach(() => {
+    if (originalPaymentTimeout === undefined) delete process.env.PAYMENT_TIMEOUT_SECONDS;
+    else process.env.PAYMENT_TIMEOUT_SECONDS = originalPaymentTimeout;
+  });
+
   it('uses a unique reservation ID as the Redis owner without exposing patient ID', async () => {
     const result = await service.reserveSlot({ doctorId, slotId }, patientA);
     const lockKey = BookingService.formatSlotLockKey(doctorId, slotId);
@@ -197,6 +208,27 @@ describe('Secure distributed slot reservation', () => {
     await expect(service.reserveSlot({ doctorId, slotId }, patientA)).rejects.toMatchObject({
       status: 409,
     });
+  });
+
+  it('does not create Redis keys for a nonexistent database slot', async () => {
+    slotExists = false;
+
+    await expect(service.reserveSlot({ doctorId, slotId }, patientA)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(await redis.get(BookingService.formatSlotLockKey(doctorId, slotId))).toBeNull();
+  });
+
+  it('uses the configured payment timeout for reservation TTL and expiry', async () => {
+    process.env.PAYMENT_TIMEOUT_SECONDS = '900';
+    const before = Date.now();
+
+    const reservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+
+    expect(reservation.data.ttlSeconds).toBe(900);
+    expect(new Date(reservation.data.expiresAt).getTime() - before).toBeGreaterThanOrEqual(
+      899_000,
+    );
   });
 
   it('prevents another patient from releasing or confirming a stolen reservation ID', async () => {
@@ -307,6 +339,35 @@ describe('Secure distributed slot reservation', () => {
       }),
     );
     expect((await service.getSlotLockStatus(doctorId, slotId)).isLocked).toBe(true);
+  });
+
+  it('rejects confirmation when the reservation expires after the initial check', async () => {
+    const reservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+    const originalGet = redis.get.bind(redis);
+    let metadataReads = 0;
+    jest.spyOn(redis, 'get').mockImplementation(async (key) => {
+      if (key === BookingService.formatReservationKey(reservation.data.reservationId)) {
+        metadataReads += 1;
+        if (metadataReads === 2) return null;
+      }
+      return originalGet(key);
+    });
+
+    await expect(
+      service.confirmBooking(
+        {
+          doctorId,
+          slotId,
+          reservationId: reservation.data.reservationId,
+          reasonForVisit: 'Boundary expiry',
+          paymentMethod: PaymentMethod.VNPAY,
+        },
+        patientA,
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+
+    expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+    expect(queryRunner.manager!.create).not.toHaveBeenCalled();
   });
 });
 

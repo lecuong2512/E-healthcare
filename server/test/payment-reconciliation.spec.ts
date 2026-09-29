@@ -42,15 +42,26 @@ describe('PaymentReconciliationService', () => {
   let vnpay: jest.Mocked<Pick<PaymentProvider, 'queryStatus'>>;
   let momo: jest.Mocked<Pick<PaymentProvider, 'queryStatus'>>;
   let service: PaymentReconciliationService;
+  let dataSource: DataSource;
+  let lockRunner: { connect: jest.Mock; query: jest.Mock; release: jest.Mock };
 
   beforeEach(() => {
     repository = { find: jest.fn().mockResolvedValue([transaction]) };
     appointmentRepository = { find: jest.fn().mockResolvedValue([]) };
-    const dataSource = {
+    lockRunner = {
+      connect: jest.fn().mockResolvedValue(undefined),
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([{ acquired: true }])
+        .mockResolvedValueOnce([{ pg_advisory_unlock: true }]),
+      release: jest.fn().mockResolvedValue(undefined),
+    };
+    dataSource = {
       isInitialized: true,
       getRepository: jest.fn((entity) =>
         entity === PaymentTransactionEntity ? repository : appointmentRepository,
       ),
+      createQueryRunner: jest.fn(() => lockRunner),
     } as unknown as DataSource;
     finalizer = {
       finalize: jest.fn().mockResolvedValue('SUCCESS'),
@@ -162,5 +173,43 @@ describe('PaymentReconciliationService', () => {
     await expect(service.reconcileExpired()).resolves.toBe(0);
     resolveQuery(result);
     await expect(first).resolves.toBe(1);
+  });
+
+  it('allows only one reconciliation leader across service instances', async () => {
+    let resolveQuery!: (value: VerifiedPaymentResult) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    vnpay.queryStatus.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveQuery = resolve;
+          markStarted();
+        }),
+    );
+    const rejectedRunner = {
+      connect: jest.fn().mockResolvedValue(undefined),
+      query: jest.fn().mockResolvedValue([{ acquired: false }]),
+      release: jest.fn().mockResolvedValue(undefined),
+    };
+    (dataSource.createQueryRunner as jest.Mock)
+      .mockReturnValueOnce(lockRunner)
+      .mockReturnValueOnce(rejectedRunner);
+    const secondService = new PaymentReconciliationService(
+      dataSource,
+      finalizer as unknown as PaymentFinalizerService,
+      vnpay as unknown as PaymentProvider,
+      momo as unknown as PaymentProvider,
+    );
+
+    const first = service.reconcileExpired();
+    await started;
+    await expect(secondService.reconcileExpired()).resolves.toBe(0);
+    expect(vnpay.queryStatus).toHaveBeenCalledTimes(1);
+
+    resolveQuery(result);
+    await expect(first).resolves.toBe(1);
+    expect(rejectedRunner.release).toHaveBeenCalled();
   });
 });
