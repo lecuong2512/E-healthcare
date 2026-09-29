@@ -1,11 +1,35 @@
-import { Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AdminStaffApiService, StaffRow } from '../../data-access/admin-staff-api.service';
 
-/**
- * STUB — khung trang, thuộc phạm vi task nghiệp vụ riêng 
- */
-@Component({
-  selector: 'app-staff-mgmt-page',
-  standalone: true,
-  template: `<div class="p-6 text-slate-500">[TODO] Quản lý nhân sự — SRS-ADM-02</div>`,
-})
-export class StaffMgmtPage {}
+interface StaffView { id: string; code: string; name: string; role: string; facility: string; status: string; }
+
+@Component({ selector: 'app-staff-mgmt-page', standalone: true, imports: [CommonModule, ReactiveFormsModule], templateUrl: './staff-mgmt.page.html', styleUrl: './staff-mgmt.page.scss', changeDetection: ChangeDetectionStrategy.OnPush })
+export class StaffMgmtPage {
+  private readonly api = inject(AdminStaffApiService);
+  private readonly formBuilder = inject(FormBuilder);
+  readonly showForm = signal(false);
+  readonly submitting = signal(false);
+  readonly errorMessage = signal('');
+  readonly staff = signal<StaffView[]>([]);
+  readonly staffForm = this.formBuilder.nonNullable.group({
+    fullName: ['', [Validators.required, Validators.maxLength(100)]], email: ['', [Validators.required, Validators.email]], password: ['', [Validators.required, Validators.minLength(8)]], role: ['ROLE_DOCTOR'], gender: ['MALE'], dateOfBirth: ['', Validators.required], specialtyId: [''], licenseNumber: [''], roomNumber: [''], academicTitle: [''],
+  });
+
+  ngOnInit(): void { this.loadStaff(); }
+  openForm(): void { this.errorMessage.set(''); this.showForm.set(true); }
+  createStaff(): void {
+    if (this.staffForm.invalid) { this.staffForm.markAllAsTouched(); return; }
+    const value = this.staffForm.getRawValue();
+    if (value.role === 'ROLE_DOCTOR' && (!value.specialtyId || !value.licenseNumber || !value.roomNumber)) { this.errorMessage.set('Bác sĩ cần chuyên khoa, CCHN và phòng khám.'); return; }
+    this.submitting.set(true); this.errorMessage.set('');
+    this.api.create(value).subscribe({
+      next: () => { this.submitting.set(false); this.showForm.set(false); this.staffForm.reset({ role: 'ROLE_DOCTOR', gender: 'MALE', fullName: '', email: '', password: '', dateOfBirth: '', specialtyId: '', licenseNumber: '', roomNumber: '', academicTitle: '' }); this.loadStaff(); },
+      error: () => { this.submitting.set(false); this.errorMessage.set('Không thể tạo tài khoản. Vui lòng kiểm tra lại thông tin.'); },
+    });
+  }
+  changeStatus(person: StaffView, status: 'ACTIVE' | 'BLOCKED'): void { this.api.changeStatus(person.id, status).subscribe({ next: () => this.loadStaff() }); }
+  private loadStaff(): void { this.api.list().subscribe({ next: result => this.staff.set(result.data.map((person, index) => this.toView(person, index))), error: () => this.staff.set([]) }); }
+  private toView(person: StaffRow, index: number): StaffView { return { id: person.id, code: `NV-${String(index + 1).padStart(5, '0')}`, name: person.fullName, role: person.email ? 'Nhân sự y tế' : 'Nhân sự', facility: 'Trung tâm', status: person.status === 'ACTIVE' ? 'Hoạt động' : person.status === 'BLOCKED' ? 'Đã khóa' : 'Chờ kích hoạt' }; }
+}

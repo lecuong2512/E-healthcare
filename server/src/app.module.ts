@@ -13,6 +13,7 @@ import { ClinicalModule } from "./modules/clinical/clinical.module";
 import { QueueModule } from "./modules/queue/queue.module";
 import { NotificationModule } from "./modules/notification/notification.module";
 import { ReceptionModule } from "./modules/reception/reception.module";
+import { StaffAdminModule } from './modules/admin/staff-admin.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ReceptionModule } from "./modules/reception/reception.module";
     AppointmentModule,
     ClinicalModule,
     ReceptionModule,
+    StaffAdminModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
   ],
   providers: [
