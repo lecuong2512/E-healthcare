@@ -20,23 +20,21 @@ export class PasswordResetService {
     // Same response prevents account enumeration.
     if (!rows[0]) return { expiresIn: OTP_TTL };
     const user = rows[0];
-    // Checklist defines OTP limits by phone number; do not create a fallback key.
-    if (!user.phone_number) return { expiresIn: OTP_TTL };
-    if (await this.redis.incrementWithTtl(`otp_sends:${user.phone_number}`, 600) > 3) throw new HttpException({ code: "OTP_SEND_LIMIT_EXCEEDED" }, HttpStatus.TOO_MANY_REQUESTS);
+    const rateLimitKey = user.phone_number ?? user.email ?? user.id;
+    if (await this.redis.incrementWithTtl(`otp_sends:${rateLimitKey}`, 600) > 3) throw new HttpException({ code: "OTP_SEND_LIMIT_EXCEEDED" }, HttpStatus.TOO_MANY_REQUESTS);
     const id = randomUUID();
     const otp = randomInt(0, 1000000).toString().padStart(6, "0");
-    await this.delivery.send({ email: user.email, phoneNumber: user.phone_number }, otp);
+    await this.delivery.send({ email: user.email, phoneNumber: user.phone_number }, otp, "forgot_password");
     await this.redis.setEx(`password_reset_otp:${user.id}`, JSON.stringify({ id, otpHash: this.otpHash(id, otp) }), OTP_TTL);
     return { expiresIn: OTP_TTL };
   }
   async reset(dto: ResetPasswordDto): Promise<void> {
     if (Buffer.byteLength(dto.newPassword) > 72 || dto.newPassword.includes("\0")) throw new BadRequestException("Mật khẩu không hợp lệ.");
     const { value, localPhone } = this.normalise(dto.identifier);
-    const userRows = await this.database.query("SELECT id, phone_number FROM users WHERE LOWER(email)=LOWER($1) OR phone_number=$1 OR phone_number=$2 LIMIT 1", [value, localPhone]);
+    const userRows = await this.database.query("SELECT id, email, phone_number FROM users WHERE LOWER(email)=LOWER($1) OR phone_number=$1 OR phone_number=$2 LIMIT 1", [value, localPhone]);
     if (!userRows[0]) throw this.invalid();
     const userId = userRows[0].id;
-    if (!userRows[0].phone_number) throw this.invalid();
-    const phoneNumber = userRows[0].phone_number as string;
+    const failKey = userRows[0].phone_number ?? userRows[0].email ?? userId;
     await this.database.transaction(async manager => {
       const raw = await this.redis.get(`password_reset_otp:${userId}`);
       if (!raw) throw this.invalid();
@@ -44,11 +42,11 @@ export class PasswordResetService {
       const now = new Date();
       const actual = Buffer.from(this.otpHash(session.id, dto.otp), "hex"), expected = Buffer.from(session.otpHash, "hex");
       if (!timingSafeEqual(actual, expected)) {
-        const redisFailed = await this.redis.incrementWithTtl(`otp_fails:${phoneNumber}`, LOCK_TTL);
+        const redisFailed = await this.redis.incrementWithTtl(`otp_fails:${failKey}`, LOCK_TTL);
         if (redisFailed >= MAX_ATTEMPTS) throw this.locked(new Date(now.getTime() + LOCK_TTL * 1000), now);
         throw this.invalid();
       }
-      await this.redis.del(`otp_fails:${userRows[0].phone_number ?? userId}`);
+      await this.redis.del(`otp_fails:${failKey}`);
       await this.redis.del(`password_reset_otp:${userId}`);
       await manager.query("UPDATE users SET password_hash=$2 WHERE id=$1", [userId, await hashPassword(dto.newPassword)]);
       await manager.query("UPDATE auth_sessions SET revoked_at=clock_timestamp() WHERE user_id=$1 AND revoked_at IS NULL", [userId]);

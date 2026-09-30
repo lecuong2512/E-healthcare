@@ -136,6 +136,26 @@ describe('RegisterPage', () => {
     ).not.toHaveBeenCalled();
   });
 
+  it('should reject registration when confirmPassword does not match password', () => {
+    component['fullName'] = 'Nguyễn Tùng';
+    component['phone'] = '0838413268';
+    component['email'] = 'test@example.com';
+    component['password'] = 'Password123!';
+    component['confirmPassword'] = 'DifferentPassword123!';
+    component['gender'] = Gender.MALE;
+    component['dateOfBirth'] = '2000-01-01';
+
+    component['submitRegister']();
+
+    expect(component['errorMessage']()).toBe(
+      'Mật khẩu nhập lại không khớp.',
+    );
+
+    expect(
+      authService.requestRegisterOtp,
+    ).not.toHaveBeenCalled();
+  });
+
   it('should sanitize whitespace from phone number before requesting OTP', () => {
     authService.requestRegisterOtp.and.returnValue(
       of({

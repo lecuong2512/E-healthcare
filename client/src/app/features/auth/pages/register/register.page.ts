@@ -46,6 +46,7 @@ export class RegisterPage implements OnDestroy {
   protected phone = '';
   protected email = '';
   protected password = '';
+  protected confirmPassword = '';
 
   /**
    * ID của phiên đăng ký do backend trả về
@@ -61,6 +62,7 @@ export class RegisterPage implements OnDestroy {
   protected readonly errorMessage = signal('');
   protected readonly resendCountdown = signal(180);
   protected readonly showPassword = signal(false);
+  protected readonly showConfirmPassword = signal(false);
 
   protected readonly otpDigits = signal([
     '',
@@ -147,6 +149,11 @@ export class RegisterPage implements OnDestroy {
     this.errorMessage.set(
       'Vui lòng nhập đầy đủ thông tin.',
     );
+    return;
+  }
+
+  if (this.confirmPassword && this.password !== this.confirmPassword) {
+    this.errorMessage.set('Mật khẩu nhập lại không khớp.');
     return;
   }
 

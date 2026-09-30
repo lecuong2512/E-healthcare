@@ -646,6 +646,11 @@
                 <span class="text-sm font-mono font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-lg border border-sky-100">{{ receipt.appointmentCode }}</span>
               </div>
 
+              <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                <span class="text-xs text-slate-500 font-medium">Bệnh nhân</span>
+                <span class="text-xs font-semibold text-slate-900">{{ receipt.patient?.fullName || formValue.fullName || '—' }} ({{ bookingFor() === 'self' ? 'Bản thân' : 'Người thân' }})</span>
+              </div>
+
               @if (selectedDoctor(); as doc) {
                 <div class="flex justify-between items-start py-2 border-b border-slate-100">
                   <span class="text-xs text-slate-500 font-medium">Bác sĩ khám</span>
@@ -749,7 +754,7 @@
                   <span class="text-slate-500 text-xs">Bệnh nhân</span>
                   <button type="button" (click)="goToStep(3)" [disabled]="loading()" class="text-[11px] font-semibold text-sky-600 hover:text-sky-800 hover:underline">Sửa</button>
                 </div>
-                <span class="font-semibold text-xs text-slate-900">{{ formValue.fullName || '—' }}</span>
+                <span class="font-semibold text-xs text-slate-900">{{ formValue.fullName || '—' }} ({{ bookingFor() === 'self' ? 'Bản thân' : 'Người thân' }})</span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-slate-500 text-xs">SĐT</span>

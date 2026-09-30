@@ -24,6 +24,8 @@ import { configureApp } from '../src/configure-app';
 import { AppointmentEntity } from '../src/database/entities/appointment.entity';
 import { DoctorEntity } from '../src/database/entities/doctor.entity';
 import { DoctorScheduleEntity } from '../src/database/entities/doctor-schedule.entity';
+import { UserEntity } from '../src/database/entities/user.entity';
+import { PersonalHealthProfileEntity, UserRoleEntity } from '../src/database/entities/auth.entity';
 import { BookingController } from '../src/modules/booking/booking.controller';
 import { BookingService } from '../src/modules/booking/booking.service';
 
@@ -162,12 +164,25 @@ describe('Secure distributed slot reservation', () => {
           if (entity === DoctorEntity) {
             return { findOne: jest.fn().mockResolvedValue({ id: doctorId, consultationFee: 300_000 }) };
           }
+          if (entity === UserEntity) {
+            return {
+              findOneBy: jest.fn().mockResolvedValue({ id: patientA, fullName: 'Nguyễn An' }),
+              find: jest.fn().mockResolvedValue([]),
+              create: jest.fn((val) => val),
+              save: jest.fn((val) => Promise.resolve({ id: 'dependent-user-id', ...val })),
+            };
+          }
+          if (entity === UserRoleEntity || entity === PersonalHealthProfileEntity) {
+            return {
+              save: jest.fn().mockResolvedValue({}),
+            };
+          }
           return {};
         }),
         create: jest.fn((_entity, value) => value),
         save: jest.fn((entity, value) =>
           Promise.resolve(
-            entity === AppointmentEntity ? { id: 'appointment-id', ...value } : value,
+            entity === AppointmentEntity ? { id: 'appointment-id', ...value } : (value?.id ? value : { id: 'dependent-user-id', ...value }),
           ),
         ),
       } as never,
@@ -313,6 +328,35 @@ describe('Secure distributed slot reservation', () => {
     expect(appointment.paymentStatus).toBe(PaymentStatus.UNPAID);
     expect(queryRunner.commitTransaction).toHaveBeenCalled();
     expect((await service.getSlotLockStatus(doctorId, slotId)).isLocked).toBe(false);
+  });
+
+  it('confirms booking for a dependent, sets createdBy and patientId and returns patient info', async () => {
+    const reservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+    const appointment = await service.confirmBooking(
+      {
+        doctorId,
+        slotId,
+        reservationId: reservation.data.reservationId,
+        reasonForVisit: 'Khám cho người thân',
+        paymentMethod: PaymentMethod.PAY_AT_CLINIC,
+        bookingFor: 'other',
+        patientName: 'Nguyễn Thị Mẹ',
+        patientPhone: '0988776655',
+        patientDob: '1960-01-01',
+        patientGender: 'female',
+      },
+      patientA,
+    );
+
+    expect(appointment.status).toBe(AppointmentStatus.CONFIRMED);
+    expect(queryRunner.manager!.create).toHaveBeenCalledWith(
+      AppointmentEntity,
+      expect.objectContaining({
+        patientId: 'dependent-user-id',
+        createdBy: patientA,
+      }),
+    );
+    expect(appointment.patient?.fullName).toBe('Nguyễn Thị Mẹ');
   });
 
   it('keeps an online booking pending with a holding slot and active reservation', async () => {

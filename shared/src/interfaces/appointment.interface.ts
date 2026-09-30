@@ -47,6 +47,11 @@ export interface ConfirmBookingRequest {
   reasonForVisit: string;
   paymentMethod: PaymentMethod;
   voucherCode?: string;
+  bookingFor?: 'self' | 'other';
+  patientName?: string;
+  patientPhone?: string;
+  patientDob?: string;
+  patientGender?: string;
 }
 
 export type IConfirmBookingRequest = ConfirmBookingRequest;
@@ -70,6 +75,13 @@ export interface AppointmentResponse {
   cancellationReason?: string | null;
   refundAmount?: number;
   refundPercent?: number;
+  patient?: {
+    id: string;
+    fullName: string;
+    phoneNumber?: string | null;
+    gender?: string | null;
+    dateOfBirth?: string | null;
+  };
 }
 
 export type IAppointmentResponse = AppointmentResponse;

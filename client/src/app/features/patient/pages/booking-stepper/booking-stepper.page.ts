@@ -507,6 +507,11 @@ export class BookingStepperPage implements OnDestroy {
       reasonForVisit: this.patientForm.value.reason?.trim() || 'Khám theo lịch hẹn',
       paymentMethod: currentMethod,
       voucherCode: this.appliedVoucher()?.code,
+      bookingFor: this.bookingFor(),
+      patientName: this.patientForm.value.fullName?.trim(),
+      patientPhone: this.patientForm.value.phone ? this.patientForm.value.phone.replace(/\D/g, '') : undefined,
+      patientDob: this.patientForm.value.dob || undefined,
+      patientGender: this.patientForm.value.gender || undefined,
     }).pipe(finalize(() => { if (!this.pendingPaymentContext()) this.loading.set(false); }), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (appointment) => {
         this.bookingCommitted = true;

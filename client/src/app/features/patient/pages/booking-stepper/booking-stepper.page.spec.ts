@@ -213,6 +213,30 @@ describe('BookingStepperPage payment flow', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/patient/history']);
   });
 
+  it('confirms booking for a dependent when bookingFor is other', () => {
+    component.selectDoctorAndContinue(component.doctors()[0]);
+    component.chooseSlot(component.morningSlots[0]);
+    component.selectPayment(PaymentMethod.PAY_AT_CLINIC);
+    component.consentAccepted = true;
+    component.setBookingFor('other');
+    component.patientForm.setValue({
+      fullName: 'Trần Thị B', phone: '0987654321', dob: '1965-05-15', gender: 'female', reason: 'Tái khám huyết áp',
+    });
+
+    component.submitBooking();
+
+    expect(api.confirmBooking).toHaveBeenCalledWith(jasmine.objectContaining({
+      doctorId,
+      slotId,
+      reservationId,
+      bookingFor: 'other',
+      patientName: 'Trần Thị B',
+      patientPhone: '0987654321',
+      patientDob: '1965-05-15',
+      patientGender: 'female',
+    }));
+  });
+
   function reloadCheckout(): void {
     sessionStorage.setItem('pendingPaymentContext', JSON.stringify({ appointmentId, provider: PaymentMethod.MOMO, idempotencyKey: 'untrusted-old-key' }));
     fixture.destroy();

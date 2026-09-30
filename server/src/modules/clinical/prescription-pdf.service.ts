@@ -62,7 +62,8 @@ export class PrescriptionPdfService {
       );
     if (
       !record ||
-      record.appointment?.patientId !== patientId ||
+      (record.appointment?.patientId !== patientId &&
+        record.appointment?.createdBy !== patientId) ||
       record.appointment.doctorId !== record.doctorId
     ) {
       throw new NotFoundException(

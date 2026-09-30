@@ -63,7 +63,7 @@ export class PaymentService {
         .where('appointment.id = :appointmentId', { appointmentId })
         .getOne();
       if (!appointment) throw new NotFoundException('Appointment not found.');
-      if (appointment.patientId !== patientId) {
+      if (appointment.patientId !== patientId && appointment.createdBy !== patientId) {
         throw new ForbiddenException('Bạn không có quyền thanh toán lịch hẹn này.');
       }
       if ([PaymentStatus.PAID, PaymentStatus.REFUND_PENDING, PaymentStatus.REFUNDED].includes(appointment.paymentStatus)) {
@@ -216,7 +216,7 @@ export class PaymentService {
       where: { id: appointmentId },
     });
     if (!appointment) throw new NotFoundException('Appointment not found.');
-    if (appointment.patientId !== patientId) {
+    if (appointment.patientId !== patientId && appointment.createdBy !== patientId) {
       throw new ForbiddenException('Bạn không có quyền xem thanh toán này.');
     }
     const paymentRepository = this.dataSource.getRepository(PaymentTransactionEntity);

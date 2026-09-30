@@ -129,6 +129,21 @@ describe('PaymentService initiation and status', () => {
     expect(result.transactionId).toBe('payment-id');
   });
 
+  it('allows the creator of the appointment to initiate payment for their dependent', async () => {
+    appointment.patientId = 'dependent-patient-id';
+    appointment.createdBy = 'booker-id';
+
+    const result = await service.initiate(
+      appointmentId,
+      'booker-id',
+      idempotencyKey,
+      { provider: PaymentMethod.VNPAY },
+      '127.0.0.1',
+    );
+
+    expect(result.transactionId).toBe('payment-id');
+  });
+
   it('returns the same logical transaction for a retry with the same key', async () => {
     existing = {
       id: 'existing-payment',

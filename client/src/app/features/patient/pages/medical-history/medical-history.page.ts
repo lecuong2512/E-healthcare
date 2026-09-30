@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Component, NgZone, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MedicalRecordDetailResponse } from '@shared/interfaces';
 import {
   AppointmentDoctorReview,
@@ -87,6 +87,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   private readonly clinical = inject(ClinicalService);
   private readonly message = inject(NzMessageService);
   private readonly ngZone = inject(NgZone);
+  private readonly route = inject(ActivatedRoute, { optional: true });
 
   readonly tabs: { id: Tab; label: string }[] = [
     { id: 'upcoming', label: 'Sắp tới' },
@@ -128,6 +129,15 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   readonly clock = signal(Date.now());
 
   ngOnInit(): void {
+    const tabParam = this.route?.snapshot.queryParamMap.get('tab');
+    if (tabParam === 'completed') {
+      this.activeTab.set('completed');
+    } else if (tabParam === 'cancelled') {
+      this.activeTab.set('cancelled');
+    } else {
+      this.activeTab.set('upcoming');
+    }
+
     this.load();
     this.ngZone.runOutsideAngular(() => {
       this.tick = setInterval(() => this.clock.set(Date.now()), 1000);

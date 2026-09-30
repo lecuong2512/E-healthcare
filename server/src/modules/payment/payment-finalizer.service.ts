@@ -123,7 +123,7 @@ export class PaymentFinalizerService {
         .createQueryBuilder('appointment').setLock('pessimistic_write')
         .where('appointment.id = :id', { id: appointmentId }).getOne();
       if (!appointment) throw new NotFoundException('Appointment not found.');
-      if (appointment.patientId !== patientId) {
+      if (appointment.patientId !== patientId && appointment.createdBy !== patientId) {
         throw new ForbiddenException('Bạn chỉ có thể hủy giao dịch của chính mình.');
       }
       if (appointment.canonicalPaymentTransactionId ||
@@ -187,7 +187,7 @@ export class PaymentFinalizerService {
         .createQueryBuilder('appointment').setLock('pessimistic_write')
         .where('appointment.id = :id', { id: appointmentId }).getOne();
       if (!appointment) throw new NotFoundException('Appointment not found.');
-      if (appointment.patientId !== patientId) throw new ForbiddenException('Checkout owner mismatch.');
+      if (appointment.patientId !== patientId && appointment.createdBy !== patientId) throw new ForbiddenException('Checkout owner mismatch.');
       if (appointment.status !== AppointmentStatus.PENDING_PAYMENT || !appointment.reservationExpiresAt ||
         appointment.reservationExpiresAt.getTime() <= Date.now() ||
         [PaymentStatus.PAID, PaymentStatus.REFUND_PENDING, PaymentStatus.REFUNDED].includes(appointment.paymentStatus)) {

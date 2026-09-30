@@ -51,7 +51,10 @@ describe('ClinicalEncryptedStore patient-scoped reads', () => {
     );
 
     expect(recordRepository.findOne).toHaveBeenCalledWith({
-      where: { appointmentId, patientId },
+      where: [
+        { appointmentId, patientId },
+        { appointmentId, appointment: { createdBy: patientId } },
+      ],
       relations: {
         patient: true,
         doctor: { user: true },
