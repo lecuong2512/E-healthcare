@@ -6,14 +6,90 @@ import { DoctorScheduleEntity } from '../../../database/entities/doctor-schedule
 import { AppointmentStatus, SlotStatus } from '@shared/enums';
 import { RedisService } from '../../../common/redis/redis.service';
 import { NotificationProducerService } from '../producers/notification-producer.service';
+import { AppointmentNotificationEntity, AppointmentReminderType } from '../../../database/entities/appointment-notification.entity';
+import { environment } from '../../../config/environment';
 
 export const NO_SHOW_GRACE_MINUTES = 30;
+export const REMINDER_TIMEZONE = environment.APPOINTMENT_REMINDER_TIMEZONE?.trim() || 'Asia/Ho_Chi_Minh';
+export const REMINDERS_ENABLED = environment.APPOINTMENT_REMINDERS_ENABLED?.trim().toLowerCase() !== 'false';
+export const REMINDER_SCAN_MINUTES = 15;
+
+export function localScheduleToInstant(date: string, time: string, timeZone = REMINDER_TIMEZONE): Date | null {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const timeMatch = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(time);
+  if (!dateMatch || !timeMatch) return null;
+
+  const [year, month, day] = dateMatch.slice(1).map(Number);
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+  const second = Number(timeMatch[3] ?? '0');
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
+  const localAsUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  let formatter: Intl.DateTimeFormat;
+  try {
+    formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    });
+  } catch {
+    return null;
+  }
+
+  let instant = localAsUtc;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const parts = formatter.formatToParts(new Date(instant));
+    const value = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+    const representedAsUtc = Date.UTC(
+      value('year'), value('month') - 1, value('day'),
+      value('hour'), value('minute'), value('second'),
+    );
+    const corrected = localAsUtc - (representedAsUtc - instant);
+    if (corrected === instant) break;
+    instant = corrected;
+  }
+
+  const verified = formatter.formatToParts(new Date(instant));
+  const rendered = verified.reduce<Record<string, string>>((parts, part) => {
+    parts[part.type] = part.value;
+    return parts;
+  }, {});
+  if (
+    Number(rendered.year) !== year || Number(rendered.month) !== month ||
+    Number(rendered.day) !== day || Number(rendered.hour) !== hour ||
+    Number(rendered.minute) !== minute || Number(rendered.second) !== second
+  ) return null;
+  return new Date(instant);
+}
+
+export function isWithinReminderWindow(
+  appointmentAt: Date,
+  referenceTime: Date,
+  targetHours: number,
+  toleranceMinutes: number,
+): boolean {
+  const differenceMs = appointmentAt.getTime() - referenceTime.getTime();
+  const targetMs = targetHours * 60 * 60 * 1000;
+  const toleranceMs = toleranceMinutes * 60 * 1000;
+  return differenceMs >= targetMs - toleranceMs && differenceMs <= targetMs + toleranceMs;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  const value = error as { code?: string; driverError?: { code?: string } };
+  return value?.code === '23505' || value?.driverError?.code === '23505';
+}
 
 @Injectable()
 export class AppointmentCronService {
   private readonly logger = new Logger(AppointmentCronService.name);
   private appointmentRepo!: Repository<AppointmentEntity>;
   private scheduleRepo!: Repository<DoctorScheduleEntity>;
+  private notificationRepo!: Repository<AppointmentNotificationEntity>;
 
   constructor(
     @Optional() private readonly dataSource?: DataSource,
@@ -23,6 +99,7 @@ export class AppointmentCronService {
     if (this.dataSource && typeof this.dataSource.getRepository === 'function') {
       this.appointmentRepo = this.dataSource.getRepository(AppointmentEntity);
       this.scheduleRepo = this.dataSource.getRepository(DoctorScheduleEntity);
+      this.notificationRepo = this.dataSource.getRepository(AppointmentNotificationEntity);
     }
   }
 
@@ -135,15 +212,18 @@ export class AppointmentCronService {
 
   /**
    * Cron 3: Quét tự động nhắc hẹn trước T-24h (Email) và T-2h (SMS) theo SRS-PAT-05
-   * Chạy định kỳ mỗi 30 phút.
+  * Chạy định kỳ mỗi 15 phút.
    */
-  @Cron('*/30 * * * *')
-  async scanAndDispatchReminders(referenceTime: Date = new Date()): Promise<{ sent24h: number; sent2h: number }> {
+  @Cron(`*/${REMINDER_SCAN_MINUTES} * * * *`, {
+    timeZone: REMINDER_TIMEZONE,
+    disabled: !REMINDERS_ENABLED,
+  })
+  async scanAndDispatchReminders(referenceTime: Date = new Date()): Promise<{ scheduled24h: number; scheduled2h: number }> {
     this.logger.log(`Running scanAndDispatchReminders cron at ${referenceTime.toISOString()}`);
 
-    if (!this.appointmentRepo || !this.redisService || !this.notificationProducerService) {
+    if (!this.appointmentRepo || !this.notificationRepo || !this.notificationProducerService) {
       this.logger.warn('Required dependencies are not initialized, skipping scanAndDispatchReminders');
-      return { sent24h: 0, sent2h: 0 };
+      return { scheduled24h: 0, scheduled2h: 0 };
     }
 
     const upcomingAppointments = await this.appointmentRepo.find({
@@ -153,8 +233,8 @@ export class AppointmentCronService {
       relations: ['patient', 'doctor', 'doctor.user', 'doctor.specialty', 'schedule'],
     });
 
-    let sent24h = 0;
-    let sent2h = 0;
+    let scheduled24h = 0;
+    let scheduled2h = 0;
 
     for (const appt of upcomingAppointments) {
       if (!appt.schedule || !appt.patient) {
@@ -163,60 +243,124 @@ export class AppointmentCronService {
 
       const scheduleDate = appt.schedule.date;
       const startTime = appt.schedule.startTime;
-      const apptStartDateTime = new Date(`${scheduleDate}T${startTime}`);
+      const appointmentAt = localScheduleToInstant(scheduleDate, startTime);
+      if (!appointmentAt || appt.status !== AppointmentStatus.CONFIRMED) continue;
 
-      if (isNaN(apptStartDateTime.getTime())) {
-        continue;
-      }
-
-      const diffMs = apptStartDateTime.getTime() - referenceTime.getTime();
-      const diffHours = diffMs / (1000 * 60 * 60);
-
-      // Mốc T-24 giờ: Nhắc trước 23h đến 25h (qua Email)
-      if (diffHours >= 23 && diffHours <= 25 && appt.patient.email) {
-        const dedupeKey = `lock:reminder:24h:${appt.id}`;
-        const alreadySent = await this.redisService.get(dedupeKey);
-
-        if (!alreadySent) {
-          await this.notificationProducerService.enqueueAppointmentReminder24h({
-            to: appt.patient.email,
+      if (
+        appt.patient.email &&
+        appt.doctor?.user?.fullName &&
+        isWithinReminderWindow(appointmentAt, referenceTime, 24, 60)
+      ) {
+        const didSchedule = await this.scheduleReminder(appt, 'REMINDER_24H', async (logId) => {
+          await this.notificationProducerService!.enqueueAppointmentReminder24h({
+            notificationLogId: logId,
+            to: appt.patient.email!,
             patientName: appt.patient.fullName,
             appointmentCode: appt.appointmentCode,
-            doctorName: appt.doctor?.user?.fullName || 'Bác sĩ chuyên khoa',
+            doctorName: appt.doctor!.user.fullName,
             date: scheduleDate,
             time: startTime,
-            roomNumber: appt.doctor?.roomNumber,
+            roomNumber: appt.doctor!.roomNumber,
+            notes: 'Vui lòng mang theo CCCD, mã QR lịch hẹn và hồ sơ khám cũ. Chỉ nhịn ăn khi có chỉ định xét nghiệm hoặc nội soi.',
           });
-
-          // Đặt khóa chống gửi lặp trong 48 giờ
-          await this.redisService.setNxEx(dedupeKey, 'SENT', 172800);
-          sent24h++;
-        }
+        });
+        if (didSchedule) scheduled24h++;
       }
 
-      // Mốc T-2 giờ: Nhắc trước 1.75h đến 2.25h (qua SMS)
-      if (diffHours >= 1.75 && diffHours <= 2.25 && appt.patient.phoneNumber) {
-        const dedupeKey = `lock:reminder:2h:${appt.id}`;
-        const alreadySent = await this.redisService.get(dedupeKey);
-
-        if (!alreadySent) {
-          await this.notificationProducerService.enqueueAppointmentReminder2h({
-            phoneNumber: appt.patient.phoneNumber,
+      if (
+        appt.patient.phoneNumber &&
+        appt.doctor?.user?.fullName &&
+        isWithinReminderWindow(appointmentAt, referenceTime, 2, 15)
+      ) {
+        const didSchedule = await this.scheduleReminder(appt, 'REMINDER_2H', async (logId) => {
+          await this.notificationProducerService!.enqueueAppointmentReminder2h({
+            notificationLogId: logId,
+            phoneNumber: appt.patient.phoneNumber!,
             patientName: appt.patient.fullName,
             appointmentCode: appt.appointmentCode,
-            doctorName: appt.doctor?.user?.fullName || 'Bác sĩ chuyên khoa',
+            doctorName: appt.doctor!.user.fullName,
             time: startTime,
-            roomNumber: appt.doctor?.roomNumber,
+            roomNumber: appt.doctor!.roomNumber,
           });
-
-          // Đặt khóa chống gửi lặp trong 12 giờ
-          await this.redisService.setNxEx(dedupeKey, 'SENT', 43200);
-          sent2h++;
-        }
+        });
+        if (didSchedule) scheduled2h++;
       }
     }
 
-    this.logger.log(`scanAndDispatchReminders finished: sent24h=${sent24h}, sent2h=${sent2h}`);
-    return { sent24h, sent2h };
+    this.logger.log(`scanAndDispatchReminders finished: scheduled24h=${scheduled24h}, scheduled2h=${scheduled2h}`);
+    return { scheduled24h, scheduled2h };
+  }
+
+  private async scheduleReminder(
+    appointment: AppointmentEntity,
+    notificationType: AppointmentReminderType,
+    enqueue: (logId: string) => Promise<unknown>,
+  ): Promise<boolean> {
+    const channel = notificationType === 'REMINDER_24H' ? 'EMAIL' : 'SMS';
+    const recipient = channel === 'EMAIL' ? appointment.patient.email! : appointment.patient.phoneNumber!;
+    const scheduledAt = new Date(
+      localScheduleToInstant(appointment.schedule.date, appointment.schedule.startTime)!.getTime() -
+        (notificationType === 'REMINDER_24H' ? 24 : 2) * 60 * 60 * 1000,
+    );
+    const provider = channel === 'EMAIL' ? 'SMTP' : 'SMS_WEBHOOK';
+    let notification: AppointmentNotificationEntity | null = await this.notificationRepo.findOne({
+      where: { appointmentId: appointment.id, notificationType },
+    });
+
+    if (!notification) {
+      notification = this.notificationRepo.create({
+        appointmentId: appointment.id,
+        notificationType,
+        scheduledAt,
+        provider,
+        channel,
+        recipient,
+        subject: notificationType === 'REMINDER_24H' ? 'Nhắc lịch khám ngày mai' : 'Nhắc lịch khám sắp tới',
+        message: notificationType === 'REMINDER_24H' ? 'PREPARATION_REMINDER' : 'TRAVEL_REMINDER',
+        status: 'SCHEDULED',
+        attempts: 0,
+        failureReason: null,
+        sentAt: null,
+      });
+      try {
+        notification = await this.notificationRepo.save(notification);
+      } catch (error) {
+        if (!isUniqueConstraintError(error)) throw error;
+        notification = await this.notificationRepo.findOne({
+          where: { appointmentId: appointment.id, notificationType },
+        });
+        return false;
+      }
+    } else if (notification.status === 'FAILED') {
+      const retry = await this.notificationRepo.createQueryBuilder()
+        .update(AppointmentNotificationEntity)
+        .set({
+          status: 'SCHEDULED',
+          scheduledAt,
+          failureReason: null,
+          provider,
+          updatedAt: new Date(),
+        })
+        .where('id = :id AND status = :status', { id: notification.id, status: 'FAILED' })
+        .execute();
+      if (!retry.affected) return false;
+      notification.status = 'SCHEDULED';
+      notification.scheduledAt = scheduledAt;
+    } else {
+      return false;
+    }
+
+    try {
+      await enqueue(notification.id);
+      return true;
+    } catch {
+      await this.notificationRepo.update(notification.id, {
+        status: 'FAILED',
+        failureReason: 'Notification queue submission failed.',
+        updatedAt: new Date(),
+      });
+      this.logger.error(`Could not enqueue appointment reminder ${notification.id}.`);
+      return false;
+    }
   }
 }

@@ -1,8 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Component, NgZone, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { MedicalRecordDetailResponse } from '@shared/interfaces';
 import {
   AppointmentDoctorReview,
   CreateDoctorReviewRequest,
@@ -13,7 +14,9 @@ import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzMessageModule, NzMessageService } from 'ng-zorro-antd/message';
 import { NzModalModule } from 'ng-zorro-antd/modal';
 import { NzRateModule } from 'ng-zorro-antd/rate';
-import { TokenStoreService } from '../../../../core/services/token-store.service';
+import { toDataURL } from 'qrcode';
+import { environment } from '../../../../../environments/environment';
+import { ClinicalService } from '../../../../core/services/clinical.service';
 import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
 
 type Tab = 'upcoming' | 'completed' | 'cancelled';
@@ -37,40 +40,29 @@ interface Appointment {
     user?: { fullName?: string };
   };
   schedule?: { date: string; startTime: string; endTime: string };
-  medicalRecord?: MedicalRecord;
   review?: AppointmentDoctorReview | null;
 }
 
-interface MedicalRecord {
-  id?: string;
-  clinicalNotes?: string;
-  icd10PrimaryCode?: string;
-  icd10SecondaryCodes?: string | null;
-  doctorAdvice?: string | null;
-  followUpDate?: string | null;
-  primaryDiagnosis?: string;
-  secondaryDiagnoses?: string[];
-  dietAdvice?: string;
-  prescription?: {
-    prescriptionCode?: string;
-    items?: PrescriptionItem[];
-    pdfUrl?: string;
-    digitallySigned?: boolean;
-  };
-  resultPdfUrl?: string;
-  digitallySigned?: boolean;
+interface CheckInQrResponse {
+  qrToken: string;
+  expiresAt: string;
 }
 
-interface PrescriptionItem {
-  medicineName: string;
-  activeIngredient?: string | null;
-  totalQuantity: number;
-  unit: string;
-  usageInstructions?: string | null;
-  dosageMorning?: string | null;
-  dosageNoon?: string | null;
-  dosageAfternoon?: string | null;
-  dosageNight?: string | null;
+interface QrState {
+  loading: boolean;
+  dataUrl?: string;
+  error?: string;
+}
+
+interface CheckInQrResponse {
+  qrToken: string;
+  expiresAt: string;
+}
+
+interface QrState {
+  loading: boolean;
+  dataUrl?: string;
+  error?: string;
 }
 
 @Component({
@@ -92,8 +84,9 @@ interface PrescriptionItem {
 })
 export class MedicalHistoryPage implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
-  private readonly tokens = inject(TokenStoreService);
+  private readonly clinical = inject(ClinicalService);
   private readonly message = inject(NzMessageService);
+  private readonly ngZone = inject(NgZone);
 
   readonly tabs: { id: Tab; label: string }[] = [
     { id: 'upcoming', label: 'Sắp tới' },
@@ -112,6 +105,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   readonly reviewModalVisible = signal(false);
   readonly reviewSubmitting = signal(false);
   reviewComment = '';
+  readonly qrStates = signal<Record<string, QrState>>({});
 
   readonly cancelTarget = signal<Appointment | null>(null);
   cancelReason = '';
@@ -121,9 +115,11 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   readonly submitting = signal(false);
 
   readonly detail = signal<Appointment | null>(null);
-  readonly detailRecord = signal<MedicalRecord | null>(null);
+  readonly detailRecord = signal<MedicalRecordDetailResponse | null>(null);
   readonly detailLoading = signal(false);
   readonly detailError = signal('');
+  readonly pdfDownloading = signal(false);
+  readonly pdfError = signal('');
 
   readonly toast = signal('');
   readonly toastType = signal<'success' | 'error'>('success');
@@ -133,7 +129,9 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.load();
-    this.tick = setInterval(() => this.clock.set(Date.now()), 1000);
+    this.ngZone.runOutsideAngular(() => {
+      this.tick = setInterval(() => this.clock.set(Date.now()), 1000);
+    });
   }
 
   ngOnDestroy(): void {
@@ -145,169 +143,70 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
     }
   }
 
-  private headers(): HttpHeaders {
-    return new HttpHeaders({
-      Authorization: `Bearer ${this.tokens.accessToken() ?? ''}`,
-    });
-  }
-
   load(): void {
-    this.isMock.set(false);
     this.loading.set(true);
     this.error.set('');
 
     this.http
-      .get<Appointment[]>('/api/v1/appointments/me', { headers: this.headers() })
+      .get<Appointment[]>(`${environment.apiBaseUrl}/appointments/me`)
       .subscribe({
         next: (rows) => {
-          this.appointments.set(rows);
+          const appointments = rows ?? [];
+          this.appointments.set(appointments);
           this.loading.set(false);
+          appointments
+            .filter((appointment) => appointment.status === 'CONFIRMED')
+            .forEach((appointment) => this.loadQr(appointment));
         },
         error: (e) => {
           this.error.set(
-            e?.error?.message || 'Không thể tải lịch sử khám. Vui lòng thử lại.'
+            this.apiError(e, 'Không thể tải lịch sử khám. Vui lòng thử lại.'),
           );
           this.loading.set(false);
         },
       });
   }
 
-  useMockData(): void {
-    const date = (offset: number, time: string) => {
-      const d = new Date(Date.now() + offset * 86400000);
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
+  loadQr(appointment: Appointment): void {
+    if (appointment.status !== 'CONFIRMED') return;
 
-      return {
-        date: `${yyyy}-${mm}-${dd}`,
-        startTime: time,
-        endTime: `${String((Number(time.slice(0, 2)) + 1) % 24).padStart(2, '0')}:${time.slice(3, 5)}:00`,
-      };
-    };
+    this.qrStates.update((states) => ({
+      ...states,
+      [appointment.id]: { loading: true },
+    }));
 
-    const relativeSchedule = (hoursFromNow: number) => {
-      const start = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
-      const end = new Date(start.getTime() + 60 * 60 * 1000);
-
-      const format = (value: Date) => {
-        const yyyy = value.getFullYear();
-        const mm = String(value.getMonth() + 1).padStart(2, '0');
-        const dd = String(value.getDate()).padStart(2, '0');
-        const hh = String(value.getHours()).padStart(2, '0');
-        const min = String(value.getMinutes()).padStart(2, '0');
-
-        return {
-          date: `${yyyy}-${mm}-${dd}`,
-          startTime: `${hh}:${min}:00`,
-          endTime: `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}:00`,
-        };
-      };
-
-      return format(start);
-    };
-
-    const doctor = (
-      name: string,
-      title: string,
-      specialty: string,
-      room: string
-    ) => ({
-      id: `mock-${name}`,
-      academicTitle: title,
-      roomNumber: room,
-      specialty: { name: specialty },
-      user: { fullName: name },
-    });
-
-    const prescription: PrescriptionItem[] = [
-      {
-        medicineName: 'Amlodipine 5 mg',
-        activeIngredient: 'Amlodipine',
-        totalQuantity: 30,
-        unit: 'viên',
-        usageInstructions: 'Uống 1 viên mỗi ngày, sau ăn sáng.',
-        dosageMorning: '1 viên',
-        dosageNoon: '—',
-        dosageAfternoon: '—',
-        dosageNight: '—',
-      },
-      {
-        medicineName: 'Atorvastatin 10 mg',
-        activeIngredient: 'Atorvastatin',
-        totalQuantity: 30,
-        unit: 'viên',
-        usageInstructions: 'Uống buổi tối trước khi ngủ.',
-        dosageMorning: '—',
-        dosageNoon: '—',
-        dosageAfternoon: '—',
-        dosageNight: '1 viên',
-      },
-    ];
-
-    this.appointments.set([
-      {
-        id: 'mock-upcoming-01',
-        appointmentCode: 'APT-DEMO-2601',
-        status: 'CONFIRMED',
-        totalAmount: 350000,
-        doctor: doctor('Trần Văn Tiến', 'PGS.TS.BS', 'Tim mạch', 'A203'),
-        schedule: relativeSchedule(72),
-      },
-      {
-        id: 'mock-upcoming-02',
-        appointmentCode: 'APT-DEMO-2602',
-        status: 'CONFIRMED',
-        totalAmount: 280000,
-        doctor: doctor('Trần Quốc Bảo', 'ThS.BS', 'Nội tổng quát', 'B105'),
-        schedule: relativeSchedule(8),
-      },
-      {
-        id: 'mock-upcoming-03',
-        appointmentCode: 'APT-DEMO-2603',
-        status: 'CONFIRMED',
-        totalAmount: 260000,
-        doctor: doctor('Phạm Hoàng Long', 'BSCKII', 'Da liễu', 'D108'),
-        schedule: relativeSchedule(1.5),
-      },
-      {
-        id: 'mock-completed-01',
-        appointmentCode: 'APT-DEMO-2518',
-        status: 'COMPLETED',
-        totalAmount: 420000,
-        doctor: doctor('Lê Thu Hà', 'BSCKII', 'Nội tiết', 'C312'),
-        schedule: date(-12, '08:30:00'),
-        medicalRecord: {
-          clinicalNotes: 'Tăng huyết áp nguyên phát, hiện ổn định với điều trị.',
-          icd10PrimaryCode: 'I10',
-          icd10SecondaryCodes: 'E78.5',
-          doctorAdvice:
-            'Duy trì thuốc đều đặn, đo huyết áp tại nhà mỗi sáng. Tái khám sau 4 tuần.',
-          followUpDate: date(16, '00:00:00').date,
-          dietAdvice: 'Giảm muối, hạn chế thức ăn nhiều dầu mỡ.',
-          digitallySigned: true,
-          prescription: {
-            prescriptionCode: 'RX-DEMO-771',
-            digitallySigned: true,
-            items: prescription,
-          },
+    this.http
+      .get<CheckInQrResponse>(
+        `${environment.apiBaseUrl}/appointments/${encodeURIComponent(appointment.id)}/check-in-qr`,
+      )
+      .subscribe({
+        next: ({ qrToken }) => {
+          void toDataURL(qrToken, { width: 160, margin: 1, errorCorrectionLevel: 'M' })
+            .then((dataUrl: string) => {
+              this.qrStates.update((states) => ({
+                ...states,
+                [appointment.id]: { loading: false, dataUrl },
+              }));
+            })
+            .catch(() => this.setQrError(appointment.id));
         },
-      },
-      {
-        id: 'mock-cancelled-01',
-        appointmentCode: 'APT-DEMO-2509',
-        status: 'CANCELLED_BY_PATIENT',
-        totalAmount: 250000,
-        cancellationReason: 'Bệnh nhân có lịch công tác đột xuất.',
-        doctor: doctor('Phạm Hoàng Long', 'ThS.BS', 'Nhi khoa', 'D108'),
-        schedule: date(-4, '10:15:00'),
-      },
-    ]);
+        error: () => this.setQrError(appointment.id),
+      });
+  }
 
-    this.error.set('');
-    this.loading.set(false);
-    this.isMock.set(true);
-    this.activeTab.set('upcoming');
+  private setQrError(appointmentId: string): void {
+    this.qrStates.update((states) => ({
+      ...states,
+      [appointmentId]: {
+        loading: false,
+        error: 'Không thể tải mã QR. Vui lòng thử lại.',
+      },
+    }));
+  }
+
+  private apiError(error: unknown, fallback: string): string {
+    const response = error as { error?: { message?: string } };
+    return response?.error?.message || fallback;
   }
 
   count(tab: Tab): number {
@@ -358,7 +257,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   }
 
   canCancel(a: Appointment): boolean {
-    return ['CONFIRMED'].includes(a.status);
+    return a.status === 'CONFIRMED';
   }
 
   canReview(a: Appointment): boolean {
@@ -431,9 +330,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
     }
 
     this.http
-      .post<DoctorReviewResponse>(`/api/v1/doctors/${doctorId}/reviews`, payload, {
-        headers: this.headers(),
-      })
+      .post<DoctorReviewResponse>(`/api/v1/doctors/${doctorId}/reviews`, payload)
       .subscribe({
         next: success,
         error: (error) => {
@@ -533,11 +430,16 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
       consentAccepted: true,
     };
 
-    const success = (updated: object = {}) => {
+    const success = (updated: Partial<Appointment>) => {
       this.appointments.update((rows) =>
         rows.map((row) =>
           row.id === a.id
-            ? { ...row, ...updated, status: 'CANCELLED_BY_PATIENT', cancellationReason: reason }
+            ? {
+                ...row,
+                ...updated,
+                status: updated.status || 'CANCELLED_BY_PATIENT',
+                cancellationReason: updated.cancellationReason ?? reason,
+              }
             : row
         )
       );
@@ -545,25 +447,19 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
       this.cancelTarget.set(null);
       this.submitting.set(false);
       this.showToast('Đã hủy lịch khám thành công.', 'success');
-
-      if (!this.isMock()) {
-        this.load();
-      }
     };
 
-    if (this.isMock()) {
-      setTimeout(() => success(payload), 500);
-      return;
-    }
-
     this.http
-      .post(`/api/v1/appointments/${a.id}/cancel`, payload, { headers: this.headers() })
+      .post(`${environment.apiBaseUrl}/appointments/${encodeURIComponent(a.id)}/cancel`, payload)
       .subscribe({
-        next: (updated) => success(updated as object),
+        next: (updated) => {
+          success(updated as Partial<Appointment>);
+          this.load();
+        },
         error: (e) => {
           this.submitting.set(false);
           this.showToast(
-            e?.error?.message || 'Không thể hủy lịch. Vui lòng thử lại.',
+            this.apiError(e, 'Không thể hủy lịch. Vui lòng thử lại.'),
             'error'
           );
         },
@@ -588,47 +484,65 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
 
   showDetails(a: Appointment): void {
     this.detail.set(a);
-    this.detailRecord.set(a.medicalRecord || null);
+    this.detailRecord.set(null);
     this.detailError.set('');
-
-    if (a.medicalRecord) {
-      return;
-    }
-
     this.detailLoading.set(true);
+    this.pdfError.set('');
 
-    this.http
-      .get<MedicalRecord>(`/api/v1/clinical/medical-records/appointment/${a.id}`, {
-        headers: this.headers(),
-      })
+    this.clinical
+      .getMedicalRecordByAppointment(a.id)
       .subscribe({
         next: (r) => {
           this.detailRecord.set(r);
           this.detailLoading.set(false);
         },
         error: (e) => {
-          this.detailError.set(
-            e?.error?.message || 'Chưa có dữ liệu hồ sơ khám cho lần khám này.'
-          );
+          this.detailError.set(this.apiError(e, 'Chưa có dữ liệu hồ sơ khám cho lần khám này.'));
           this.detailLoading.set(false);
         },
       });
   }
 
-  secondaryDiagnosis(): string {
-    const r = this.detailRecord();
-    return r?.secondaryDiagnoses?.join(', ') || r?.icd10SecondaryCodes || 'Không có';
-  }
+  /**
+   * SRS-PAT-04: Tải tệp PDF đơn thuốc điện tử có gắn mã băm SHA-256 và mã QR xác thực.
+   * Backend kiểm tra JWT Role PATIENT và sở hữu appointment trước khi trả PDF.
+   */
+  downloadPrescriptionPdf(a: Appointment): void {
+    if (this.pdfDownloading()) return;
+    this.pdfDownloading.set(true);
+    this.pdfError.set('');
 
-  download(url?: string): void {
-    if (!url) {
-      return;
-    }
+    const prescriptionCode = this.detailRecord()?.prescription?.prescriptionCode;
+    const filename = prescriptionCode
+      ? `don-thuoc-${prescriptionCode.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`
+      : `don-thuoc-${a.appointmentCode ?? a.id}.pdf`;
 
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '';
-    a.rel = 'noopener';
-    a.click();
+    this.clinical.downloadPrescriptionPdf(a.id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename;
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        this.pdfDownloading.set(false);
+      },
+      error: async (e: unknown) => {
+        this.pdfDownloading.set(false);
+        const fallback = 'Không thể tải đơn thuốc PDF. Vui lòng thử lại sau.';
+        const errObj = e as { error?: unknown };
+        if (errObj?.error instanceof Blob) {
+          try {
+            const text = await errObj.error.text();
+            const parsed = JSON.parse(text) as { message?: string };
+            this.pdfError.set(parsed?.message || fallback);
+          } catch {
+            this.pdfError.set(fallback);
+          }
+        } else {
+          this.pdfError.set(this.apiError(e, fallback));
+        }
+      },
+    });
   }
 }

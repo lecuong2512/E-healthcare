@@ -62,6 +62,7 @@ import { ReportApprovalEntity } from './entities/report-approval.entity';
 import { AddReportApprovals1790300000000 } from './migrations/1790300000000-add-report-approvals';
 import { DoctorReviewEntity } from "./entities/doctor-review.entity";
 import { CreateDoctorReviews1790586000000 } from "./migrations/1790586000000-create-doctor-reviews";
+import { AddAppointmentReminderLifecycle1790152800000 } from "./migrations/1790152800000-add-appointment-reminder-lifecycle";
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -132,6 +133,7 @@ export function createDataSource(url: string): DataSource {
       CreateClinicRooms1790400000000,
       AddClinicRoomDetails1790500000000,
       CreateDoctorReviews1790586000000,
+      AddAppointmentReminderLifecycle1790152800000,
       CreateStaffShiftAssignments1790600000000,
       BackfillDoctorUserRoles1790730000000,
     ],

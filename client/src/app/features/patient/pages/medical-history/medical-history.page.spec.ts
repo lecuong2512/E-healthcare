@@ -1,12 +1,12 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { NzMessageService } from 'ng-zorro-antd/message';
+import { TokenStoreService } from '../../../../core/services/token-store.service';
 
 import { MedicalHistoryPage } from './medical-history.page';
-import { TokenStoreService } from '../../../../core/services/token-store.service';
 
 describe('MedicalHistoryPage', () => {
   let component: MedicalHistoryPage;
@@ -20,13 +20,11 @@ describe('MedicalHistoryPage', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
-        provideNoopAnimations(),
         {
           provide: TokenStoreService,
-          useValue: {
-            accessToken: () => 'fake-jwt-token',
-          },
+          useValue: { accessToken: () => 'patient-session-token' },
         },
+        provideNoopAnimations(),
       ],
     }).compileComponents();
 
@@ -34,8 +32,8 @@ describe('MedicalHistoryPage', () => {
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
-    const initialRequest = httpMock.expectOne('/api/v1/appointments/me');
-    initialRequest.flush([]);
+    httpMock.expectOne('/api/v1/appointments/me').flush([]);
+    fixture.detectChanges();
   });
 
   afterEach(() => {
@@ -46,11 +44,17 @@ describe('MedicalHistoryPage', () => {
   it('should create the component and load real appointments by default', () => {
     expect(component).toBeTruthy();
     expect(component.appointments()).toEqual([]);
-    expect(component.isMock()).toBeFalse();
     expect(component.activeTab()).toBe('upcoming');
   });
 
   it('should filter items correctly for each tab', () => {
+    component.appointments.set([
+      { id: '1', status: 'CONFIRMED' },
+      { id: '2', status: 'CHECKED_IN' },
+      { id: '3', status: 'COMPLETED' },
+      { id: '4', status: 'CANCELLED_BY_PATIENT' },
+      { id: '5', status: 'CANCELLED_BY_CLINIC' },
+    ]);
     component.activeTab.set('upcoming');
     const upcoming = component.itemsForTab();
     expect(upcoming.every((a) => ['CONFIRMED', 'CHECKED_IN'].includes(a.status))).toBeTrue();
@@ -64,6 +68,194 @@ describe('MedicalHistoryPage', () => {
     expect(cancelled.every((a) => a.status.includes('CANCELLED'))).toBeTrue();
   });
 
+  it('shows an empty state when the patient has no appointments', () => {
+    expect(fixture.nativeElement.textContent).toContain('Bạn chưa có lịch khám sắp tới');
+  });
+
+  it('shows loading while refreshing appointments', () => {
+    component.load();
+    expect(component.loading()).toBeTrue();
+    httpMock.expectOne('/api/v1/appointments/me').flush([]);
+    expect(component.loading()).toBeFalse();
+  });
+
+  it('shows an error state and retry action when the API fails', () => {
+    component.load();
+    httpMock.expectOne('/api/v1/appointments/me').flush(
+      { message: 'Lỗi tải dữ liệu' },
+      { status: 500, statusText: 'Server Error' },
+    );
+    fixture.detectChanges();
+    expect(component.error()).toBe('Lỗi tải dữ liệu');
+    expect(fixture.nativeElement.textContent).toContain('Thử lại');
+  });
+
+  it('requests and renders the check-in QR returned by the API', async () => {
+    component.load();
+    httpMock.expectOne('/api/v1/appointments/me').flush([
+      { id: 'appointment-1', status: 'CONFIRMED', appointmentCode: 'APT-1' },
+    ]);
+    const qrRequest = httpMock.expectOne('/api/v1/appointments/appointment-1/check-in-qr');
+    expect(qrRequest.request.method).toBe('GET');
+    qrRequest.flush({ qrToken: 'check-in-token', expiresAt: '2026-09-29T10:00:00Z' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('img[alt="Mã QR check-in lịch hẹn"]')).toBeTruthy();
+  });
+
+  it('loads and displays the authenticated Past medical record detail', () => {
+    const appointment = { id: 'appointment-1', status: 'COMPLETED' };
+    component.showDetails(appointment);
+    fixture.detectChanges();
+    expect(component.detailLoading()).toBeTrue();
+
+    const request = httpMock.expectOne('/api/v1/clinical/medical-records/appointment/appointment-1');
+    expect(request.request.headers.get('Authorization')).toBe('Bearer patient-session-token');
+    request.flush({
+      id: 'record-1',
+      appointmentId: 'appointment-1',
+      patientId: 'patient-1',
+      doctorId: 'doctor-1',
+      vitalSigns: {
+        bloodPressure: '', pulse: 0, temperature: 0, respiratoryRate: 0,
+        weight: 0, height: 0, bmi: 0,
+      },
+      clinicalNotes: 'Viêm họng cấp',
+      icd10PrimaryCode: 'J02.9',
+      icd10SecondaryCodes: null,
+      doctorAdvice: 'Uống đủ nước và nghỉ ngơi.',
+      followUpDate: '2026-10-10',
+      isLocked: true,
+      lockedAt: null,
+      completedAt: '2026-09-20T10:00:00Z',
+      prescription: {
+        id: 'prescription-1',
+        medicalRecordId: 'record-1',
+        prescriptionCode: 'RX-1',
+        createdAt: '2026-09-20T10:00:00Z',
+        items: [{
+          id: 'item-1', prescriptionId: 'prescription-1',
+          medicineName: 'Thuốc A', activeIngredient: 'Hoạt chất A',
+          dosageMorning: '1 viên', dosageNoon: null, dosageAfternoon: null,
+          dosageNight: null, totalQuantity: 5, unit: 'viên',
+          usageInstructions: 'Uống sau ăn.',
+        }],
+      },
+    });
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(component.detailLoading()).toBeFalse();
+    expect(text).toContain('Viêm họng cấp');
+    expect(text).toContain('J02.9');
+    expect(text).toContain('Uống đủ nước và nghỉ ngơi.');
+    expect(text).toContain('10/10/2026');
+    expect(text).toContain('Thuốc A');
+    expect(text).toContain('Uống sau ăn.');
+    // SRS-PAT-04: Kiểm tra nút tải PDF hiển thị khi có đơn thuốc
+    const pdfBtn = fixture.nativeElement.querySelector('#btn-download-prescription-pdf') as HTMLButtonElement | null;
+    expect(pdfBtn).toBeTruthy();
+    expect(pdfBtn?.textContent?.trim()).toContain('Tải đơn thuốc PDF');
+    expect(pdfBtn?.disabled).toBeFalse();
+  });
+
+  it('SRS-PAT-04: triggers PDF download and handles API error gracefully', () => {
+    const appointment = { id: 'apt-pdf-01', status: 'COMPLETED' };
+    component.showDetails(appointment);
+    httpMock.expectOne('/api/v1/clinical/medical-records/appointment/apt-pdf-01').flush({
+      id: 'record-pdf-1',
+      appointmentId: 'apt-pdf-01',
+      patientId: 'patient-1',
+      doctorId: 'doctor-1',
+      vitalSigns: { bloodPressure: '', pulse: 0, temperature: 0, respiratoryRate: 0, weight: 0, height: 0, bmi: 0 },
+      clinicalNotes: 'Viêm xoang',
+      icd10PrimaryCode: 'J32.9',
+      icd10SecondaryCodes: null,
+      doctorAdvice: null,
+      followUpDate: null,
+      isLocked: true,
+      lockedAt: null,
+      completedAt: '2026-09-25T08:00:00Z',
+      prescription: { id: 'prx-1', medicalRecordId: 'record-pdf-1', prescriptionCode: 'RX-PDF-01', createdAt: '2026-09-25T08:00:00Z', items: [] },
+    });
+    fixture.detectChanges();
+
+    // Mock createObjectURL
+    const mockUrl = 'blob:mock-url';
+    spyOn(URL, 'createObjectURL').and.returnValue(mockUrl);
+    spyOn(URL, 'revokeObjectURL').and.stub();
+    const anchorSpy = jasmine.createSpyObj<HTMLAnchorElement>('a', ['click']);
+    spyOn(document, 'createElement').and.returnValue(anchorSpy as unknown as HTMLElement);
+
+    // Click nút tải PDF
+    const pdfBtn = fixture.nativeElement.querySelector('#btn-download-prescription-pdf') as HTMLButtonElement;
+    expect(pdfBtn).toBeTruthy();
+    pdfBtn.click();
+    expect(component.pdfDownloading()).toBeTrue();
+
+    const pdfReq = httpMock.expectOne('/api/v1/clinical/appointments/apt-pdf-01/prescription.pdf');
+    expect(pdfReq.request.method).toBe('GET');
+    expect(pdfReq.request.headers.get('Authorization')).toBe('Bearer patient-session-token');
+    pdfReq.flush(new Blob(['%PDF-test'], { type: 'application/pdf' }));
+
+    expect(component.pdfDownloading()).toBeFalse();
+    expect(component.pdfError()).toBe('');
+    expect(anchorSpy.click).toHaveBeenCalled();
+    expect(anchorSpy.download).toContain('RX-PDF-01');
+  });
+
+  it('SRS-PAT-04: shows PDF error when prescription API returns an error', async () => {
+    const appointment = { id: 'apt-pdf-02', status: 'COMPLETED' };
+    component.showDetails(appointment);
+    httpMock.expectOne('/api/v1/clinical/medical-records/appointment/apt-pdf-02').flush({
+      id: 'record-pdf-2',
+      appointmentId: 'apt-pdf-02',
+      patientId: 'patient-1',
+      doctorId: 'doctor-1',
+      vitalSigns: { bloodPressure: '', pulse: 0, temperature: 0, respiratoryRate: 0, weight: 0, height: 0, bmi: 0 },
+      clinicalNotes: 'Xét nghiệm máu',
+      icd10PrimaryCode: 'R79.9',
+      icd10SecondaryCodes: null,
+      doctorAdvice: null,
+      followUpDate: null,
+      isLocked: true,
+      lockedAt: null,
+      completedAt: '2026-09-25T09:00:00Z',
+      prescription: { id: 'prx-2', medicalRecordId: 'record-pdf-2', prescriptionCode: 'RX-ERR-01', createdAt: '2026-09-25T09:00:00Z', items: [] },
+    });
+    fixture.detectChanges();
+
+    component.downloadPrescriptionPdf({ id: 'apt-pdf-02', status: 'COMPLETED' });
+    expect(component.pdfDownloading()).toBeTrue();
+
+    const pdfReq = httpMock.expectOne('/api/v1/clinical/appointments/apt-pdf-02/prescription.pdf');
+    pdfReq.flush(
+      new Blob([JSON.stringify({ message: 'Font PDF chưa cấu hình' })], { type: 'application/json' }),
+      { status: 503, statusText: 'Service Unavailable' },
+    );
+
+    for (let i = 0; i < 20 && !component.pdfError(); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    fixture.detectChanges();
+
+    expect(component.pdfDownloading()).toBeFalse();
+    expect(component.pdfError()).toContain('Font PDF chưa cấu hình');
+    expect(fixture.nativeElement.textContent).toContain('Font PDF chưa cấu hình');
+  });
+
+  it('shows permission or missing-record errors and allows retry', () => {
+    component.showDetails({ id: 'appointment-2', status: 'COMPLETED' });
+    httpMock.expectOne('/api/v1/clinical/medical-records/appointment/appointment-2').flush(
+      { message: 'Bạn chỉ có thể xem hồ sơ bệnh án của chính mình.' },
+      { status: 403, statusText: 'Forbidden' },
+    );
+    fixture.detectChanges();
+    expect(component.detailLoading()).toBeFalse();
+    expect(fixture.nativeElement.textContent).toContain('Bạn chỉ có thể xem hồ sơ bệnh án của chính mình.');
+    expect(fixture.nativeElement.textContent).toContain('Thử tải lại');
+  });
+
   describe('canCancel', () => {
     it('should allow cancellation only for CONFIRMED status', () => {
       expect(component.canCancel({ id: '1', status: 'CONFIRMED' })).toBeTrue();
@@ -75,28 +267,6 @@ describe('MedicalHistoryPage', () => {
   });
 
   describe('Refund Policy calculation (Section 5.3 & Card 3.11)', () => {
-    const createMockTarget = (hoursAhead: number) => {
-      const targetTime = Date.now() + hoursAhead * 3600000;
-      const targetDate = new Date(targetTime);
-      const yyyy = targetDate.getFullYear();
-      const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(targetDate.getDate()).padStart(2, '0');
-      const hh = String(targetDate.getHours()).padStart(2, '0');
-      const min = String(targetDate.getMinutes()).padStart(2, '0');
-      const ss = String(targetDate.getSeconds()).padStart(2, '0');
-
-      return {
-        id: 'target-1',
-        status: 'CONFIRMED',
-        totalAmount: 200000,
-        schedule: {
-          date: `${yyyy}-${mm}-${dd}`,
-          startTime: `${hh}:${min}:${ss}`,
-          endTime: '23:59:59',
-        },
-      };
-    };
-
     it('should classify >= 24 hours as green (100% refund)', () => {
       // 25 hours ahead
       spyOn(component, 'remainingMs').and.returnValue(25 * 3600000);
@@ -198,39 +368,27 @@ describe('MedicalHistoryPage', () => {
       expect(component.submitting()).toBeFalse();
     });
 
-    it('should successfully cancel in mock mode and update local status', fakeAsync(() => {
-      component.useMockData();
-      const appt = component.appointments()[0];
-      component.openCancel(appt);
-      component.cancelReason = 'Có việc bận đột xuất';
-      component.consentAccepted = true;
-
-      component.submitCancel();
-      expect(component.submitting()).toBeTrue();
-
-      tick(500);
-
-      expect(component.submitting()).toBeFalse();
-      expect(component.cancelTarget()).toBeNull();
-      expect(component.toast()).toContain('thành công');
-
-      const updated = component.appointments().find((a) => a.id === appt.id);
-      expect(updated?.status).toBe('CANCELLED_BY_PATIENT');
-      expect(updated?.cancellationReason).toBe('Có việc bận đột xuất');
-
-      tick(5000);
-    }));
-
-    it('should send POST request to API when isMock is false', () => {
-      component.isMock.set(false);
+    it('requires confirmation, shows loading, then updates and refreshes appointment history', () => {
       const appt = { id: 'apt-real-01', status: 'CONFIRMED' };
       component.appointments.set([appt]);
-      component.openCancel(appt);
+      fixture.detectChanges();
+      const cancelButton = Array.from(fixture.nativeElement.querySelectorAll('button'))
+        .find((button: any) => button.textContent?.trim() === 'Hủy lịch hẹn') as HTMLButtonElement;
+      cancelButton.click();
+      fixture.detectChanges();
+      expect(component.cancelTarget()).toEqual(appt);
+      httpMock.expectNone('/api/v1/appointments/apt-real-01/cancel');
+
       component.cancelReason = 'Thay đổi kế hoạch';
       component.consentAccepted = true;
+      fixture.detectChanges();
 
-      component.submitCancel();
+      const confirmButton = Array.from(fixture.nativeElement.querySelectorAll('button'))
+        .find((button: any) => button.textContent?.trim() === 'Xác nhận hủy') as HTMLButtonElement;
+      confirmButton.click();
       expect(component.submitting()).toBeTrue();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Đang hủy lịch…');
 
       const req = httpMock.expectOne('/api/v1/appointments/apt-real-01/cancel');
       expect(req.request.method).toBe('POST');
@@ -239,20 +397,20 @@ describe('MedicalHistoryPage', () => {
         consentAccepted: true,
       });
 
-      req.flush({ id: 'apt-real-01', status: 'CANCELLED_BY_PATIENT' });
+      req.flush({ id: 'apt-real-01', status: 'CANCELLED_BY_CLINIC', cancellationReason: 'Ca khám thay đổi' });
+      expect(component.appointments()[0].status).toBe('CANCELLED_BY_CLINIC');
 
-      // In real mode, it triggers this.load()
       const reloadReq = httpMock.expectOne('/api/v1/appointments/me');
       expect(reloadReq.request.method).toBe('GET');
-      reloadReq.flush([]);
+      reloadReq.flush([{ id: 'apt-real-01', status: 'CANCELLED_BY_PATIENT' }]);
 
       expect(component.submitting()).toBeFalse();
       expect(component.cancelTarget()).toBeNull();
       expect(component.toast()).toContain('thành công');
+      expect(component.appointments()[0].status).toBe('CANCELLED_BY_PATIENT');
     });
 
-    it('should handle API failure gracefully with error toast', () => {
-      component.isMock.set(false);
+    it('handles API failure gracefully with an error toast', () => {
       const appt = { id: 'apt-real-02', status: 'CONFIRMED' };
       component.appointments.set([appt]);
       component.openCancel(appt);

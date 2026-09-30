@@ -20,6 +20,7 @@ export interface EmailAccountActivationPayload {
 }
 
 export interface EmailAppointmentReminder24hPayload {
+  notificationLogId?: string;
   to: string;
   patientName: string;
   appointmentCode: string;
@@ -51,6 +52,7 @@ export interface SmsOtpPayload {
 }
 
 export interface SmsAppointmentReminder2hPayload {
+  notificationLogId?: string;
   phoneNumber: string;
   patientName: string;
   appointmentCode: string;
@@ -78,10 +80,10 @@ export interface PrescriptionMedicineItem {
   activeIngredient?: string;
   unit?: string;
   quantity: number;
-  dosageMorning?: number;
-  dosageNoon?: number;
-  dosageAfternoon?: number;
-  dosageNight?: number;
+  dosageMorning?: string;
+  dosageNoon?: string;
+  dosageAfternoon?: string;
+  dosageNight?: string;
   usageInstruction: string;
 }
 
@@ -96,10 +98,13 @@ export interface PrescriptionPdfPayload {
   doctorLicense?: string;
   diagnosis: string;
   icd10Code: string;
+  secondaryIcd10Codes?: string | null;
   medicines: PrescriptionMedicineItem[];
   doctorAdvice?: string;
+  followUpDate?: string | null;
   createdAt: string;
-  verificationHash?: string;
+  verificationHash: string;
+  verificationUrl: string;
 }
 
 export interface MedicalRecordPdfPayload {

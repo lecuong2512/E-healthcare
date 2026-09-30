@@ -7,11 +7,13 @@ import { RedisModule } from '../../common/redis/redis.module';
 import { EmailSenderService } from './services/email-sender.service';
 import { SmsSenderService } from './services/sms-sender.service';
 import { PdfGeneratorService } from './services/pdf-generator.service';
+import { PdfGeneratorModule } from './pdf-generator.module';
 import { EmailProcessor } from './processors/email.processor';
 import { SmsProcessor } from './processors/sms.processor';
 import { PdfProcessor } from './processors/pdf.processor';
 import { NotificationProducerService } from './producers/notification-producer.service';
 import { AppointmentCronService } from './schedulers/appointment-cron.service';
+import { AppointmentReminderDeliveryService } from './services/appointment-reminder-delivery.service';
 import { environment } from '../../config/environment';
 
 export class MockBullQueue {
@@ -60,12 +62,12 @@ export class NotificationModule implements OnModuleInit {
     const commonProviders = [
       EmailSenderService,
       SmsSenderService,
-      PdfGeneratorService,
       EmailProcessor,
       SmsProcessor,
       PdfProcessor,
       NotificationProducerService,
       AppointmentCronService,
+      AppointmentReminderDeliveryService,
     ];
 
     if (isMock) {
@@ -75,7 +77,7 @@ export class NotificationModule implements OnModuleInit {
 
       return {
         module: NotificationModule,
-        imports: [DatabaseModule, RedisModule],
+        imports: [DatabaseModule, RedisModule, PdfGeneratorModule],
         providers: [
           ...commonProviders,
           { provide: getQueueToken(QueueName.EMAIL), useValue: mockEmail },
@@ -87,7 +89,7 @@ export class NotificationModule implements OnModuleInit {
           AppointmentCronService,
           EmailSenderService,
           SmsSenderService,
-          PdfGeneratorService,
+          PdfGeneratorModule,
         ],
       };
     }
@@ -97,6 +99,7 @@ export class NotificationModule implements OnModuleInit {
       imports: [
         DatabaseModule,
         RedisModule,
+        PdfGeneratorModule,
         BullModule.registerQueue(
           { name: QueueName.EMAIL },
           { name: QueueName.SMS },
@@ -109,7 +112,7 @@ export class NotificationModule implements OnModuleInit {
         AppointmentCronService,
         EmailSenderService,
         SmsSenderService,
-        PdfGeneratorService,
+        PdfGeneratorModule,
         BullModule,
       ],
     };

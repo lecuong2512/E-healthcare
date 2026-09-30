@@ -87,6 +87,7 @@ describe('BullMQ Queue Infrastructure & Producer (SRS Section 7.1)', () => {
 
     it('should enqueue 24h appointment reminder email', async () => {
       await producerService.enqueueAppointmentReminder24h({
+        notificationLogId: 'notify-24h-1',
         to: 'patient@example.com',
         patientName: 'Nguyen Van A',
         appointmentCode: 'APT-260923-0002',
@@ -101,6 +102,7 @@ describe('BullMQ Queue Infrastructure & Producer (SRS Section 7.1)', () => {
       const job = mockEmailQueue.jobs[0];
       expect(job.name).toBe(JobName.EMAIL_SEND_REMINDER_24H);
       expect(job.data.notes).toContain('Nhin an sang');
+      expect(job.opts.jobId).toBe('appointment-reminder-notify-24h-1');
     });
   });
 
@@ -120,6 +122,7 @@ describe('BullMQ Queue Infrastructure & Producer (SRS Section 7.1)', () => {
 
     it('should enqueue 2h appointment reminder SMS', async () => {
       await producerService.enqueueAppointmentReminder2h({
+        notificationLogId: 'notify-2h-1',
         phoneNumber: '0987654321',
         patientName: 'Tran Van E',
         appointmentCode: 'APT-260923-0003',
@@ -132,6 +135,7 @@ describe('BullMQ Queue Infrastructure & Producer (SRS Section 7.1)', () => {
       const job = mockSmsQueue.jobs[0];
       expect(job.name).toBe(JobName.SMS_SEND_REMINDER_2H);
       expect(job.data.appointmentCode).toBe('APT-260923-0003');
+      expect(job.opts.jobId).toBe('appointment-reminder-notify-2h-1');
     });
   });
 
@@ -144,6 +148,8 @@ describe('BullMQ Queue Infrastructure & Producer (SRS Section 7.1)', () => {
         doctorName: 'BS. Tran B',
         diagnosis: 'Tang huyet ap vo can',
         icd10Code: 'I10',
+        verificationHash: 'a'.repeat(64),
+        verificationUrl: `https://portal.example.test/api/v1/clinical/prescriptions/RX-260923-0001/verify?hash=${'a'.repeat(64)}`,
         medicines: [
           {
             medicineName: 'Amlodipine 5mg',

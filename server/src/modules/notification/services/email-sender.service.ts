@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { createTransport, Transporter } from 'nodemailer';
 import { environment } from '../../../config/environment';
 import {
@@ -79,6 +79,9 @@ Trân trọng,
   }
 
   async sendAppointmentReminder24h(payload: EmailAppointmentReminder24hPayload): Promise<void> {
+    if (!this.transporter) {
+      throw new ServiceUnavailableException('SMTP reminder delivery is not configured.');
+    }
     const subject = `[E-Healthcare] Nhắc hẹn: Quý khách có lịch khám vào ngày mai (${payload.date})`;
     const text = `Kính gửi ${payload.patientName},
 
@@ -94,7 +97,12 @@ ${payload.notes || '- Vui lòng mang theo CCCD gắn chip và các kết quả x
 Trân trọng cảm ơn,
 Phòng khám E-Healthcare`;
 
-    await this.sendMail(payload.to, subject, text);
+    const sender = environment.SMTP_FROM?.match(/<([^>]+)>/)?.[1] || environment.SMTP_FROM || '';
+    const senderDomain = sender.split('@')[1];
+    const messageId = payload.notificationLogId && senderDomain
+      ? `<${payload.notificationLogId}@${senderDomain}>`
+      : undefined;
+    await this.sendMail(payload.to, subject, text, messageId);
   }
 
   async sendAppointmentCancellation(payload: EmailAppointmentCancellationPayload): Promise<void> {
@@ -106,7 +114,7 @@ Phòng khám E-Healthcare`;
     await this.sendMail(payload.to, subject, text);
   }
 
-  private async sendMail(to: string, subject: string, text: string): Promise<void> {
+  private async sendMail(to: string, subject: string, text: string, messageId?: string): Promise<void> {
     if (!this.transporter) {
       this.logger.log(`[MOCK EMAIL SEND] To: ${to} | Subject: ${subject}`);
       return;
@@ -118,10 +126,11 @@ Phòng khám E-Healthcare`;
         to,
         subject,
         text,
+        ...(messageId ? { messageId } : {}),
       });
-      this.logger.log(`Email successfully sent to ${to} for subject "${subject}"`);
+      this.logger.log('Email successfully sent through SMTP.');
     } catch (err: any) {
-      this.logger.error(`Failed to send email to ${to}: ${err.message}`);
+      this.logger.error('SMTP email delivery failed.');
       throw err;
     }
   }
