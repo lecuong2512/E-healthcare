@@ -1,14 +1,24 @@
 import { Role } from "../enums/role.enum";
 import { Gender } from "../enums/gender.enum";
 
+export interface CurrentUser {
+  id?: string;
+  fullName: string;
+  email?: string | null;
+  phoneNumber?: string | null;
+  role: Role | string;
+}
+
 export interface LoginResponse {
   accessToken: string;
   role: Role;
+  user?: CurrentUser;
 }
 
 export interface RefreshResponse {
   accessToken: string;
   role: LoginResponse["role"];
+  user?: CurrentUser;
 }
 
 export interface RegisterRequest {
