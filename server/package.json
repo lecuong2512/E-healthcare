@@ -12,6 +12,7 @@
     "migration:revert": "node -r ts-node/register -r tsconfig-paths/register ../node_modules/typeorm/cli.js migration:revert -d src/database/data-source.ts",
     "security:key-rotate": "ts-node -r tsconfig-paths/register src/commands/rotate-medical-encryption.ts",
     "test": "jest --runInBand",
+    "test:integration:payment": "node test/run-payment-integration.cjs",
     "test:integration": "jest --runInBand --config jest.integration.config.cjs"
   },
   "dependencies": {

@@ -2,6 +2,8 @@ import 'reflect-metadata';
 import './test-environment';
 import { BadRequestException, ConflictException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import Redis from 'ioredis';
 import { DataSource } from 'typeorm';
 import { AppointmentStatus, PaymentMethod, PaymentStatus, PaymentTransactionStatus, SlotStatus } from '@shared/enums';
@@ -14,6 +16,8 @@ import { DoctorScheduleEntity } from '../src/database/entities/doctor-schedule.e
 import { PaymentReconciliationAuditEntity } from '../src/database/entities/payment-reconciliation-audit.entity';
 import { RedisService } from '../src/common/redis/redis.service';
 import { BookingService } from '../src/modules/booking/booking.service';
+import { DoctorSearchService } from '../src/modules/doctor/doctor-search.service';
+import { DoctorCacheService } from '../src/modules/doctor/doctor-cache.service';
 import { PaymentConfiguration } from '../src/modules/payment/payment-config';
 import { PaymentFinalizerService } from '../src/modules/payment/payment-finalizer.service';
 import { PaymentReconciliationService } from '../src/modules/payment/payment-reconciliation.service';
@@ -172,6 +176,137 @@ describe('Payment invariants on PostgreSQL and Redis', () => {
     await redis.set(key, 'ready', 'EX', 30);
     await expect(redis.get(key)).resolves.toBe('ready');
     await redis.del(key);
+  });
+
+  it('keeps a verified failed attempt recoverable and permits an atomic clinic fallback', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1');
+    const transaction = await database.getRepository(PaymentTransactionEntity).findOneByOrFail({ appointmentId });
+    await finalizer.finalize(verified(transaction, 'FINAL_FAILED'));
+    expect(await service.status(appointmentId, patientId)).toMatchObject({
+      appointmentStatus: AppointmentStatus.PENDING_PAYMENT, transactionStatus: PaymentTransactionStatus.FAILED,
+      canRetry: true, canSwitchProvider: true, canFallbackToClinic: true,
+    });
+    await service.fallbackToClinic(appointmentId, patientId);
+    const confirmed = await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId });
+    expect(confirmed.status).toBe(AppointmentStatus.CONFIRMED);
+    expect(confirmed.paymentStatus).toBe(PaymentStatus.UNPAID);
+    expect((await database.getRepository(DoctorScheduleEntity).findOneByOrFail({ id: confirmed.scheduleId })).status).toBe(SlotStatus.BOOKED);
+    await finalizer.finalize(verified(transaction, 'SUCCESS'));
+    expect((await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId })).status).toBe(AppointmentStatus.CONFIRMED);
+    expect(await database.getRepository(RefundRequestEntity).countBy({ paymentTransactionId: transaction.id })).toBe(1);
+  });
+
+  it('blocks repayment and fallback for reconciliation even with explicit switch consent', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1');
+    await database.getRepository(PaymentTransactionEntity).update({ appointmentId }, { status: PaymentTransactionStatus.RECONCILIATION_REQUIRED });
+    expect(await service.status(appointmentId, patientId)).toMatchObject({ canRetry: false, canSwitchProvider: false, canFallbackToClinic: false });
+    await expect(service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.MOMO, supersedeActive: true }, '127.0.0.1')).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.fallbackToClinic(appointmentId, patientId)).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('excludes elapsed same-day slots in the real PostgreSQL doctor detail query', async () => {
+    await database.query(`INSERT INTO doctor_schedules (doctor_id, date, start_time, end_time, status) VALUES
+      ($1, (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, '00:00:00', '00:30:00', 'AVAILABLE'),
+      ($1, '2099-12-01', '09:00:00', '09:30:00', 'AVAILABLE')`, [doctorId]);
+    const cache = { key: () => 'qa-doctor', getJson: async () => null, setJson: async () => undefined };
+    const result = await new DoctorSearchService(database, cache as unknown as DoctorCacheService).findOne(doctorId);
+    expect(result.availableSchedules).toHaveLength(1);
+    expect(result.availableSchedules[0].date).toBe('2099-12-01');
+  });
+
+  it('re-seeds future schedules deterministically without reviving existing checkout state', async () => {
+    const seed = readFileSync(resolve(__dirname, '../../scripts/seed-patient-payment-demo.sql'), 'utf8');
+    await database.query(seed);
+    await database.query(`UPDATE doctor_schedules SET date = CURRENT_DATE - 1, start_time = '07:00', end_time = '07:30' WHERE id = '90000000-0000-4000-8000-000000000031'`);
+    await database.query(seed);
+    await database.query(seed);
+    const [summary] = await database.query(`SELECT COUNT(*)::int AS count, bool_and(date > (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date) AS future FROM doctor_schedules WHERE id::text LIKE '90000000-0000-4000-8000-%'`);
+    expect(summary).toEqual({ count: 6, future: true });
+    const demoPatient = '90000000-0000-4000-8000-000000000001';
+    const checkout = await appointment(demoPatient);
+    await service.initiate(checkout, demoPatient, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1');
+    await database.query('BEGIN');
+    try {
+      await database.query(readFileSync(resolve(__dirname, '../../scripts/reset-patient-payment-test-data.sql'), 'utf8'));
+      await database.query(seed);
+      await database.query('COMMIT');
+    } catch (error) { await database.query('ROLLBACK'); throw error; }
+    expect(await database.getRepository(AppointmentEntity).countBy({ patientId: demoPatient })).toBe(0);
+    expect(await database.getRepository(PaymentTransactionEntity).countBy({ patientId: demoPatient })).toBe(0);
+  });
+
+  it('cancels owned checkout atomically, releases its voucher and Redis lock, and refunds late success once', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1');
+    const original = await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId });
+    const transaction = await database.getRepository(PaymentTransactionEntity).findOneByOrFail({ appointmentId });
+    const lockKey = BookingService.formatSlotLockKey(doctorId, original.scheduleId);
+    const metadataKey = BookingService.formatReservationKey(original.reservationId!);
+    await redis.set(lockKey, original.reservationId!, 'EX', 600);
+    await redis.set(metadataKey, JSON.stringify({ patientId }), 'EX', 600);
+    await database.query(`INSERT INTO vouchers (user_id, code, discount_percent, expires_at, is_used, used_at, redeemed_appointment_id)
+      VALUES ($1, 'CANCEL20', 20, NOW() + INTERVAL '1 day', true, NOW(), $2)`, [patientId, appointmentId]);
+    await database.getRepository(AppointmentEntity).update(appointmentId, { voucherCode: 'CANCEL20' });
+
+    await service.cancelPending(appointmentId, patientId);
+    await expect(service.cancelPending(appointmentId, patientId)).resolves.toMatchObject({ appointmentStatus: AppointmentStatus.CANCELLED });
+    expect((await database.getRepository(DoctorScheduleEntity).findOneByOrFail({ id: original.scheduleId })).status).toBe(SlotStatus.AVAILABLE);
+    expect(await redis.get(lockKey)).toBeNull();
+    expect(await redis.get(metadataKey)).toBeNull();
+    const [voucher] = await database.query('SELECT is_used, redeemed_appointment_id FROM vouchers WHERE code = $1', ['CANCEL20']);
+    expect(voucher).toEqual({ is_used: false, redeemed_appointment_id: null });
+    expect((await database.getRepository(PaymentTransactionEntity).findOneByOrFail({ id: transaction.id })).status).toBe(PaymentTransactionStatus.SUPERSEDED);
+    await expect(finalizer.finalize(verified(transaction, 'SUCCESS'))).resolves.toBe('LATE_SUCCESS');
+    await expect(finalizer.finalize(verified(transaction, 'SUCCESS'))).resolves.toBe('ALREADY_FINALIZED');
+    const cancelled = await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId });
+    expect(cancelled.status).toBe(AppointmentStatus.CANCELLED);
+    expect(cancelled.paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
+    expect(await database.getRepository(RefundRequestEntity).countBy({ paymentTransactionId: transaction.id })).toBe(1);
+  });
+
+  it('rejects another patient cancellation and refuses cancellation after successful payment', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1');
+    await expect(service.cancelPending(appointmentId, otherPatientId)).rejects.toBeInstanceOf(ForbiddenException);
+    const transaction = await database.getRepository(PaymentTransactionEntity).findOneByOrFail({ appointmentId });
+    await finalizer.finalize(verified(transaction, 'SUCCESS'));
+    await expect(service.cancelPending(appointmentId, patientId)).rejects.toBeInstanceOf(ConflictException);
+    expect((await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId })).status).toBe(AppointmentStatus.CONFIRMED);
+  });
+
+  it('never deletes a replacement Redis reservation when cancelling the old checkout', async () => {
+    const appointmentId = await appointment();
+    const original = await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId });
+    const lockKey = BookingService.formatSlotLockKey(doctorId, original.scheduleId);
+    const replacement = randomUUID();
+    await redis.set(lockKey, replacement, 'EX', 30);
+    try {
+      await service.cancelPending(appointmentId, patientId);
+      expect(await redis.get(lockKey)).toBe(replacement);
+    } finally {
+      await new RedisService(redis).releaseLockIfOwner(lockKey, replacement);
+    }
+  });
+
+  it('serializes callback and user cancellation without deadlock or re-confirming cancelled appointments', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1');
+    const transaction = await database.getRepository(PaymentTransactionEntity).findOneByOrFail({ appointmentId });
+    const outcomes = await Promise.allSettled([service.cancelPending(appointmentId, patientId), finalizer.finalize(verified(transaction, 'SUCCESS'))]);
+    expect(outcomes[1].status).toBe('fulfilled');
+    if (outcomes[0].status === 'rejected') expect(outcomes[0].reason).toBeInstanceOf(ConflictException);
+    const current = await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId });
+    const payment = await database.getRepository(PaymentTransactionEntity).findOneByOrFail({ id: transaction.id });
+    if (current.status === AppointmentStatus.CANCELLED) {
+      expect(current.paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
+      expect(payment.status).toBe(PaymentTransactionStatus.LATE_SUCCESS);
+    } else {
+      expect(current.status).toBe(AppointmentStatus.CONFIRMED);
+      expect(current.paymentStatus).toBe(PaymentStatus.PAID);
+      expect(payment.status).toBe(PaymentTransactionStatus.SUCCESS);
+    }
   });
 
   it('allows only one active transaction for concurrent initiations', async () => {
@@ -345,6 +480,7 @@ describe('Payment invariants on PostgreSQL and Redis', () => {
     );
     const transaction = await database.getRepository(PaymentTransactionEntity)
       .findOneByOrFail({ appointmentId });
+    await database.getRepository(AppointmentEntity).update(appointmentId, { reservationExpiresAt: new Date(Date.now() - 1_000) });
     await finalizer.expireReservationForReconciliation(
       PaymentMethod.VNPAY,
       transaction.merchantTransactionId,
