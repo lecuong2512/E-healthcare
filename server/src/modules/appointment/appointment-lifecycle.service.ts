@@ -86,7 +86,8 @@ export class AppointmentLifecycleService {
     return this.dataSource.transaction(async (manager) => {
       const appointment = await this.lockAppointment(manager, id);
       if (appointment.patientId !== actor.userId) throw new ForbiddenException('Bạn chỉ có thể hủy lịch hẹn của chính mình.');
-      if (![AppointmentStatus.PENDING_PAYMENT, AppointmentStatus.CONFIRMED].includes(appointment.status)) throw new BadRequestException('Lịch hẹn hiện không thể hủy.');
+      if (appointment.status === AppointmentStatus.PENDING_PAYMENT) throw new BadRequestException('Vui lòng hủy checkout qua payments/:appointmentId/cancel-pending.');
+      if (appointment.status !== AppointmentStatus.CONFIRMED) throw new BadRequestException('Lịch hẹn hiện không thể hủy.');
       const schedule = await manager.getRepository(DoctorScheduleEntity).findOneByOrFail({ id: appointment.scheduleId });
       const cancelled = await this.cancelWithin(manager, appointment, AppointmentStatus.CANCELLED_BY_PATIENT, actor.userId, reason, AppointmentLifecycleService.patientRefundPercent(this.scheduledAt(schedule)), true);
       await this.auditCancellation(manager, auditContext, cancelled);
@@ -112,7 +113,6 @@ export class AppointmentLifecycleService {
       const appointment = await this.lockAppointment(manager, id);
       if (
         ![
-          AppointmentStatus.PENDING_PAYMENT,
           AppointmentStatus.CONFIRMED,
         ].includes(appointment.status)
       ) {
@@ -250,8 +250,6 @@ export class AppointmentLifecycleService {
 
     return committed.result;
   }
-  static isPaymentExpired(createdAt: Date, now = new Date()): boolean { return createdAt.getTime() <= now.getTime() - 10 * 60 * 1000; }
-  async expirePendingPayments(now = new Date()): Promise<number> { if (!this.dataSource.isInitialized) return 0; const candidates = await this.dataSource.getRepository(AppointmentEntity).createQueryBuilder('appointment').where('appointment.status = :status', { status: AppointmentStatus.PENDING_PAYMENT }).andWhere('appointment.created_at <= :expiresAt', { expiresAt: new Date(now.getTime() - 10 * 60 * 1000) }).getMany(); let expired = 0; for (const candidate of candidates) await this.dataSource.transaction(async (manager) => { const appointment = await this.lockAppointment(manager, candidate.id); if (appointment.status !== AppointmentStatus.PENDING_PAYMENT || !AppointmentLifecycleService.isPaymentExpired(appointment.createdAt, now)) return; appointment.status = AppointmentStatus.EXPIRED; const schedule = await manager.getRepository(DoctorScheduleEntity).findOneByOrFail({ id: appointment.scheduleId }); if (schedule.status === SlotStatus.BOOKED) { schedule.status = SlotStatus.AVAILABLE; await manager.save(schedule); } await manager.save(appointment); expired += 1; }); return expired; }
   private async transitionWithin(manager: EntityManager, id: string, target: AppointmentStatus, actor: AppointmentActor, automated = false): Promise<{ appointment: AppointmentEntity; previousStatus: AppointmentStatus }> { const appointment = await this.lockAppointment(manager, id); if (!TRANSITIONS[appointment.status]?.includes(target)) throw new BadRequestException('Không thể chuyển trạng thái lịch hẹn.'); if (actor.role === Role.DOCTOR && !automated) await this.assertDoctorOwnership(manager, appointment, actor); const previousStatus = appointment.status; appointment.status = target; if (target === AppointmentStatus.CHECKED_IN) appointment.checkedInAt = new Date(); return { appointment: await manager.save(appointment), previousStatus }; }
   private async cancelWithin(manager: EntityManager, appointment: AppointmentEntity, status: AppointmentStatus, actorId: string, reason: string | undefined, percent: number, recordConsent = false): Promise<AppointmentEntity> { const refundAmount = appointment.paymentStatus === PaymentStatus.PAID ? Math.round(Number(appointment.totalAmount) * percent) / 100 : 0; appointment.status = status; appointment.cancelledAt = new Date(); appointment.cancelledBy = actorId; appointment.cancellationReason = reason?.trim() || null; if (recordConsent) appointment.consentNd13AcceptedAt = new Date(); appointment.refundPercent = percent; appointment.refundAmount = refundAmount; const schedule = await manager.getRepository(DoctorScheduleEntity).findOneByOrFail({ id: appointment.scheduleId }); if (schedule.status === SlotStatus.BOOKED) { schedule.status = SlotStatus.AVAILABLE; await manager.save(schedule); } return manager.save(appointment); }
   private async lockAppointment(manager: EntityManager, id: string): Promise<AppointmentEntity> { const appointment = await manager.getRepository(AppointmentEntity).createQueryBuilder('appointment').setLock('pessimistic_write').where('appointment.id = :id', { id }).getOne(); if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn.'); return appointment; }

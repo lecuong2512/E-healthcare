@@ -146,7 +146,7 @@ describe('PaymentService initiation and status', () => {
       appointmentId,
       patientId,
       idempotencyKey,
-      { provider: PaymentMethod.MOMO },
+      { provider: PaymentMethod.VNPAY },
       '127.0.0.1',
     );
 
@@ -311,7 +311,7 @@ describe('PaymentService initiation and status', () => {
     (dataSource.getRepository as jest.Mock).mockImplementation((entity) =>
       entity === AppointmentEntity
         ? { findOne: jest.fn().mockResolvedValue(appointment) }
-        : { findOne: paymentFindOne },
+        : { findOne: paymentFindOne, find: jest.fn().mockResolvedValue([canonical]) },
     );
 
     const result = await service.status(appointmentId, patientId);

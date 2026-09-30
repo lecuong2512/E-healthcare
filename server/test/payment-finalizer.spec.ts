@@ -62,6 +62,9 @@ describe('PaymentFinalizerService', () => {
     } as PaymentTransactionEntity;
     appointment = {
       id: 'appointment-id',
+      patientId: 'patient-id',
+      reservationId: payment.reservationId,
+      reservationExpiresAt: new Date(Date.now() + 600_000),
       doctorId: 'doctor-id',
       scheduleId: 'schedule-id',
       status: AppointmentStatus.PENDING_PAYMENT,
@@ -79,6 +82,7 @@ describe('PaymentFinalizerService', () => {
       andWhere: jest.fn().mockReturnThis(),
       getOne: jest.fn().mockResolvedValue(value),
       getOneOrFail: jest.fn().mockResolvedValue(value),
+      getMany: jest.fn().mockResolvedValue([value].filter(Boolean)),
     });
     manager = {
       getRepository: jest.fn((entity) => {
@@ -86,6 +90,7 @@ describe('PaymentFinalizerService', () => {
           return { findOne: jest.fn().mockResolvedValue(null) };
         }
         return {
+          findOne: jest.fn().mockResolvedValue(entity === PaymentTransactionEntity ? payment : null),
           createQueryBuilder: jest.fn(() =>
             queryFor(
               entity === PaymentTransactionEntity
@@ -125,14 +130,52 @@ describe('PaymentFinalizerService', () => {
     );
   });
 
-  it('cancels and releases the slot only for a verified final failure', async () => {
+  it('keeps a valid checkout recoverable after a verified failed attempt', async () => {
     await expect(service.finalize(verified('FINAL_FAILED'))).resolves.toBe('FAILED');
 
     expect(payment.status).toBe(PaymentTransactionStatus.FAILED);
-    expect(appointment.status).toBe(AppointmentStatus.CANCELLED);
+    expect(appointment.status).toBe(AppointmentStatus.PENDING_PAYMENT);
     expect(appointment.paymentStatus).toBe(PaymentStatus.FAILED);
+    expect(schedule.status).toBe(SlotStatus.HOLDING);
+    expect(redis.releaseReservationIfOwner).not.toHaveBeenCalled();
+  });
+
+  it('uses reservation expiry rather than createdAt and expires only once at the boundary', async () => {
+    const expiry = new Date('2030-01-01T00:10:00Z');
+    appointment.reservationExpiresAt = expiry;
+    appointment.createdAt = new Date('2020-01-01T00:00:00Z');
+    await service.expireReservationForReconciliation(PaymentMethod.VNPAY, 'PAY01', new Date(expiry.getTime() - 1_000));
+    expect(appointment.status).toBe(AppointmentStatus.PENDING_PAYMENT);
+    expect(schedule.status).toBe(SlotStatus.HOLDING);
+    await service.expireReservationForReconciliation(PaymentMethod.VNPAY, 'PAY01', new Date(expiry.getTime() + 1_000));
+    expect(appointment.status).toBe(AppointmentStatus.CANCELLED);
     expect(schedule.status).toBe(SlotStatus.AVAILABLE);
+    expect(payment.status).toBe(PaymentTransactionStatus.RECONCILIATION_REQUIRED);
+    await service.expireReservationForReconciliation(PaymentMethod.VNPAY, 'PAY01', new Date(expiry.getTime() + 2_000));
+    expect(redis.releaseReservationIfOwner).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes success after the reservation deadline to refund even before the scheduler runs', async () => {
+    appointment.reservationExpiresAt = new Date(Date.now() - 1_000);
+    await expect(service.finalize(verified('SUCCESS'))).resolves.toBe('LATE_SUCCESS');
+    expect(appointment.status).toBe(AppointmentStatus.CANCELLED);
+    expect(appointment.paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
+    expect(schedule.status).toBe(SlotStatus.AVAILABLE);
+  });
+
+  it('falls back to clinic after a definitive failure without creating a second appointment', async () => {
+    payment.status = PaymentTransactionStatus.FAILED;
+    await expect(service.fallbackToClinic(appointment.id, 'patient-id')).resolves.toMatchObject({ appointmentStatus: AppointmentStatus.CONFIRMED });
+    expect(appointment.paymentMethod).toBe(PaymentMethod.PAY_AT_CLINIC);
+    expect(appointment.paymentStatus).toBe(PaymentStatus.UNPAID);
+    expect(schedule.status).toBe(SlotStatus.BOOKED);
     expect(redis.releaseReservationIfOwner).toHaveBeenCalled();
+  });
+
+  it.each([PaymentTransactionStatus.PENDING, PaymentTransactionStatus.RECONCILIATION_REQUIRED, PaymentTransactionStatus.SUPERSEDED])('blocks clinic fallback for an unresolved %s attempt', async (state) => {
+    payment.status = state;
+    await expect(service.fallbackToClinic(appointment.id, 'patient-id')).rejects.toThrow(/unresolved/);
+    expect(manager.save).not.toHaveBeenCalled();
   });
 
   it('keeps the committed success when Redis cleanup fails', async () => {
@@ -213,7 +256,8 @@ describe('PaymentFinalizerService', () => {
     );
   });
 
-  it('returns a reserved voucher after final payment failure', async () => {
+  it('returns a reserved voucher after failure past the reservation deadline', async () => {
+    appointment.reservationExpiresAt = new Date(Date.now() - 1_000);
     appointment.voucherCode = 'SAVE20';
     voucher = {
       id: 'voucher-id',
@@ -232,6 +276,7 @@ describe('PaymentFinalizerService', () => {
   });
 
   it('expires the held slot into reconciliation without claiming payment failure', async () => {
+    appointment.reservationExpiresAt = new Date(Date.now() - 1_000);
     await service.expireReservationForReconciliation(
       PaymentMethod.VNPAY,
       payment.merchantTransactionId,
@@ -265,6 +310,7 @@ describe('PaymentFinalizerService', () => {
   });
 
   it('routes payment to late-success when timeout wins the IPN race', async () => {
+    appointment.reservationExpiresAt = new Date(Date.now() - 1_000);
     await service.expireReservationForReconciliation(
       PaymentMethod.VNPAY,
       payment.merchantTransactionId,
@@ -283,6 +329,54 @@ describe('PaymentFinalizerService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(manager.save).not.toHaveBeenCalled();
     expect(redis.releaseReservationIfOwner).not.toHaveBeenCalled();
+  });
+
+  it('cancels pending checkout, returns its voucher and releases the owned Redis reservation', async () => {
+    appointment.voucherCode = 'SAVE20';
+    voucher = { isUsed: true, redeemedAppointmentId: appointment.id, usedAt: new Date() } as VoucherEntity;
+    const result = await service.cancelPending(appointment.id, 'patient-id');
+    expect(result.appointmentStatus).toBe(AppointmentStatus.CANCELLED);
+    expect(appointment.cancellationReason).toBe('PATIENT_CANCELLED_PAYMENT');
+    expect(appointment.cancelledBy).toBe('patient-id');
+    expect(payment.status).toBe(PaymentTransactionStatus.SUPERSEDED);
+    expect(schedule.status).toBe(SlotStatus.AVAILABLE);
+    expect(voucher.isUsed).toBe(false);
+    expect(voucher.redeemedAppointmentId).toBeNull();
+    expect(redis.releaseReservationIfOwner).toHaveBeenCalledWith(
+      'lock:doctor:doctor-id:slot:schedule-id', `reservation:${payment.reservationId}`, payment.reservationId,
+    );
+  });
+
+  it('allows cancelling reconciliation checkout and replaying an acknowledged cancellation', async () => {
+    payment.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
+    await service.cancelPending(appointment.id, 'patient-id');
+    await expect(service.cancelPending(appointment.id, 'patient-id')).resolves.toMatchObject({ appointmentStatus: AppointmentStatus.CANCELLED });
+    expect(payment.status).toBe(PaymentTransactionStatus.SUPERSEDED);
+  });
+
+  it('rejects cancelling another patient checkout without touching payment or reservation', async () => {
+    await expect(service.cancelPending(appointment.id, 'other-patient')).rejects.toThrow(/chính mình/);
+    expect(manager.save).not.toHaveBeenCalled();
+    expect(redis.releaseReservationIfOwner).not.toHaveBeenCalled();
+  });
+
+  [PaymentTransactionStatus.SUCCESS, PaymentTransactionStatus.LATE_SUCCESS].forEach((state) => {
+    it(`rejects cancelling a ${state} payment`, async () => {
+      payment.status = state;
+      await expect(service.cancelPending(appointment.id, 'patient-id')).rejects.toThrow(/ghi nhận thanh toán/);
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+  });
+
+  it('routes success after user cancellation to one refund and never restores the slot', async () => {
+    await service.cancelPending(appointment.id, 'patient-id');
+    await expect(service.finalize(verified('SUCCESS'))).resolves.toBe('LATE_SUCCESS');
+    expect(appointment.status).toBe(AppointmentStatus.CANCELLED);
+    expect(appointment.paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
+    expect(schedule.status).toBe(SlotStatus.AVAILABLE);
+    expect(manager.create).toHaveBeenCalledWith(RefundRequestEntity, expect.objectContaining({ paymentTransactionId: payment.id, status: 'PENDING' }));
+    await expect(service.finalize(verified('SUCCESS'))).resolves.toBe('ALREADY_FINALIZED');
+    expect(manager.create).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a signed MoMo callback with a mismatched request ID', async () => {

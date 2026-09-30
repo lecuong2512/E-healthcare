@@ -16,6 +16,7 @@ import {
 } from '@shared/enums';
 import {
   InitiatePaymentResponse,
+  CancelPendingPaymentResponse,
   PaymentStatusResponse,
 } from '@shared/interfaces';
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
@@ -63,6 +64,9 @@ export class PaymentService {
       if (appointment.patientId !== patientId) {
         throw new ForbiddenException('Bạn không có quyền thanh toán lịch hẹn này.');
       }
+      if ([PaymentStatus.PAID, PaymentStatus.REFUND_PENDING, PaymentStatus.REFUNDED].includes(appointment.paymentStatus)) {
+        throw new ConflictException('Checkout already recorded funds. Do not pay again.');
+      }
 
       const paymentRepository = manager.getRepository(PaymentTransactionEntity);
       const idempotent = await paymentRepository.findOne({
@@ -71,6 +75,13 @@ export class PaymentService {
       if (idempotent) {
         if (idempotent.appointmentId !== appointmentId) {
           throw new ConflictException('Idempotency-Key đã được dùng cho lịch hẹn khác.');
+        }
+        if (idempotent.provider !== dto.provider) {
+          throw new ConflictException('Idempotency-Key belongs to a different provider.');
+        }
+        if (appointment.status !== AppointmentStatus.PENDING_PAYMENT ||
+          !appointment.reservationExpiresAt || appointment.reservationExpiresAt.getTime() <= Date.now()) {
+          throw new ConflictException('Checkout is no longer payable.');
         }
         if (idempotent.status !== PaymentTransactionStatus.PENDING) {
           throw new ConflictException('Giao dịch với Idempotency-Key này đã kết thúc.');
@@ -107,6 +118,9 @@ export class PaymentService {
         })
         .getOne();
       if (active) {
+        if (active.status === PaymentTransactionStatus.RECONCILIATION_REQUIRED) {
+          throw new ConflictException('Payment is being reconciled. Do not pay again.');
+        }
         if (active.provider === dto.provider) {
           throw new ConflictException(
             'An active transaction already exists for this payment provider.',
@@ -186,6 +200,14 @@ export class PaymentService {
     return this.finalizer.finalize(await this.momo.verifyCallback(payload));
   }
 
+  cancelPending(appointmentId: string, patientId: string): Promise<CancelPendingPaymentResponse> {
+    return this.finalizer.cancelPending(appointmentId, patientId);
+  }
+
+  fallbackToClinic(appointmentId: string, patientId: string) {
+    return this.finalizer.fallbackToClinic(appointmentId, patientId);
+  }
+
   async status(appointmentId: string, patientId: string): Promise<PaymentStatusResponse> {
     const appointment = await this.dataSource.getRepository(AppointmentEntity).findOne({
       where: { id: appointmentId },
@@ -206,13 +228,27 @@ export class PaymentService {
           where: { appointmentId },
           order: { createdAt: 'DESC' },
         });
+    const payments = await paymentRepository.find({ where: { appointmentId } });
+    const unresolved = payments.some((payment) => [PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+      PaymentTransactionStatus.SUCCESS, PaymentTransactionStatus.LATE_SUCCESS].includes(payment.status));
+    const recoverable = appointment.status === AppointmentStatus.PENDING_PAYMENT &&
+      !!appointment.reservationExpiresAt && appointment.reservationExpiresAt.getTime() > Date.now() &&
+      ![PaymentStatus.PAID, PaymentStatus.REFUND_PENDING, PaymentStatus.REFUNDED].includes(appointment.paymentStatus) && !unresolved;
+    const canFallbackToClinic = recoverable && payments.every((payment) =>
+      [PaymentTransactionStatus.FAILED, PaymentTransactionStatus.TIMEOUT].includes(payment.status));
     return {
       appointmentId,
+      appointmentCode: appointment.appointmentCode,
+      idempotencyKey: transaction?.idempotencyKey,
+      failureCode: transaction?.status === PaymentTransactionStatus.FAILED ? 'PROVIDER_REJECTED' : null,
+      canRetry: recoverable,
+      canSwitchProvider: recoverable,
+      canFallbackToClinic,
       appointmentStatus: appointment.status,
       paymentStatus: appointment.paymentStatus,
       provider: appointment.paymentMethod,
       transactionStatus: transaction?.status ?? null,
-      expiresAt: transaction?.expiresAt ?? null,
+      expiresAt: appointment.reservationExpiresAt ?? transaction?.expiresAt ?? null,
       paidAt: transaction?.paidAt ?? appointment.paidAt,
     };
   }

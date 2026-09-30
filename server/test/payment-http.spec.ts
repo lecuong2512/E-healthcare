@@ -63,6 +63,8 @@ describe('Payment HTTP authorization and DTO contract', () => {
       expiresAt: new Date().toISOString(),
     }),
     status: jest.fn().mockResolvedValue({}),
+    cancelPending: jest.fn().mockResolvedValue({ appointmentId, appointmentStatus: 'CANCELLED' }),
+    fallbackToClinic: jest.fn().mockResolvedValue({ appointmentId, appointmentStatus: 'CONFIRMED' }),
     handleVnpayIpn: jest.fn().mockResolvedValue('SUCCESS'),
     handleMomoIpn: jest.fn().mockResolvedValue('SUCCESS'),
     pendingRefunds: jest.fn().mockResolvedValue([]),
@@ -162,6 +164,24 @@ describe('Payment HTTP authorization and DTO contract', () => {
       .get('/api/v1/payments/refunds/pending')
       .set('x-test-role', Role.ADMIN)
       .expect(200);
+  });
+
+  it('restricts pending checkout cancellation to authenticated patients with a valid appointment ID', async () => {
+    const endpoint = `/api/v1/payments/${appointmentId}/cancel-pending`;
+    await request(app.getHttpServer()).post(endpoint).send({}).expect(401);
+    await request(app.getHttpServer()).post(endpoint).set('x-test-role', Role.DOCTOR).send({}).expect(403);
+    await request(app.getHttpServer()).post('/api/v1/payments/invalid/cancel-pending').set('x-test-role', Role.PATIENT).send({}).expect(400);
+    await request(app.getHttpServer()).post(endpoint).set('x-test-role', Role.PATIENT).send({}).expect(200);
+    expect(payments.cancelPending).toHaveBeenCalledWith(appointmentId, 'patient-id');
+  });
+
+  it('restricts clinic fallback to authenticated patients with valid appointment IDs', async () => {
+    const endpoint = `/api/v1/payments/${appointmentId}/fallback-to-clinic`;
+    await request(app.getHttpServer()).post(endpoint).send({}).expect(401);
+    await request(app.getHttpServer()).post(endpoint).set('x-test-role', Role.DOCTOR).send({}).expect(403);
+    await request(app.getHttpServer()).post('/api/v1/payments/invalid/fallback-to-clinic').set('x-test-role', Role.PATIENT).send({}).expect(400);
+    await request(app.getHttpServer()).post(endpoint).set('x-test-role', Role.PATIENT).send({}).expect(200);
+    expect(payments.fallbackToClinic).toHaveBeenCalledWith(appointmentId, 'patient-id');
   });
 
   it('restricts reconciliation operations and validates controlled outcomes', async () => {

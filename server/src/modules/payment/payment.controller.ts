@@ -15,6 +15,7 @@ import { Throttle } from '@nestjs/throttler';
 import { Role } from '@shared/enums';
 import {
   InitiatePaymentResponse,
+  CancelPendingPaymentResponse,
   PaymentStatusResponse,
 } from '@shared/interfaces';
 import { Public, Roles } from '../../common/decorators/auth.decorators';
@@ -102,6 +103,26 @@ export class PaymentController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PaymentStatusResponse> {
     return this.payments.status(appointmentId, request.auth!.userId);
+  }
+
+  @Roles(Role.PATIENT)
+  @Post(':appointmentId/cancel-pending')
+  @HttpCode(HttpStatus.OK)
+  cancelPending(
+    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CancelPendingPaymentResponse> {
+    return this.payments.cancelPending(appointmentId, request.auth!.userId);
+  }
+
+  @Roles(Role.PATIENT)
+  @Post(':appointmentId/fallback-to-clinic')
+  @HttpCode(HttpStatus.OK)
+  fallbackToClinic(
+    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.payments.fallbackToClinic(appointmentId, request.auth!.userId);
   }
 
   @Public()

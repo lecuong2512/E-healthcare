@@ -4,7 +4,6 @@ import { NotificationModule } from '../notification/notification.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { AppointmentController } from './appointment.controller';
 import { AppointmentLifecycleService } from './appointment-lifecycle.service';
-import { AppointmentPaymentExpiryScheduler } from './appointment-payment-expiry.scheduler';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
@@ -15,7 +14,7 @@ import { AuditModule } from '../audit/audit.module';
     AuditModule,
   ],
   controllers: [AppointmentController],
-  providers: [AppointmentLifecycleService, AppointmentPaymentExpiryScheduler],
+  providers: [AppointmentLifecycleService],
   exports: [AppointmentLifecycleService],
 })
 export class AppointmentModule {}
