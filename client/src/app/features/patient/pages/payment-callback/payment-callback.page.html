@@ -24,8 +24,6 @@
         <h1 class="mt-2 text-2xl font-bold text-slate-900">Đang chờ xác nhận thanh toán</h1>
       } @else if (state() === 'warning') {
         <h1 class="mt-2 text-2xl font-bold text-slate-900">Giao dịch đang được đối soát</h1>
-      } @else if (state() === 'pending') {
-        <h1 class="mt-2 text-2xl font-bold text-slate-900">Đang chờ xác nhận thanh toán</h1>
       } @else if (state() === 'failed') {
         <h1 class="mt-2 text-2xl font-bold text-slate-900">Thanh toán thất bại</h1>
       } @else if (state() === 'cancelled') {
@@ -102,9 +100,20 @@
           <p class="text-center text-xs text-slate-500">Nhà cung cấp: {{ provider() }}. Kết quả callback không thay thế trạng thái do Backend xác nhận.</p>
         }
 
-        @if (state() === 'failed' || state() === 'cancelled') {
+        @if (state() === 'failed') {
+          <div class="space-y-3">
+            <button type="button" (click)="choosePaymentAgain()" class="min-h-11 w-full rounded-lg bg-sky-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-600 focus:ring-offset-2">
+              Chọn lại phương thức thanh toán
+            </button>
+            <button type="button" (click)="cancelAndBookNew()" class="min-h-11 w-full rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-600 focus:ring-offset-2">
+              Hủy ca này để đặt lại / Thanh toán tại viện
+            </button>
+          </div>
+        }
+
+        @if (state() === 'cancelled') {
           <button type="button" (click)="choosePaymentAgain()" class="min-h-11 w-full rounded-lg bg-sky-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-600 focus:ring-offset-2">
-            Chọn lại phương thức thanh toán
+            Đặt lịch khám mới
           </button>
         }
 
@@ -114,9 +123,9 @@
           </button>
         }
 
-        @if (state() === 'pending' && showDemoControls) {
+        @if (showDemoControls && state() !== 'success' && state() !== 'loading') {
           <div class="space-y-2 rounded-lg border border-sky-200 bg-sky-50 p-4">
-            <p class="text-sm font-semibold text-slate-800">Xem thử giao diện thành công</p>
+            <p class="text-sm font-semibold text-slate-800">Chế độ phát triển (Dev Mode)</p>
             <button type="button" (click)="simulateBackendSuccess()" class="min-h-11 w-full rounded-lg bg-sky-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-600 focus:ring-offset-2">
               Mô phỏng kết quả Backend thành công
             </button>

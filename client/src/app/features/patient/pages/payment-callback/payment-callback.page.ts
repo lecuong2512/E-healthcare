@@ -6,7 +6,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppointmentStatus, PaymentStatus, PaymentTransactionStatus } from '@shared/enums';
 import { PaymentStatusResponse } from '@shared/interfaces';
 import { toDataURL } from 'qrcode';
-import { EMPTY, Subscription, catchError, expand, switchMap, timer } from 'rxjs';
+import { EMPTY, Subscription, catchError, expand, switchMap, take, timer } from 'rxjs';
 import { environment } from '../../../../../environments/environment';
 import { PatientBookingApiService } from '../../data-access/patient-booking-api.service';
 import { CurrencyVndPipe } from '../../../../shared/pipes/currency-vnd.pipe';
@@ -136,6 +136,21 @@ export class PaymentCallbackPage {
     void this.router.navigate(['/patient/booking']);
   }
 
+  cancelAndBookNew(): void {
+    const appointmentId = this.latestParams?.get('appointmentId')?.trim()
+      || sessionStorage.getItem('pendingPaymentAppointmentId');
+    sessionStorage.removeItem('pendingPaymentAppointmentId');
+    sessionStorage.removeItem('pendingPaymentContext');
+    if (appointmentId) {
+      this.paymentApi.cancelAppointment(appointmentId, 'Hủy đơn lỗi thanh toán để đặt lại').subscribe({
+        next: () => void this.router.navigate(['/patient/booking']),
+        error: () => void this.router.navigate(['/patient/booking']),
+      });
+    } else {
+      void this.router.navigate(['/patient/booking']);
+    }
+  }
+
   retryStatusCheck(): void {
     if (this.latestParams) this.readCallback(this.latestParams);
   }
@@ -189,10 +204,16 @@ export class PaymentCallbackPage {
     }
 
     this.state.set('loading');
+    let pollCount = 0;
+    const MAX_POLLS = 15;
     this.verificationSubscription = this.paymentApi.getPaymentStatus(appointmentId).pipe(
-      expand((status) => this.stateFor(status) === 'pending'
-        ? timer(2_000).pipe(switchMap(() => this.paymentApi.getPaymentStatus(appointmentId)))
-        : EMPTY),
+      expand((status) => {
+        pollCount++;
+        return this.stateFor(status) === 'pending' && pollCount < MAX_POLLS
+          ? timer(2_000).pipe(switchMap(() => this.paymentApi.getPaymentStatus(appointmentId)))
+          : EMPTY;
+      }),
+      take(MAX_POLLS),
       catchError((error: unknown) => {
         if (requestId === this.verificationSequence) {
           this.message.set(this.apiError(error, 'Không thể kiểm tra trạng thái thanh toán với Backend.'));
@@ -207,8 +228,14 @@ export class PaymentCallbackPage {
           const state = this.stateFor(status);
           if (state !== 'success') {
             this.state.set(state);
-            this.message.set(this.statusMessage(status, state));
-            if (['failed', 'cancelled'].includes(state)) {
+            if (state === 'pending' && pollCount >= MAX_POLLS) {
+              this.message.set(
+                'Hệ thống vẫn đang chờ phản hồi từ cổng thanh toán. Vui lòng bấm "Kiểm tra lại trạng thái" hoặc xem trong Lịch sử khám sau ít phút.',
+              );
+            } else {
+              this.message.set(this.statusMessage(status, state));
+            }
+            if (state === 'cancelled') {
               sessionStorage.removeItem('pendingPaymentAppointmentId');
               sessionStorage.removeItem('pendingPaymentContext');
             }

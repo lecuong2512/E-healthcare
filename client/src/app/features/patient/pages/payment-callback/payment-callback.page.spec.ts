@@ -22,11 +22,12 @@ describe('PaymentCallbackPage', () => {
     router = jasmine.createSpyObj<Router>('Router', ['navigate']);
     paymentApi = jasmine.createSpyObj<PatientBookingApiService>(
       'PatientBookingApiService',
-      ['getPaymentStatus'],
+      ['getPaymentStatus', 'cancelAppointment'],
     );
     paymentApi.getPaymentStatus.and.returnValue(
       requestError ? throwError(() => new Error('network error')) : of(status),
     );
+    paymentApi.cancelAppointment.and.returnValue(of({ success: true }));
     sessionStorage.setItem('pendingPaymentAppointmentId', 'appointment-id');
     await TestBed.configureTestingModule({
       imports: [PaymentCallbackPage],
@@ -94,6 +95,16 @@ describe('PaymentCallbackPage', () => {
     expect(fixture.nativeElement.textContent).toContain('Chọn lại phương thức thanh toán');
     fixture.componentInstance.choosePaymentAgain();
     expect(router.navigate).toHaveBeenCalledWith(['/patient/booking']);
+  });
+
+  it('allows canceling failed appointment to book a new appointment or pay at clinic', async () => {
+    await createPage({ resultCode: '0', orderId: 'order-failed' }, failedStatus());
+
+    expect(fixture.nativeElement.textContent).toContain('Hủy ca này để đặt lại / Thanh toán tại viện');
+    fixture.componentInstance.cancelAndBookNew();
+    expect(paymentApi.cancelAppointment).toHaveBeenCalledWith('appointment-id', jasmine.any(String));
+    expect(router.navigate).toHaveBeenCalledWith(['/patient/booking']);
+    expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBeNull();
   });
 
   it('shows cancellation reason only when Backend reports a cancelled appointment', async () => {
