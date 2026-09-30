@@ -204,7 +204,7 @@ describe('MedicalHistoryPage', () => {
     expect(anchorSpy.download).toContain('RX-PDF-01');
   });
 
-  it('SRS-PAT-04: shows PDF error when prescription API returns an error', () => {
+  it('SRS-PAT-04: shows PDF error when prescription API returns an error', async () => {
     const appointment = { id: 'apt-pdf-02', status: 'COMPLETED' };
     component.showDetails(appointment);
     httpMock.expectOne('/api/v1/clinical/medical-records/appointment/apt-pdf-02').flush({
@@ -229,11 +229,18 @@ describe('MedicalHistoryPage', () => {
     expect(component.pdfDownloading()).toBeTrue();
 
     const pdfReq = httpMock.expectOne('/api/v1/clinical/appointments/apt-pdf-02/prescription.pdf');
-    pdfReq.flush({ message: 'Font PDF chưa cấu hình' }, { status: 503, statusText: 'Service Unavailable' });
+    pdfReq.flush(
+      new Blob([JSON.stringify({ message: 'Font PDF chưa cấu hình' })], { type: 'application/json' }),
+      { status: 503, statusText: 'Service Unavailable' },
+    );
+
+    for (let i = 0; i < 20 && !component.pdfError(); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    fixture.detectChanges();
 
     expect(component.pdfDownloading()).toBeFalse();
     expect(component.pdfError()).toContain('Font PDF chưa cấu hình');
-    fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Font PDF chưa cấu hình');
   });
 
@@ -366,7 +373,7 @@ describe('MedicalHistoryPage', () => {
       component.appointments.set([appt]);
       fixture.detectChanges();
       const cancelButton = Array.from(fixture.nativeElement.querySelectorAll('button'))
-        .find((button: HTMLButtonElement) => button.textContent?.trim() === 'Hủy lịch hẹn') as HTMLButtonElement;
+        .find((button: any) => button.textContent?.trim() === 'Hủy lịch hẹn') as HTMLButtonElement;
       cancelButton.click();
       fixture.detectChanges();
       expect(component.cancelTarget()).toEqual(appt);
@@ -377,7 +384,7 @@ describe('MedicalHistoryPage', () => {
       fixture.detectChanges();
 
       const confirmButton = Array.from(fixture.nativeElement.querySelectorAll('button'))
-        .find((button: HTMLButtonElement) => button.textContent?.trim() === 'Xác nhận hủy') as HTMLButtonElement;
+        .find((button: any) => button.textContent?.trim() === 'Xác nhận hủy') as HTMLButtonElement;
       confirmButton.click();
       expect(component.submitting()).toBeTrue();
       fixture.detectChanges();

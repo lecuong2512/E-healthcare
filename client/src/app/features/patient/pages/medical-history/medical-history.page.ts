@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, NgZone, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MedicalRecordDetailResponse } from '@shared/interfaces';
@@ -86,6 +86,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
   private readonly clinical = inject(ClinicalService);
   private readonly message = inject(NzMessageService);
+  private readonly ngZone = inject(NgZone);
 
   readonly tabs: { id: Tab; label: string }[] = [
     { id: 'upcoming', label: 'Sắp tới' },
@@ -128,7 +129,9 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.load();
-    this.tick = setInterval(() => this.clock.set(Date.now()), 1000);
+    this.ngZone.runOutsideAngular(() => {
+      this.tick = setInterval(() => this.clock.set(Date.now()), 1000);
+    });
   }
 
   ngOnDestroy(): void {
@@ -524,11 +527,21 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
         setTimeout(() => URL.revokeObjectURL(url), 10_000);
         this.pdfDownloading.set(false);
       },
-      error: (e) => {
+      error: async (e: unknown) => {
         this.pdfDownloading.set(false);
-        this.pdfError.set(
-          this.apiError(e, 'Không thể tải đơn thuốc PDF. Vui lòng thử lại sau.')
-        );
+        const fallback = 'Không thể tải đơn thuốc PDF. Vui lòng thử lại sau.';
+        const errObj = e as { error?: unknown };
+        if (errObj?.error instanceof Blob) {
+          try {
+            const text = await errObj.error.text();
+            const parsed = JSON.parse(text) as { message?: string };
+            this.pdfError.set(parsed?.message || fallback);
+          } catch {
+            this.pdfError.set(fallback);
+          }
+        } else {
+          this.pdfError.set(this.apiError(e, fallback));
+        }
       },
     });
   }
