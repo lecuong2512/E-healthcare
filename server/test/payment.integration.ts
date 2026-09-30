@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import Redis from 'ioredis';
 import { DataSource } from 'typeorm';
-import { AppointmentStatus, PaymentMethod, PaymentStatus, PaymentTransactionStatus, SlotStatus } from '@shared/enums';
+import { AppointmentStatus, CounterPaymentMethod, PaymentMethod, PaymentStatus, PaymentTransactionStatus, SlotStatus } from '@shared/enums';
 import { environment } from '../src/config/environment';
 import { createDataSource } from '../src/database/database-options';
 import { PaymentTransactionEntity } from '../src/database/entities/payment-trans.entity';
@@ -22,6 +22,8 @@ import { PaymentConfiguration } from '../src/modules/payment/payment-config';
 import { PaymentFinalizerService } from '../src/modules/payment/payment-finalizer.service';
 import { PaymentReconciliationService } from '../src/modules/payment/payment-reconciliation.service';
 import { PaymentService } from '../src/modules/payment/payment.service';
+import { CounterPaymentService } from '../src/modules/reception/counter-payment.service';
+import { ReceptionAuditService } from '../src/modules/reception/reception-audit.service';
 import { PaymentProviderError, PaymentProviderErrorKind } from '../src/modules/payment/providers/payment-provider.error';
 import { PaymentProvider } from '../src/modules/payment/providers/payment-provider.interface';
 import { VerifiedPaymentResult } from '../src/modules/payment/types/verified-payment-result';
@@ -204,6 +206,29 @@ describe('Payment invariants on PostgreSQL and Redis', () => {
     expect(await service.status(appointmentId, patientId)).toMatchObject({ canRetry: false, canSwitchProvider: false, canFallbackToClinic: false });
     await expect(service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.MOMO, supersedeActive: true }, '127.0.0.1')).rejects.toBeInstanceOf(ConflictException);
     await expect(service.fallbackToClinic(appointmentId, patientId)).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('restores clinic collection after refunding all late online attempts', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1');
+    await service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.MOMO, supersedeActive: true }, '127.0.0.1');
+    const payments = await database.getRepository(PaymentTransactionEntity).find({ where: { appointmentId } });
+    const momo = payments.find(payment => payment.provider === PaymentMethod.MOMO)!;
+    await finalizer.finalize(verified(momo, 'FINAL_FAILED'));
+    await service.fallbackToClinic(appointmentId, patientId);
+    for (const payment of payments) await finalizer.finalize(verified(payment, 'SUCCESS'));
+    const refunds = await database.getRepository(RefundRequestEntity).find({ where: { appointmentId } });
+    expect(refunds).toHaveLength(2);
+    await service.resolveRefund(refunds[0].id, otherPatientId, { outcome: 'SUCCEEDED', providerRefundId: 'REFUND-1' });
+    expect((await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId })).paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
+    await service.resolveRefund(refunds[1].id, otherPatientId, { outcome: 'SUCCEEDED', providerRefundId: 'REFUND-2' });
+    expect(await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId })).toMatchObject({
+      paymentMethod: PaymentMethod.PAY_AT_CLINIC, paymentStatus: PaymentStatus.UNPAID, paidAt: null,
+    });
+    const counter = new CounterPaymentService(database, new ReceptionAuditService());
+    await counter.collect(appointmentId, { actorId: otherPatientId, ip: null, userAgent: null }, { method: CounterPaymentMethod.CASH, amountTendered: 300000 });
+    expect((await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId })).paymentStatus).toBe(PaymentStatus.PAID);
+    expect((await database.getRepository(PaymentTransactionEntity).find({ where: { appointmentId } })).every(payment => payment.status === PaymentTransactionStatus.LATE_SUCCESS)).toBe(true);
   });
 
   it('permits clinic fallback after switching from VNPay to a failed MoMo attempt', async () => {

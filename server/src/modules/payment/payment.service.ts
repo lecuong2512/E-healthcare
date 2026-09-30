@@ -322,7 +322,15 @@ export class PaymentService {
           refund.paymentTransactionId === appointment.canonicalPaymentTransactionId ||
           refundsOnlyLatePayment)
       ) {
-        appointment.paymentStatus = PaymentStatus.REFUNDED;
+        if (refundsOnlyLatePayment && appointment.paymentMethod === PaymentMethod.PAY_AT_CLINIC) {
+          const otherRefunds = await repository.find({ where: { appointmentId: appointment.id } });
+          // Do not unlock collection while another overpayment still needs a refund.
+          const unresolved = otherRefunds.some(other => other.id !== refund.id && other.status !== 'SUCCEEDED');
+          appointment.paymentStatus = unresolved ? PaymentStatus.REFUND_PENDING : PaymentStatus.UNPAID;
+          if (!unresolved) appointment.paidAt = null;
+        } else {
+          appointment.paymentStatus = PaymentStatus.REFUNDED;
+        }
         await manager.save(appointment);
       }
       return manager.save(refund);
