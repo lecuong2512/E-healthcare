@@ -153,6 +153,13 @@ export class PaymentFinalizerService {
         .createQueryBuilder('schedule').setLock('pessimistic_write')
         .where('schedule.id = :id', { id: appointment.scheduleId }).getOneOrFail();
       if (schedule.status !== SlotStatus.HOLDING) throw new ConflictException('Checkout no longer owns its slot.');
+      for (const payment of payments) {
+        if (payment.status !== PaymentTransactionStatus.PENDING) continue;
+        payment.status = PaymentTransactionStatus.SUPERSEDED;
+        payment.nextReconcileAt = null;
+        payment.reconciliationManualReview = false;
+        await manager.save(payment);
+      }
       appointment.status = AppointmentStatus.CONFIRMED;
       appointment.paymentStatus = PaymentStatus.UNPAID;
       appointment.paymentMethod = PaymentMethod.PAY_AT_CLINIC;

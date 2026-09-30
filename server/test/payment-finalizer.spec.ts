@@ -172,7 +172,21 @@ describe('PaymentFinalizerService', () => {
     expect(redis.releaseReservationIfOwner).toHaveBeenCalled();
   });
 
-  it.each([PaymentTransactionStatus.PENDING, PaymentTransactionStatus.RECONCILIATION_REQUIRED, PaymentTransactionStatus.SUCCESS, PaymentTransactionStatus.LATE_SUCCESS])('blocks clinic fallback for an unresolved %s attempt', async (state) => {
+  it('supersedes pending online payment and refunds late success after switching to clinic', async () => {
+    await service.fallbackToClinic(appointment.id, 'patient-id');
+    expect(payment.status).toBe(PaymentTransactionStatus.SUPERSEDED);
+    expect(appointment.paymentMethod).toBe(PaymentMethod.PAY_AT_CLINIC);
+    expect(appointment.paymentStatus).toBe(PaymentStatus.UNPAID);
+    expect(schedule.status).toBe(SlotStatus.BOOKED);
+    await expect(service.finalize(verified('SUCCESS'))).resolves.toBe('LATE_SUCCESS');
+    expect(payment.status).toBe(PaymentTransactionStatus.LATE_SUCCESS);
+    expect(appointment.canonicalPaymentTransactionId).toBeNull();
+    expect(appointment.paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
+    expect(schedule.status).toBe(SlotStatus.BOOKED);
+    expect(manager.create).toHaveBeenCalledWith(RefundRequestEntity, expect.any(Object));
+  });
+
+  it.each([PaymentTransactionStatus.RECONCILIATION_REQUIRED, PaymentTransactionStatus.SUCCESS, PaymentTransactionStatus.LATE_SUCCESS])('blocks clinic fallback for an unresolved %s attempt', async (state) => {
     payment.status = state;
     await expect(service.fallbackToClinic(appointment.id, 'patient-id')).rejects.toThrow(/unresolved/);
     expect(manager.save).not.toHaveBeenCalled();
