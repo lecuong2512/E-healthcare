@@ -20,6 +20,9 @@ export class SpecialtyEntity {
   @Column({ name: 'icon_url', type: 'varchar', length: 500, nullable: true })
   iconUrl!: string | null;
 
+  @Column({ name: 'head_doctor_id', type: 'uuid', nullable: true })
+  headDoctorId!: string | null;
+
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
 

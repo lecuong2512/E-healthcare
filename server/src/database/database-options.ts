@@ -45,6 +45,19 @@ import { EmrAddendumEntity } from "./entities/emr-addendum.entity";
 import { AddEmrPrescriptionTables1790065218000 } from "./migrations/1790065218000-add-emr-prescription-tables";
 import { CreateEmrAddendumsTable1790150000000 } from "./migrations/1790150000000-create-emr-addendums-table";
 import { AddAppointmentConsent1790151600000 } from "./migrations/1790151600000-add-appointment-consent";
+import { DoctorSpecialtyEntity } from './entities/doctor-specialty.entity';
+import { AddDoctorSpecialties1790310000000 } from './migrations/1790310000000-add-doctor-specialties';
+import { DoctorRecurringShiftEntity } from './entities/doctor-recurring-shift.entity';
+import { AddDoctorRecurringShifts1790313600000 } from './migrations/1790313600000-add-doctor-recurring-shifts';
+import { ClinicRoomEntity } from './entities/clinic-room.entity';
+import { CreateClinicRooms1790400000000 } from './migrations/1790400000000-create-clinic-rooms';
+import { BackfillDoctorUserRoles1790730000000 } from './migrations/1790730000000-backfill-doctor-user-roles';
+import { AddClinicRoomDetails1790500000000 } from './migrations/1790500000000-add-clinic-room-details';
+import { StaffShiftAssignmentEntity } from './entities/staff-shift-assignment.entity';
+import { CreateStaffShiftAssignments1790600000000 } from './migrations/1790600000000-create-staff-shift-assignments';
+import { AddAdminCatalogStaffReporting1790240000000 } from './migrations/1790240000000-add-admin-catalog-staff-reporting';
+import { AddSpecialtyHeadDoctor1790320000000 } from './migrations/1790320000000-add-specialty-head-doctor';
+import { Icd10CatalogEntity, MedicalServiceEntity, MedicineEntity } from './entities/admin-catalog.entity';
 import { ReportApprovalEntity } from './entities/report-approval.entity';
 import { AddReportApprovals1790300000000 } from './migrations/1790300000000-add-report-approvals';
 import { DoctorReviewEntity } from "./entities/doctor-review.entity";
@@ -67,6 +80,10 @@ export function createDataSource(url: string): DataSource {
       GoogleRegistrationSessionEntity,
       SpecialtyEntity,
       DoctorEntity,
+      DoctorSpecialtyEntity,
+      DoctorRecurringShiftEntity,
+      ClinicRoomEntity,
+      StaffShiftAssignmentEntity,
       DoctorScheduleEntity,
       AppointmentEntity,
       VoucherEntity,
@@ -78,6 +95,9 @@ export function createDataSource(url: string): DataSource {
       DoctorQueueCounterEntity,
       CounterPaymentTransactionEntity,
       ReceptionAuditLogEntity,
+      MedicineEntity,
+      MedicalServiceEntity,
+      Icd10CatalogEntity,
       EmrAddendumEntity,
       ReportApprovalEntity,
       DoctorReviewEntity,
@@ -105,9 +125,17 @@ export function createDataSource(url: string): DataSource {
       UniquePatientCitizenId1789938000000,
       CreateEmrAddendumsTable1790150000000,
       AddAppointmentConsent1790151600000,
+      AddAdminCatalogStaffReporting1790240000000,
       AddReportApprovals1790300000000,
+      AddDoctorSpecialties1790310000000,
+      AddDoctorRecurringShifts1790313600000,
+      AddSpecialtyHeadDoctor1790320000000,
+      CreateClinicRooms1790400000000,
+      AddClinicRoomDetails1790500000000,
       CreateDoctorReviews1790586000000,
       AddAppointmentReminderLifecycle1790152800000,
+      CreateStaffShiftAssignments1790600000000,
+      BackfillDoctorUserRoles1790730000000,
     ],
   });
 }
