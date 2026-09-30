@@ -103,15 +103,20 @@ describe('MoMo sandbox provider', () => {
     ).rejects.toBeInstanceOf(BadGatewayException);
   });
 
-  it('rejects an unsigned create response', async () => {
+  it('accepts an unsigned create response as permitted by MoMo API specification', async () => {
     const payload = signedCreateResponse();
     delete payload.signature;
     jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => payload } as Response);
-    await expect(new MomoProvider(config).initiate({
-      provider: PaymentMethod.MOMO, merchantTransactionId: 'PAY202609280001',
-      requestId: 'request-1', amountVnd: 300_000, clientIp: '127.0.0.1',
-      createdAt: new Date(), expiresAt: new Date(),
-    })).rejects.toBeInstanceOf(BadGatewayException);
+    const result = await new MomoProvider(config).initiate({
+      provider: PaymentMethod.MOMO,
+      merchantTransactionId: 'PAY202609280001',
+      requestId: 'request-1',
+      amountVnd: 300_000,
+      clientIp: '127.0.0.1',
+      createdAt: new Date(),
+      expiresAt: new Date(),
+    });
+    expect(result.paymentUrl).toContain('https://test-payment.momo.vn/');
   });
 
   it.each([

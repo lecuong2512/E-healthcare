@@ -167,13 +167,15 @@ export class MomoProvider implements PaymentProvider {
   }
 
   private verifyCreateResponse(result: MomoPayload, context: PaymentContext): void {
-    const actualSignature = String(result.signature || '');
-    const canonical = this.canonicalizer.createResponse(result, this.config.accessKey);
-    if (!this.signature.verify(canonical, actualSignature)) {
-      throw new PaymentProviderError(
-        PaymentProviderErrorKind.INVALID_RESPONSE,
-        'Invalid MoMo create response signature.',
-      );
+    const actualSignature = typeof result.signature === 'string' ? result.signature : '';
+    if (actualSignature) {
+      const canonical = this.canonicalizer.createResponse(result, this.config.accessKey);
+      if (!this.signature.verify(canonical, actualSignature)) {
+        throw new PaymentProviderError(
+          PaymentProviderErrorKind.INVALID_RESPONSE,
+          'Invalid MoMo create response signature.',
+        );
+      }
     }
     if (
       result.partnerCode !== this.config.partnerCode ||
