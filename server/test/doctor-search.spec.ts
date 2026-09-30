@@ -1,7 +1,10 @@
 import { DataSource } from "typeorm";
+import { plainToInstance } from "class-transformer";
+import { validate } from "class-validator";
 import { DoctorEntity } from "../src/database/entities/doctor.entity";
 import { DoctorCacheService } from "../src/modules/doctor/doctor-cache.service";
 import { DoctorSearchService } from "../src/modules/doctor/doctor-search.service";
+import { SearchDoctorDto } from "../src/modules/doctor/dto/search-doctor.dto";
 
 describe("DoctorSearchService", () => {
   const doctor = {
@@ -45,6 +48,40 @@ describe("DoctorSearchService", () => {
   }
 
   beforeEach(() => jest.clearAllMocks());
+
+  it.each([
+    [{}, 1, 20],
+    [{ page: "2", limit: "50" }, 2, 50],
+    [{ page: "1", limit: "100" }, 1, 100],
+    [{ page: "2", limit: "200" }, 2, 100],
+    [{ page: "-2", limit: "-5" }, 1, 1],
+    [{ page: "0", limit: "0" }, 1, 20],
+    [{ page: "invalid", limit: "invalid" }, 1, 20],
+  ])("normalizes HTTP pagination %j to page=%i, limit=%i", async (input, page, limit) => {
+    const dto = plainToInstance(SearchDoctorDto, input);
+    expect(await validate(dto)).toEqual([]);
+    expect(dto.page).toBe(page);
+    expect(dto.limit).toBe(limit);
+
+    const { dataSource, query } = createDatabase([]);
+    const cache = createCache();
+    const result = await new DoctorSearchService(dataSource, cache).search(dto);
+    expect(query.skip).toHaveBeenCalledWith((page - 1) * limit);
+    expect(query.take).toHaveBeenCalledWith(limit);
+    expect(cache.key).toHaveBeenCalledWith("list", expect.objectContaining({ page, limit }));
+    expect(result.pagination).toEqual({ page, limit, total: 0, totalPages: 0 });
+  });
+
+  it.each([
+    [{}, 1, 20],
+    [{ page: -2, limit: 200 }, 1, 100],
+  ])("normalizes pagination for direct service callers %j", async (input, page, limit) => {
+    const { dataSource, query } = createDatabase([]);
+    const result = await new DoctorSearchService(dataSource, createCache()).search(input as SearchDoctorDto);
+    expect(query.skip).toHaveBeenCalledWith((page - 1) * limit);
+    expect(query.take).toHaveBeenCalledWith(limit);
+    expect(result.pagination).toEqual({ page, limit, total: 0, totalPages: 0 });
+  });
 
   it("applies keyword, specialty, availability, price, rating and pagination filters", async () => {
     const { dataSource, query } = createDatabase();

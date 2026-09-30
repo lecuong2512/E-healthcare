@@ -16,6 +16,16 @@ describe('PatientBookingApiService', () => {
 
   afterEach(() => http.verify());
 
+  it('requests the first 50 doctors for booking', () => {
+    service.searchDoctors().subscribe();
+
+    const request = http.expectOne((req) => req.url === '/api/v1/doctors/search');
+    expect(request.request.method).toBe('GET');
+    expect(request.request.params.get('page')).toBe('1');
+    expect(request.request.params.get('limit')).toBe('50');
+    request.flush({ data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } });
+  });
+
   it('sends only provider and the idempotency header when initiating payment', () => {
     service.initiatePayment('appointment-id', PaymentMethod.VNPAY, 'idempotency-id').subscribe();
 
