@@ -50,6 +50,17 @@
         >
           <span aria-hidden="true">{{ muted() ? '🔇' : '🔊' }}</span>
         </button>
+
+        <button
+          type="button"
+          class="queue-board__exit"
+          (click)="exitPresentation()"
+          aria-label="Thoát chế độ trình chiếu / Quay lại quầy"
+          title="Thoát chế độ trình chiếu / Quay lại quầy"
+        >
+          <span class="queue-board__exit-icon" aria-hidden="true">🚪</span>
+          <span class="queue-board__exit-text">Quay lại quầy</span>
+        </button>
       </div>
     </div>
   </header>
@@ -99,13 +110,21 @@
             {{ muted() ? 'Bật âm thanh' : 'Tắt âm thanh' }}
           </button>
         </div>
-        <button
-          type="button"
-          class="presentation-launcher__start"
-          (click)="startPresentation()"
-        >
-          Bắt đầu trình chiếu
-        </button>
+        <div class="presentation-launcher__actions">
+          <button
+            type="button"
+            class="presentation-launcher__start"
+            (click)="startPresentation()"
+          >
+            Bắt đầu trình chiếu
+          </button>
+          <a
+            routerLink="/receptionist/checkin"
+            class="presentation-launcher__cancel"
+          >
+            Quay lại quầy lễ tân
+          </a>
+        </div>
         @if (fullscreenError()) {
           <p class="presentation-launcher__error" role="alert">
             {{ fullscreenError() }}

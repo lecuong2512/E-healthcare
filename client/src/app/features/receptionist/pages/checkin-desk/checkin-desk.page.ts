@@ -12,6 +12,7 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 
 import {
   AppointmentStatus,
@@ -70,6 +71,7 @@ function queueConnectionOrDisconnected(
     ReactiveFormsModule,
     QrScannerComponent,
     CurrencyVndPipe,
+    RouterLink,
   ],
   templateUrl: './checkin-desk.page.html',
   styleUrl: './checkin-desk.page.scss',

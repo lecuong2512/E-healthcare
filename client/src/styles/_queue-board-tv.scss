@@ -184,6 +184,37 @@ app-queue-board-page {
     background: #f0f9ff;
     font-size: clamp(17px, 1.2vw, 22px);
     cursor: pointer;
+    transition: background 0.15s ease-in-out;
+
+    &:hover {
+      background: #e0f2fe;
+    }
+  }
+
+  .queue-board__exit {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: clamp(44px, 3vw, 54px);
+    padding: 0 clamp(10px, 0.9vw, 16px);
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    color: #c2410c;
+    background: #fff7ed;
+    font-size: clamp(12px, 0.8vw, 14px);
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease-in-out, border-color 0.15s ease-in-out;
+
+    &:hover {
+      border-color: #fdba74;
+      background: #ffedd5;
+    }
+
+    .queue-board__exit-icon {
+      font-size: clamp(14px, 1vw, 16px);
+    }
   }
 
   .queue-board__content {
@@ -574,16 +605,58 @@ app-queue-board-page {
     }
   }
 
+  .presentation-launcher__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+
+    @media (max-width: 480px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .presentation-launcher__start {
     width: 100%;
     min-height: 44px;
-    margin-top: 16px;
+    margin-top: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 0;
     border-radius: 8px;
     color: #fff;
     background: var(--qb-primary);
     font-size: 14px;
     font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease-in-out;
+
+    &:hover {
+      background: var(--qb-primary-dark);
+    }
+  }
+
+  .presentation-launcher__cancel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid var(--qb-border);
+    border-radius: 8px;
+    color: var(--qb-muted);
+    background: #f8fafc;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.15s ease-in-out, color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+
+    &:hover {
+      color: var(--qb-text);
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
   }
 
   .presentation-launcher__error {
@@ -592,7 +665,8 @@ app-queue-board-page {
     font-size: 13px;
   }
 
-  button:focus-visible {
+  button:focus-visible,
+  a:focus-visible {
     outline: 3px solid rgb(2 132 199 / 30%);
     outline-offset: 3px;
   }
@@ -610,8 +684,15 @@ app-queue-board-page {
 
   @media (max-width: 820px) {
     .queue-board__brand small,
-    time small {
+    time small,
+    .queue-board__exit-text {
       display: none;
+    }
+
+    .queue-board__exit {
+      width: clamp(44px, 3vw, 54px);
+      padding: 0;
+      justify-content: center;
     }
 
     .queue-board__content {
