@@ -221,6 +221,28 @@ describe('Prescription PDF encrypted reads and verification', () => {
     });
   });
 
+  it('allows the creator of the appointment to export the prescription PDF for their dependent', async () => {
+    record = makeRecord('dependent-1');
+    (record.appointment as any).createdBy = 'booker-1';
+
+    const result = await service.generateForPatient(
+      'appointment-1',
+      'booker-1',
+      {
+        actorId: 'booker-1',
+        actorRole: Role.PATIENT,
+        ipAddress: '127.0.0.1',
+        userAgent: 'jest',
+        requestId: 'request-dependent',
+      },
+    );
+
+    expect(result).toEqual({
+      prescriptionCode: 'RX-1',
+      buffer: Buffer.from('%PDF-test'),
+    });
+  });
+
   it('does not decrypt a record outside the authenticated patient scope', async () => {
     record = null;
 

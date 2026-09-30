@@ -83,6 +83,21 @@ export class AuthService {
     );
   }
 
+  forgotPassword(identifier: string): Observable<{ expiresIn: number }> {
+    return this.http.post<{ expiresIn: number }>(
+      `${API_BASE}/auth/forgot-password`,
+      { identifier },
+    );
+  }
+
+  resetPassword(payload: {
+    identifier: string;
+    otp: string;
+    newPassword: string;
+  }): Observable<void> {
+    return this.http.post<void>(`${API_BASE}/auth/reset-password`, payload);
+  }
+
   // Chuyển sang Google; backend xác thực danh tính và thiết lập cookie phiên.
   loginWithGoogle(): void {
     window.location.href = `${API_BASE}/auth/google`;

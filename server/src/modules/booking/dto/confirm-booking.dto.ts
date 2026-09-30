@@ -33,4 +33,24 @@ export class ConfirmBookingDto implements IConfirmBookingRequest {
   @IsOptional()
   @IsString({ message: 'Mã voucher phải là chuỗi ký tự.' })
   voucherCode?: string;
+
+  @IsOptional()
+  @IsString({ message: 'Đối tượng đặt lịch phải là chuỗi ký tự.' })
+  bookingFor?: 'self' | 'other';
+
+  @IsOptional()
+  @IsString({ message: 'Họ tên bệnh nhân phải là chuỗi ký tự.' })
+  patientName?: string;
+
+  @IsOptional()
+  @IsString({ message: 'Số điện thoại bệnh nhân phải là chuỗi ký tự.' })
+  patientPhone?: string;
+
+  @IsOptional()
+  @IsString({ message: 'Ngày sinh bệnh nhân phải là chuỗi ký tự.' })
+  patientDob?: string;
+
+  @IsOptional()
+  @IsString({ message: 'Giới tính bệnh nhân phải là chuỗi ký tự.' })
+  patientGender?: string;
 }

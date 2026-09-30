@@ -50,7 +50,7 @@
     <div class="max-w-2xl mx-auto flex items-center justify-between px-4">
 
       <!-- Bước 1 -->
-      <div class="flex items-center gap-2">
+      <button type="button" (click)="goToStep(1)" [disabled]="loading()" class="flex items-center gap-2 text-left bg-transparent border-none p-0 cursor-pointer disabled:cursor-not-allowed">
         <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all"
              [class.bg-sky-600]="step() >= 1" [class.text-white]="step() >= 1"
              [class.bg-white]="step() < 1" [class.border-2]="step() < 1" [class.border-slate-300]="step() < 1">
@@ -59,11 +59,11 @@
         <span class="text-xs font-medium hidden sm:inline"
               [class.text-sky-600]="step() === 1"
               [class.text-slate-700]="step() !== 1">Chọn Bác sĩ</span>
-      </div>
+      </button>
       <div class="flex-1 h-0.5 mx-1" [class.bg-sky-600]="step() >= 2" [class.bg-slate-200]="step() < 2"></div>
 
       <!-- Bước 2 -->
-      <div class="flex items-center gap-2">
+      <button type="button" (click)="goToStep(2)" [disabled]="loading()" class="flex items-center gap-2 text-left bg-transparent border-none p-0 cursor-pointer disabled:cursor-not-allowed">
         <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all"
              [class.bg-sky-600]="step() >= 2" [class.text-white]="step() >= 2"
              [class.bg-white]="step() < 2" [class.border-2]="step() < 2" [class.border-slate-300]="step() < 2"
@@ -74,11 +74,11 @@
               [class.text-sky-600]="step() === 2"
               [class.text-slate-400]="step() < 2"
               [class.text-slate-700]="step() > 2">Chọn khung giờ</span>
-      </div>
+      </button>
       <div class="flex-1 h-0.5 mx-1" [class.bg-sky-600]="step() >= 3" [class.bg-slate-200]="step() < 3"></div>
 
       <!-- Bước 3 -->
-      <div class="flex items-center gap-2">
+      <button type="button" (click)="goToStep(3)" [disabled]="loading()" class="flex items-center gap-2 text-left bg-transparent border-none p-0 cursor-pointer disabled:cursor-not-allowed">
         <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all"
              [class.bg-sky-600]="step() >= 3" [class.text-white]="step() >= 3"
              [class.bg-white]="step() < 3" [class.border-2]="step() < 3" [class.border-slate-300]="step() < 3"
@@ -89,11 +89,11 @@
               [class.text-sky-600]="step() === 3"
               [class.text-slate-400]="step() < 3"
               [class.text-slate-700]="step() > 3">Hồ sơ người khám</span>
-      </div>
+      </button>
       <div class="flex-1 h-0.5 mx-1" [class.bg-sky-600]="step() >= 4" [class.bg-slate-200]="step() < 4"></div>
 
       <!-- Bước 4 -->
-      <div class="flex items-center gap-2">
+      <button type="button" (click)="goToStep(4)" [disabled]="loading()" class="flex items-center gap-2 text-left bg-transparent border-none p-0 cursor-pointer disabled:cursor-not-allowed">
         <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all"
              [class.bg-emerald-600]="!!payAtClinicReceipt()"
              [class.bg-sky-600]="step() >= 4 && !payAtClinicReceipt()"
@@ -108,7 +108,7 @@
               [class.text-slate-400]="step() < 4">
           @if (payAtClinicReceipt()) { Hoàn thành } @else { Xác nhận &amp; Thanh toán }
         </span>
-      </div>
+      </button>
 
     </div>
   </div>
@@ -646,6 +646,11 @@
                 <span class="text-sm font-mono font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-lg border border-sky-100">{{ receipt.appointmentCode }}</span>
               </div>
 
+              <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                <span class="text-xs text-slate-500 font-medium">Bệnh nhân</span>
+                <span class="text-xs font-semibold text-slate-900">{{ receipt.patient?.fullName || formValue.fullName || '—' }} ({{ bookingFor() === 'self' ? 'Bản thân' : 'Người thân' }})</span>
+              </div>
+
               @if (selectedDoctor(); as doc) {
                 <div class="flex justify-between items-start py-2 border-b border-slate-100">
                   <span class="text-xs text-slate-500 font-medium">Bác sĩ khám</span>
@@ -721,7 +726,10 @@
             <div class="p-5 space-y-3 text-sm">
               @if (selectedDoctor(); as doc) {
                 <div class="flex justify-between items-start">
-                  <span class="text-slate-500 text-xs">Bác sĩ</span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-slate-500 text-xs">Bác sĩ</span>
+                    <button type="button" (click)="goToStep(1)" [disabled]="loading()" class="text-[11px] font-semibold text-sky-600 hover:text-sky-800 hover:underline">Đổi</button>
+                  </div>
                   <div class="text-right">
                     <p class="font-bold text-slate-900 text-xs">{{ doc.title }} {{ doc.name }}</p>
                     <p class="text-slate-400 text-[11px]">{{ doc.specialty }} · {{ doc.hospital }}</p>
@@ -734,13 +742,19 @@
                 <span class="font-semibold text-xs text-slate-900">{{ selectedDayLabel() }}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-slate-500 text-xs">Khung giờ</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-slate-500 text-xs">Khung giờ</span>
+                  <button type="button" (click)="goToStep(2)" [disabled]="loading()" class="text-[11px] font-semibold text-sky-600 hover:text-sky-800 hover:underline">Đổi</button>
+                </div>
                 <span class="font-semibold text-xs text-slate-900">{{ selectedSlotLabel() }}</span>
               </div>
               <div class="h-px bg-slate-100"></div>
               <div class="flex justify-between items-center">
-                <span class="text-slate-500 text-xs">Bệnh nhân</span>
-                <span class="font-semibold text-xs text-slate-900">{{ formValue.fullName || '—' }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-slate-500 text-xs">Bệnh nhân</span>
+                  <button type="button" (click)="goToStep(3)" [disabled]="loading()" class="text-[11px] font-semibold text-sky-600 hover:text-sky-800 hover:underline">Sửa</button>
+                </div>
+                <span class="font-semibold text-xs text-slate-900">{{ formValue.fullName || '—' }} ({{ bookingFor() === 'self' ? 'Bản thân' : 'Người thân' }})</span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-slate-500 text-xs">SĐT</span>
@@ -777,7 +791,7 @@
                 <button
                   type="button"
                   (click)="selectPayment(pm.id)"
-                  [disabled]="loading() || (recoveryActive() && pm.id !== 'PAY_AT_CLINIC' && !canPay())"
+                  [disabled]="loading()"
                   [attr.aria-pressed]="paymentMethod() === pm.id"
                   class="py-3 px-4 rounded-xl border flex items-center gap-2.5 transition-all text-left"
                   [class.border-sky-500]="paymentMethod() === pm.id"
@@ -886,7 +900,7 @@
                     class="min-h-[44px] px-5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
               ← Sửa hồ sơ
             </button>
-            <button type="button" (click)="submitBooking()" [disabled]="loading() || (recoveryActive() && paymentMethod() !== 'PAY_AT_CLINIC' && !canPay())"
+            <button type="button" (click)="submitBooking()" [disabled]="loading()"
                     class="min-h-[44px] px-8 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-xs font-bold text-white shadow-md transition">
               @if (loading()) { Đang xử lý... } @else if (recoveryActive()) { {{ paymentMethod() === 'PAY_AT_CLINIC' ? 'Xác nhận thanh toán tại viện' : 'Thanh toán lịch hẹn hiện tại' }} } @else { Xác nhận đặt khám }
             </button>

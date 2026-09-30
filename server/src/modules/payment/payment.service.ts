@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import {
   AppointmentStatus,
   PaymentMethod,
@@ -44,7 +44,7 @@ export class PaymentService {
   ) {}
 
   async initiate(
-    appointmentId: string,
+    identifier: string,
     patientId: string,
     idempotencyKey: string,
     dto: InitiatePaymentDto,
@@ -55,6 +55,7 @@ export class PaymentService {
       throw new BadRequestException('Idempotency-Key phải là UUID hợp lệ.');
     }
     const transaction = await this.dataSource.transaction(async (manager) => {
+      const appointmentId = await this.resolveAppointmentId(identifier, manager);
       const appointment = await manager
         .getRepository(AppointmentEntity)
         .createQueryBuilder('appointment')
@@ -62,7 +63,7 @@ export class PaymentService {
         .where('appointment.id = :appointmentId', { appointmentId })
         .getOne();
       if (!appointment) throw new NotFoundException('Appointment not found.');
-      if (appointment.patientId !== patientId) {
+      if (appointment.patientId !== patientId && appointment.createdBy !== patientId) {
         throw new ForbiddenException('Bạn không có quyền thanh toán lịch hẹn này.');
       }
       if ([PaymentStatus.PAID, PaymentStatus.REFUND_PENDING, PaymentStatus.REFUNDED].includes(appointment.paymentStatus)) {
@@ -201,34 +202,46 @@ export class PaymentService {
     return this.finalizer.finalize(await this.momo.verifyCallback(payload));
   }
 
-  cancelPending(appointmentId: string, patientId: string): Promise<CancelPendingPaymentResponse> {
-    return this.finalizer.cancelPending(appointmentId, patientId);
+  cancelPending(identifier: string, patientId: string): Promise<CancelPendingPaymentResponse> {
+    return this.finalizer.cancelPending(identifier, patientId);
   }
 
-  fallbackToClinic(appointmentId: string, patientId: string) {
-    return this.finalizer.fallbackToClinic(appointmentId, patientId);
+  fallbackToClinic(identifier: string, patientId: string) {
+    return this.finalizer.fallbackToClinic(identifier, patientId);
   }
 
-  async status(appointmentId: string, patientId: string): Promise<PaymentStatusResponse> {
+  async status(identifier: string, patientId: string): Promise<PaymentStatusResponse> {
+    const appointmentId = await this.resolveAppointmentId(identifier);
     const appointment = await this.dataSource.getRepository(AppointmentEntity).findOne({
       where: { id: appointmentId },
     });
     if (!appointment) throw new NotFoundException('Appointment not found.');
-    if (appointment.patientId !== patientId) {
+    if (appointment.patientId !== patientId && appointment.createdBy !== patientId) {
       throw new ForbiddenException('Bạn không có quyền xem thanh toán này.');
     }
     const paymentRepository = this.dataSource.getRepository(PaymentTransactionEntity);
-    const transaction = appointment.canonicalPaymentTransactionId
+    let transaction = appointment.canonicalPaymentTransactionId
       ? await paymentRepository.findOne({
           where: {
             id: appointment.canonicalPaymentTransactionId,
             appointmentId,
           },
         })
-      : await paymentRepository.findOne({
-          where: { appointmentId },
-          order: { createdAt: 'DESC' },
-        });
+      : null;
+
+    if (!transaction && !this.isUuid(identifier)) {
+      transaction = await paymentRepository.findOne({
+        where: { merchantTransactionId: identifier, appointmentId },
+      });
+    }
+
+    if (!transaction) {
+      transaction = await paymentRepository.findOne({
+        where: { appointmentId },
+        order: { createdAt: 'DESC' },
+      });
+    }
+
     const payments = await paymentRepository.find({ where: { appointmentId } });
     const unresolved = payments.some((payment) => [PaymentTransactionStatus.RECONCILIATION_REQUIRED,
       PaymentTransactionStatus.SUCCESS, PaymentTransactionStatus.LATE_SUCCESS].includes(payment.status));
@@ -373,6 +386,47 @@ export class PaymentService {
   private normalizeIp(value: string): string {
     const first = value.split(',')[0]?.trim() || '127.0.0.1';
     return first.replace(/^::ffff:/, '');
+  }
+
+  async resolveAppointmentId(identifier: string, manager?: EntityManager): Promise<string> {
+    const trimmed = identifier?.trim();
+    if (!trimmed) {
+      throw new NotFoundException('Không tìm thấy lịch hẹn hoặc giao dịch thanh toán.');
+    }
+    const appointmentRepo = manager
+      ? manager.getRepository(AppointmentEntity)
+      : this.dataSource.getRepository(AppointmentEntity);
+    const paymentRepo = manager
+      ? manager.getRepository(PaymentTransactionEntity)
+      : this.dataSource.getRepository(PaymentTransactionEntity);
+
+    if (this.isUuid(trimmed)) {
+      if (appointmentRepo?.findOne) {
+        const appointment = await appointmentRepo.findOne({
+          where: { id: trimmed },
+          select: ['id'],
+        });
+        if (appointment) return appointment.id;
+      }
+      if (paymentRepo?.findOne) {
+        const transaction = await paymentRepo.findOne({
+          where: [{ id: trimmed }, { merchantTransactionId: trimmed }],
+          select: ['appointmentId'],
+        });
+        if (transaction?.appointmentId) return transaction.appointmentId;
+      }
+      return trimmed;
+    } else {
+      if (paymentRepo?.findOne) {
+        const transaction = await paymentRepo.findOne({
+          where: { merchantTransactionId: trimmed },
+          select: ['appointmentId'],
+        });
+        if (transaction?.appointmentId) return transaction.appointmentId;
+      }
+    }
+
+    throw new NotFoundException('Không tìm thấy lịch hẹn hoặc giao dịch thanh toán.');
   }
 
   private isUuid(value: string): boolean {

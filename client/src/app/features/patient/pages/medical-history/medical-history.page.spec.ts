@@ -47,6 +47,30 @@ describe('MedicalHistoryPage', () => {
     expect(component.activeTab()).toBe('upcoming');
   });
 
+  it('should initialize activeTab based on route queryParam tab=completed', () => {
+    const fixtureCompleted = TestBed.createComponent(MedicalHistoryPage);
+    const compCompleted = fixtureCompleted.componentInstance;
+    (compCompleted as any)['route'] = {
+      snapshot: { queryParamMap: { get: (key: string) => (key === 'tab' ? 'completed' : null) } },
+    };
+    compCompleted.ngOnInit();
+    expect(compCompleted.activeTab()).toBe('completed');
+    httpMock.expectOne('/api/v1/appointments/me').flush([]);
+    fixtureCompleted.destroy();
+  });
+
+  it('should initialize activeTab based on route queryParam tab=cancelled', () => {
+    const fixtureCancelled = TestBed.createComponent(MedicalHistoryPage);
+    const compCancelled = fixtureCancelled.componentInstance;
+    (compCancelled as any)['route'] = {
+      snapshot: { queryParamMap: { get: (key: string) => (key === 'tab' ? 'cancelled' : null) } },
+    };
+    compCancelled.ngOnInit();
+    expect(compCancelled.activeTab()).toBe('cancelled');
+    httpMock.expectOne('/api/v1/appointments/me').flush([]);
+    fixtureCancelled.destroy();
+  });
+
   it('should filter items correctly for each tab', () => {
     component.appointments.set([
       { id: '1', status: 'CONFIRMED' },

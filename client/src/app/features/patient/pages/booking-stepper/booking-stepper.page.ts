@@ -288,18 +288,54 @@ export class BookingStepperPage implements OnDestroy {
   }
 
   selectDoctor(doctor: Doctor): void {
-    if (this.recoveryActive() || this.loading()) return;
+    if (this.loading()) return;
+    if (this.pendingPaymentContext()) {
+      this.confirm({
+        nzTitle: 'Đổi bác sĩ khám?',
+        nzContent: 'Bạn đang có một lịch hẹn đang chờ thanh toán. Để chọn bác sĩ mới, hệ thống sẽ hủy giữ chỗ cũ.',
+        nzOkText: 'Xác nhận đổi', nzCancelText: 'Giữ lịch hiện tại', nzOkDanger: true,
+        nzOnOk: () => {
+          this.loading.set(true);
+          const oldId = this.pendingPaymentContext()!.appointmentId;
+          this.api.cancelPendingPayment(oldId).pipe(
+            finalize(() => this.loading.set(false)),
+            takeUntilDestroyed(this.destroyRef),
+          ).subscribe({
+            next: () => {
+              this.clearPendingPaymentContext();
+              this.recoveryActive.set(false);
+              this.bookingCommitted = false;
+              this.releaseReservation();
+              this.selectedSlotId.set(null);
+              this.selectedDoctorId.set(doctor.id);
+              this.loadDoctor(doctor.id);
+            },
+            error: (err) => this.errorMessage.set(this.errorText(err)),
+          });
+        },
+      });
+      return;
+    }
     this.releaseReservation();
     this.selectedSlotId.set(null);
     this.selectedDoctorId.set(doctor.id);
   }
-  selectDoctorAndContinue(doctor: Doctor): void { if (!this.recoveryActive()) this.loadDoctor(doctor.id); }
+
+  selectDoctorAndContinue(doctor: Doctor): void {
+    if (this.loading()) return;
+    if (this.pendingPaymentContext()) {
+      this.selectDoctor(doctor);
+      return;
+    }
+    this.loadDoctor(doctor.id);
+  }
+
   setSearchQuery(query: string): void { this.searchQuery.set(query); }
   selectSpecialty(specialty: string): void { this.selectedSpecialty.set(specialty); }
   confirmDoctor(): void { const id = this.selectedDoctorId(); if (id) this.loadDoctor(id); }
 
   selectDate(day: DayOption): void {
-    if (!day.slotsCount || this.pendingPaymentContext()) return;
+    if (!day.slotsCount) return;
     if (this.selectedDay() !== day.date) {
       this.releaseReservation();
       this.selectedSlotId.set(null);
@@ -312,7 +348,35 @@ export class BookingStepperPage implements OnDestroy {
   }
 
   chooseSlot(slot: SlotItem): void {
-    if (this.pendingPaymentContext()) { this.errorMessage.set('Hãy hủy checkout cũ qua Bắt đầu đặt lịch mới trước khi giữ chỗ khác.'); return; }
+    if (this.loading()) return;
+    if (this.pendingPaymentContext()) {
+      this.confirm({
+        nzTitle: 'Đổi khung giờ khám?',
+        nzContent: 'Bạn đang có một lịch hẹn đang chờ thanh toán. Để chọn khung giờ mới, hệ thống sẽ hủy giữ chỗ cũ.',
+        nzOkText: 'Xác nhận đổi', nzCancelText: 'Giữ lịch hiện tại', nzOkDanger: true,
+        nzOnOk: () => {
+          this.loading.set(true);
+          const oldId = this.pendingPaymentContext()!.appointmentId;
+          this.api.cancelPendingPayment(oldId).pipe(
+            finalize(() => this.loading.set(false)),
+            takeUntilDestroyed(this.destroyRef),
+          ).subscribe({
+            next: () => {
+              this.clearPendingPaymentContext();
+              this.recoveryActive.set(false);
+              this.bookingCommitted = false;
+              this.reserveNewSlot(slot);
+            },
+            error: (err) => this.errorMessage.set(this.errorText(err)),
+          });
+        },
+      });
+      return;
+    }
+    this.reserveNewSlot(slot);
+  }
+
+  private reserveNewSlot(slot: SlotItem): void {
     const doctorId = this.selectedDoctorId();
     if (slot.status !== 'available' || !doctorId || this.loading()) return;
     this.loading.set(true);
@@ -353,7 +417,6 @@ export class BookingStepperPage implements OnDestroy {
 
   selectPayment(method: PaymentMethod): void {
     if (this.loading()) return;
-    if (this.recoveryActive() && method !== PaymentMethod.PAY_AT_CLINIC && !this.canPay()) return;
     this.errorMessage.set(null);
     this.paymentMethod.set(method);
   }
@@ -398,7 +461,7 @@ export class BookingStepperPage implements OnDestroy {
         this.fallbackPendingToClinic();
         return;
       }
-      if (!this.canPay()) {
+      if (this.checkoutStatus() && !this.canPay()) {
         this.errorMessage.set('Checkout chưa thể thanh toán lại. Vui lòng kiểm tra trạng thái từ hệ thống.');
         return;
       }
@@ -444,6 +507,11 @@ export class BookingStepperPage implements OnDestroy {
       reasonForVisit: this.patientForm.value.reason?.trim() || 'Khám theo lịch hẹn',
       paymentMethod: currentMethod,
       voucherCode: this.appliedVoucher()?.code,
+      bookingFor: this.bookingFor(),
+      patientName: this.patientForm.value.fullName?.trim(),
+      patientPhone: this.patientForm.value.phone ? this.patientForm.value.phone.replace(/\D/g, '') : undefined,
+      patientDob: this.patientForm.value.dob || undefined,
+      patientGender: this.patientForm.value.gender || undefined,
     }).pipe(finalize(() => { if (!this.pendingPaymentContext()) this.loading.set(false); }), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (appointment) => {
         this.bookingCommitted = true;
@@ -464,6 +532,7 @@ export class BookingStepperPage implements OnDestroy {
           provider: currentMethod,
           idempotencyKey: this.idempotencyKey,
         };
+        sessionStorage.setItem('pendingPaymentAppointmentId', appointment.id);
         this.persistPendingPaymentContext(context);
         this.recoveryActive.set(true);
         this.loading.set(false);
@@ -585,7 +654,7 @@ export class BookingStepperPage implements OnDestroy {
   }
 
   goToStep(step: number): void {
-    if (!this.recoveryActive() && !this.loading()) {
+    if (!this.loading()) {
       this.errorMessage.set(null);
       this.step.set(step);
       if (step === 3 && this.bookingFor() === 'self' && !this.patientForm.value.fullName) {

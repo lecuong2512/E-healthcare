@@ -82,7 +82,7 @@ export class PaymentController {
   @Post(':appointmentId/initiate')
   @HttpCode(HttpStatus.CREATED)
   initiate(
-    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Param('appointmentId') appointmentId: string,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() dto: InitiatePaymentDto,
     @Req() request: AuthenticatedRequest,
@@ -99,7 +99,7 @@ export class PaymentController {
   @Roles(Role.PATIENT)
   @Get(':appointmentId/status')
   status(
-    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Param('appointmentId') appointmentId: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<PaymentStatusResponse> {
     return this.payments.status(appointmentId, request.auth!.userId);
@@ -109,17 +109,17 @@ export class PaymentController {
   @Post(':appointmentId/cancel-pending')
   @HttpCode(HttpStatus.OK)
   cancelPending(
-    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Param('appointmentId') appointmentId: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<CancelPendingPaymentResponse> {
     return this.payments.cancelPending(appointmentId, request.auth!.userId);
   }
 
   @Roles(Role.PATIENT)
-  @Post(':appointmentId/fallback-to-clinic')
+  @Post([':appointmentId/fallback-to-clinic', ':appointmentId/fallback-clinic'])
   @HttpCode(HttpStatus.OK)
   fallbackToClinic(
-    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Param('appointmentId') appointmentId: string,
     @Req() request: AuthenticatedRequest,
   ) {
     return this.payments.fallbackToClinic(appointmentId, request.auth!.userId);

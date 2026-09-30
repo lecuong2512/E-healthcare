@@ -103,4 +103,50 @@ describe("OTP delivery adapters", () => {
       ),
     ).resolves.toBeUndefined();
   });
+
+  test("sends forgot_password email with 5-minute validity template", async () => {
+    environment.SMTP_HOST = "smtp.example.com";
+    environment.SMTP_FROM = "no-reply@example.com";
+    const sendMail = jest
+      .fn()
+      .mockResolvedValue({ accepted: ["patient@example.com"] });
+    (createTransport as jest.Mock).mockReturnValue({ sendMail });
+    await delivery.send(
+      { email: "patient@example.com", phoneNumber: null },
+      "012345",
+      "forgot_password",
+    );
+    expect(sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "patient@example.com",
+        subject: "Đặt lại mật khẩu E-Healthcare",
+        text: "Mã OTP đặt lại mật khẩu E-Healthcare của bạn là 012345. Mã có hiệu lực 5 phút.",
+      }),
+    );
+  });
+
+  test("sends forgot_password SMS with 5-minute validity template", async () => {
+    environment.SMS_WEBHOOK_URL = "https://sms.example.com/send";
+    environment.SMS_WEBHOOK_TOKEN = "test-token";
+    const fetchMock = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue({ ok: true } as Response);
+    await delivery.send(
+      { email: null, phoneNumber: "+84901234567" },
+      "012345",
+      "forgot_password",
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL(environment.SMS_WEBHOOK_URL),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          phoneNumber: "+84901234567",
+          message:
+            "Mã OTP đặt lại mật khẩu E-Healthcare của bạn là 012345. Mã có hiệu lực 5 phút.",
+        }),
+      }),
+    );
+  });
 });
+

@@ -47,11 +47,12 @@ describe('Appointment history review contract', () => {
     const result = await service.listForPatient('patient-1');
 
     expect(find).toHaveBeenCalledWith({
-      where: { patientId: 'patient-1' },
+      where: [{ patientId: 'patient-1' }, { createdBy: 'patient-1' }],
       relations: {
         doctor: { user: true, specialty: true },
         schedule: true,
         review: true,
+        patient: true,
       },
       order: { id: 'DESC' },
     });

@@ -137,4 +137,33 @@ describe('AuthService', () => {
     expect(tokenStore.currentUser()?.fullName).toBe('Hồ Sơ Cập Nhật');
     expect(tokenStore.currentUser()?.email).toBe('updated@example.com');
   });
+
+  it('forgotPassword() should send POST request with identifier', () => {
+    service.forgotPassword('user@example.com').subscribe((res) => {
+      expect(res).toEqual({ expiresIn: 300 });
+    });
+
+    const req = httpMock.expectOne('/api/v1/auth/forgot-password');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ identifier: 'user@example.com' });
+    req.flush({ expiresIn: 300 });
+  });
+
+  it('resetPassword() should send POST request with payload', () => {
+    const payload = {
+      identifier: 'user@example.com',
+      otp: '123456',
+      newPassword: 'Password123!',
+    };
+
+    service.resetPassword(payload).subscribe(() => {
+      // success
+    });
+
+    const req = httpMock.expectOne('/api/v1/auth/reset-password');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(payload);
+    req.flush(null);
+  });
 });
+

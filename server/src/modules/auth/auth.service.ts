@@ -124,20 +124,6 @@ export class AuthService {
       await this.assertSmsSendAllowed(manager, phoneNumber);
       const registrationId = randomUUID();
       const otp = randomInt(0, 1000000).toString().padStart(6, "0");
-      await this.delivery.send({ email, phoneNumber }, otp);
-      if (phoneNumber) {
-        // Lưu lịch sử gửi độc lập với phiên OTP để gửi lại không làm reset hạn mức.
-        const receipts = manager.getRepository(RegistrationOtpSendEntity);
-        await receipts
-          .createQueryBuilder()
-          .delete()
-          .where("phone_number = :phoneNumber", { phoneNumber })
-          .andWhere("sent_at <= :expiresAt", {
-            expiresAt: new Date(now.getTime() - SMS_SEND_WINDOW_SECONDS * 1000),
-          })
-          .execute();
-        await receipts.save(receipts.create({ phoneNumber, sentAt: now }));
-      }
       if (previous) await sessions.remove(previous);
       // Gửi lại không reset số lần nhập sai; chỉ reset sau khi hết thời gian khóa.
       const attempts = previous?.lockedUntil
@@ -159,6 +145,20 @@ export class AuthService {
           lockedUntil: null,
         }),
       );
+      if (phoneNumber) {
+        // Lưu lịch sử gửi độc lập với phiên OTP để gửi lại không làm reset hạn mức.
+        const receipts = manager.getRepository(RegistrationOtpSendEntity);
+        await receipts
+          .createQueryBuilder()
+          .delete()
+          .where("phone_number = :phoneNumber", { phoneNumber })
+          .andWhere("sent_at <= :expiresAt", {
+            expiresAt: new Date(now.getTime() - SMS_SEND_WINDOW_SECONDS * 1000),
+          })
+          .execute();
+        await receipts.save(receipts.create({ phoneNumber, sentAt: now }));
+      }
+      await this.delivery.send({ email, phoneNumber }, otp);
       return {
         registrationId,
         expiresIn: OTP_TTL_SECONDS,

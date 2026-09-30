@@ -9,8 +9,15 @@ export class OtpDeliveryService {
   async send(
     contact: { email: string | null; phoneNumber: string | null },
     otp: string,
+    purpose: "register" | "forgot_password" = "register",
   ): Promise<void> {
-    const message = `Mã OTP đăng ký E-Healthcare của bạn là ${otp}. Mã có hiệu lực 3 phút.`;
+    const isForgot = purpose === "forgot_password";
+    const message = isForgot
+      ? `Mã OTP đặt lại mật khẩu E-Healthcare của bạn là ${otp}. Mã có hiệu lực 5 phút.`
+      : `Mã OTP đăng ký E-Healthcare của bạn là ${otp}. Mã có hiệu lực 3 phút.`;
+    const emailSubject = isForgot
+      ? "Đặt lại mật khẩu E-Healthcare"
+      : "Xác nhận đăng ký E-Healthcare";
 
     if (contact.email) {
       if (!environment.SMTP_HOST || !environment.SMTP_FROM) {
@@ -34,7 +41,7 @@ export class OtpDeliveryService {
           await transport.sendMail({
             from: environment.SMTP_FROM,
             to: contact.email,
-            subject: "Xác nhận đăng ký E-Healthcare",
+            subject: emailSubject,
             text: message,
           });
         } catch (error) {

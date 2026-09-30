@@ -32,17 +32,27 @@ export class AppointmentLifecycleService {
   static patientRefundPercent(scheduledAt: Date, now = new Date()): number { const hours = (scheduledAt.getTime() - now.getTime()) / 3600000; return hours >= 24 ? 100 : hours >= 2 ? 70 : 0; }
   async listForPatient(patientId: string) {
     const appointments = await this.dataSource.getRepository(AppointmentEntity).find({
-      where: { patientId },
+      where: [{ patientId }, { createdBy: patientId }],
       relations: {
         doctor: { user: true, specialty: true },
         schedule: true,
         review: true,
+        patient: true,
       },
       order: { id: 'DESC' },
     });
 
-    return appointments.map(({ doctor, review, ...appointment }) => ({
+    return appointments.map(({ doctor, review, patient, ...appointment }) => ({
       ...appointment,
+      patient: patient
+        ? {
+            id: patient.id,
+            fullName: patient.fullName,
+            phoneNumber: patient.phoneNumber,
+            gender: patient.gender,
+            dateOfBirth: patient.dateOfBirth,
+          }
+        : undefined,
       doctor: {
         id: doctor.id,
         academicTitle: doctor.academicTitle,
@@ -85,7 +95,7 @@ export class AppointmentLifecycleService {
     if (!consentAccepted) throw new BadRequestException('Cần xác nhận đồng thuận xử lý dữ liệu sức khỏe.');
     return this.dataSource.transaction(async (manager) => {
       const appointment = await this.lockAppointment(manager, id);
-      if (appointment.patientId !== actor.userId) throw new ForbiddenException('Bạn chỉ có thể hủy lịch hẹn của chính mình.');
+      if (appointment.patientId !== actor.userId && appointment.createdBy !== actor.userId) throw new ForbiddenException('Bạn chỉ có thể hủy lịch hẹn của chính mình.');
       if (appointment.status === AppointmentStatus.PENDING_PAYMENT) throw new BadRequestException('Vui lòng hủy checkout qua payments/:appointmentId/cancel-pending.');
       if (appointment.status !== AppointmentStatus.CONFIRMED) throw new BadRequestException('Lịch hẹn hiện không thể hủy.');
       const schedule = await manager.getRepository(DoctorScheduleEntity).findOneByOrFail({ id: appointment.scheduleId });

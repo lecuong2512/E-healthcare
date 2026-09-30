@@ -142,10 +142,14 @@ export class ClinicalService {
     manager?: EntityManager,
   ): Promise<void> {
     if (role === Role.PATIENT && record.patientId !== userId) {
-      throw new ForbiddenException({
-        code: 'FORBIDDEN_ACCESS',
-        message: 'Bạn chỉ có thể xem hồ sơ bệnh án của chính mình.',
-      });
+      const appointment = await (manager ? manager.getRepository(AppointmentEntity) : this.appointmentRepo)
+        .findOne({ where: { id: record.appointmentId }, select: ['id', 'createdBy', 'patientId'] });
+      if (appointment?.createdBy !== userId) {
+        throw new ForbiddenException({
+          code: 'FORBIDDEN_ACCESS',
+          message: 'Bạn chỉ có thể xem hồ sơ bệnh án của chính mình.',
+        });
+      }
     }
     if (role === Role.DOCTOR) {
       const doctor = await this.getDoctorByUserId(userId, manager);

@@ -142,7 +142,10 @@ export class ClinicalEncryptedStore {
     patientId: string,
   ): Promise<MedicalRecordEntity | null> {
     const record = await manager.getRepository(MedicalRecordEntity).findOne({
-      where: { appointmentId, patientId },
+      where: [
+        { appointmentId, patientId },
+        { appointmentId, appointment: { createdBy: patientId } },
+      ],
       relations: {
         patient: true,
         doctor: { user: true },

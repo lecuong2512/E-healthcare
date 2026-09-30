@@ -12,9 +12,13 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import {
   AppointmentStatus,
+  DateOfBirthPrecision,
+  Gender,
   PaymentMethod,
   PaymentStatus,
+  Role,
   SlotStatus,
+  UserStatus,
 } from '@shared/enums';
 import {
   AppointmentResponse,
@@ -27,6 +31,7 @@ import { DoctorEntity } from '../../database/entities/doctor.entity';
 import { UserEntity } from '../../database/entities/user.entity';
 import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
 import { VoucherEntity } from '../../database/entities/voucher.entity';
+import { PersonalHealthProfileEntity, UserRoleEntity } from '../../database/entities/auth.entity';
 import { ConfirmBookingDto, ReleaseSlotDto, ReserveSlotDto } from './dto';
 import { paymentTimeoutSeconds } from '../payment/payment-timeout';
 import { isBookableStart } from './booking-slot-time';
@@ -253,9 +258,76 @@ export class BookingService {
         totalAmount = Math.max(0, totalAmount - discountAmount);
       }
 
+      let targetPatient: UserEntity | null = null;
+      let targetPatientId = authenticatedUserId;
+
+      if (dto.bookingFor === 'other' && dto.patientName?.trim()) {
+        const usersRepo = queryRunner.manager.getRepository(UserEntity);
+        const patientName = dto.patientName.trim();
+        const rawPhone = dto.patientPhone ? dto.patientPhone.replace(/\D/g, '') : null;
+
+        if (rawPhone) {
+          const candidates = await usersRepo.find({
+            where: { phoneNumber: rawPhone },
+          });
+          targetPatient = candidates.find(
+            (c) => c.fullName.trim().toLowerCase() === patientName.toLowerCase(),
+          ) ?? null;
+        }
+
+        if (!targetPatient) {
+          let contactPhone = rawPhone;
+          if (!contactPhone) {
+            const bookerUser = await usersRepo.findOneBy({ id: authenticatedUserId });
+            contactPhone = bookerUser?.phoneNumber ?? null;
+          }
+
+          const rawGender = dto.patientGender?.toLowerCase();
+          const gender = rawGender === 'female' || rawGender === Gender.FEMALE
+            ? Gender.FEMALE
+            : rawGender === 'other' || rawGender === Gender.OTHER
+              ? Gender.OTHER
+              : Gender.MALE;
+
+          const dateOfBirth = dto.patientDob?.trim() || '1990-01-01';
+
+          targetPatient = await usersRepo.save(
+            usersRepo.create({
+              fullName: patientName,
+              phoneNumber: contactPhone,
+              email: null,
+              passwordHash: null,
+              gender,
+              dateOfBirth,
+              dateOfBirthPrecision: DateOfBirthPrecision.FULL_DATE,
+              status: UserStatus.PENDING_VERIFY,
+              failedLoginAttempts: 0,
+              loginLockedUntil: null,
+              googleSubject: null,
+            }),
+          );
+
+          await queryRunner.manager.getRepository(UserRoleEntity).save({
+            userId: targetPatient.id,
+            role: Role.PATIENT,
+          });
+
+          await queryRunner.manager.getRepository(PersonalHealthProfileEntity).save({
+            userId: targetPatient.id,
+          });
+        }
+
+        targetPatientId = targetPatient.id;
+      } else {
+        targetPatient = await queryRunner.manager.getRepository(UserEntity).findOneBy({
+          id: authenticatedUserId,
+        });
+      }
+
       const appointment = queryRunner.manager.create(AppointmentEntity, {
         appointmentCode: this.generateAppointmentCode(),
-        patientId,
+        patientId: targetPatientId,
+        createdBy: authenticatedUserId,
         doctorId: dto.doctorId,
         scheduleId: dto.slotId,
         reservationId: dto.reservationId,
@@ -296,7 +368,7 @@ export class BookingService {
           const doctorUser = await this.dataSource.getRepository(UserEntity).findOneBy({ id: doctor.userId });
           const doctorName = doctorUser?.fullName || doctor.academicTitle || 'Bác sĩ';
           this.webPushService.sendAppointmentConfirmed(
-            patientId,
+            authenticatedUserId,
             saved.appointmentCode,
             doctorName,
             slot.date,
@@ -319,6 +391,15 @@ export class BookingService {
         finalAmount: Number(saved.totalAmount),
         voucherCode: saved.voucherCode,
         checkedInAt: saved.checkedInAt,
+        patient: targetPatient
+          ? {
+              id: targetPatient.id,
+              fullName: targetPatient.fullName,
+              phoneNumber: targetPatient.phoneNumber,
+              gender: targetPatient.gender,
+              dateOfBirth: targetPatient.dateOfBirth,
+            }
+          : undefined,
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();

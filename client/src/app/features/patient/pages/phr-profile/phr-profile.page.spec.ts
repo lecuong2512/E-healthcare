@@ -160,7 +160,7 @@ describe('PhrProfilePage', () => {
     );
   });
 
-  it('should restore the last saved profile when cancelChanges is called', () => {
+  it('should restore the last saved profile and reset all states when cancelChanges is called', () => {
     component['form'].fullName = 'Changed Name';
     component['form'].citizenId = '123456789';
     component['form'].gender = Gender.FEMALE;
@@ -170,11 +170,39 @@ describe('PhrProfilePage', () => {
     component['form'].allergies = 'Changed allergy';
 
     component['isSaved'] = true;
+    component['errorMessage'] = 'An error';
+    component['avatarPreview'] = 'data:image/png;base64,preview';
+    component['selectedAvatarFile'] = new File([''], 'test.png');
+    component['avatarUploadError'] = 'Upload failed';
+    component['avatarUploadSuccess'] = true;
+    component['consentAccepted'] = true;
+    component['consentError'] = true;
+
+    const routerSpy = jasmine.createSpyObj('Router', ['navigate']);
+    (component as any)['router'] = routerSpy;
+    (component as any)['location'] = null;
 
     component['cancelChanges']();
 
     expect(component['form']).toEqual(mockProfile);
+    expect(component['avatarPreview']).toBeNull();
+    expect(component['selectedAvatarFile']).toBeNull();
+    expect(component['avatarUploadError']).toBe('');
+    expect(component['avatarUploadSuccess']).toBeFalse();
     expect(component['isSaved']).toBeFalse();
     expect(component['errorMessage']).toBe('');
+    expect(component['consentAccepted']).toBeFalse();
+    expect(component['consentError']).toBeFalse();
+    expect(routerSpy.navigate).toHaveBeenCalledWith(['/patient/doctor-search']);
+  });
+
+  it('should navigate back via location when available and history is present', () => {
+    const locationSpy = jasmine.createSpyObj('Location', ['back']);
+    (component as any)['location'] = locationSpy;
+    spyOnProperty(window.history, 'length', 'get').and.returnValue(2);
+
+    component['cancelChanges']();
+
+    expect(locationSpy.back).toHaveBeenCalled();
   });
 });

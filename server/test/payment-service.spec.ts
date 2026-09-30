@@ -129,6 +129,21 @@ describe('PaymentService initiation and status', () => {
     expect(result.transactionId).toBe('payment-id');
   });
 
+  it('allows the creator of the appointment to initiate payment for their dependent', async () => {
+    appointment.patientId = 'dependent-patient-id';
+    appointment.createdBy = 'booker-id';
+
+    const result = await service.initiate(
+      appointmentId,
+      'booker-id',
+      idempotencyKey,
+      { provider: PaymentMethod.VNPAY },
+      '127.0.0.1',
+    );
+
+    expect(result.transactionId).toBe('payment-id');
+  });
+
   it('returns the same logical transaction for a retry with the same key', async () => {
     existing = {
       id: 'existing-payment',
@@ -320,5 +335,44 @@ describe('PaymentService initiation and status', () => {
       where: { id: 'canonical-payment', appointmentId },
     });
     expect(result.transactionStatus).toBe(PaymentTransactionStatus.SUCCESS);
+  });
+
+  it('resolves merchantTransactionId in status to the underlying appointment', async () => {
+    const merchantTxnId = 'PAY20261001ABCDEF';
+    const txn = {
+      id: 'txn-uuid-1',
+      appointmentId,
+      merchantTransactionId: merchantTxnId,
+      provider: PaymentMethod.VNPAY,
+      status: PaymentTransactionStatus.PENDING,
+      expiresAt: new Date(Date.now() + 60000),
+      paidAt: null,
+    } as PaymentTransactionEntity;
+    (dataSource.getRepository as jest.Mock).mockImplementation((entity) =>
+      entity === AppointmentEntity
+        ? { findOne: jest.fn().mockResolvedValue(appointment) }
+        : {
+            findOne: jest.fn(async (args) => {
+              if (args?.where?.merchantTransactionId === merchantTxnId) return txn;
+              return txn;
+            }),
+            find: jest.fn().mockResolvedValue([txn]),
+          },
+    );
+
+    const result = await service.status(merchantTxnId, patientId);
+    expect(result.appointmentId).toBe(appointmentId);
+  });
+
+  it('throws NotFoundException when an identifier does not match any appointment or transaction', async () => {
+    (dataSource.getRepository as jest.Mock).mockImplementation((entity) =>
+      entity === AppointmentEntity
+        ? { findOne: jest.fn().mockResolvedValue(null) }
+        : { findOne: jest.fn().mockResolvedValue(null), find: jest.fn().mockResolvedValue([]) },
+    );
+
+    await expect(service.status('UNKNOWN_TXN', patientId)).rejects.toThrow(
+      'Không tìm thấy lịch hẹn hoặc giao dịch thanh toán.',
+    );
   });
 });
