@@ -1,5 +1,7 @@
 import "reflect-metadata";
-import { requiredEnvironment } from "../config/environment";
+import { environment, requiredEnvironment } from "../config/environment";
 import { createDataSource } from "./database-options";
 
-export default createDataSource(requiredEnvironment("DATABASE_URL"));
+export default createDataSource(
+  environment.DATABASE_MIGRATION_URL ?? requiredEnvironment("DATABASE_URL"),
+);

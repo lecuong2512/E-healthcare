@@ -1,4 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  inject,
+  signal,
+} from '@angular/core';
 import { ReactiveFormsModule, NonNullableFormBuilder } from '@angular/forms';
 import { AuditAction } from '@shared/enums';
 
@@ -10,6 +16,8 @@ import {
   vietnamDateTimeToUtcIso,
 } from './audit-log-time.util';
 import { AuditLogsPresentationStore } from './audit-logs-presentation.store';
+import { AuditLogsApiService } from './audit-logs-api.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-audit-logs-page',
@@ -27,11 +35,15 @@ import { AuditLogsPresentationStore } from './audit-logs-presentation.store';
 export class AuditLogsPage {
   private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly csvDownload = inject(AuditLogCsvDownloadService);
+  private readonly api = inject(AuditLogsApiService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly store = inject(AuditLogsPresentationStore);
   private readonly defaultRange = createDefaultVietnamRange();
 
   readonly actionOptions: readonly AuditAction[] = Object.values(AuditAction);
   readonly validationError = signal<string | null>(null);
+  private loadSubscription: Subscription | null = null;
+  private exportSubscription: Subscription | null = null;
 
   readonly filterForm = this.formBuilder.group({
     fromLocal: this.defaultRange.fromLocal,
@@ -39,6 +51,13 @@ export class AuditLogsPage {
     action: '',
     search: '',
   });
+
+  constructor() {
+    this.destroyRef.onDestroy(() => {
+      this.loadSubscription?.unsubscribe();
+      this.exportSubscription?.unsubscribe();
+    });
+  }
 
   applyFilters(): void {
     const value = this.filterForm.getRawValue();
@@ -59,6 +78,7 @@ export class AuditLogsPage {
 
     this.validationError.set(null);
     this.store.applyFilter(value);
+    this.loadCurrentPage();
   }
 
   resetFilters(): void {
@@ -75,9 +95,35 @@ export class AuditLogsPage {
   changePageSize(event: Event): void {
     const select = event.target as HTMLSelectElement;
     this.store.setPageSize(Number(select.value));
+    this.loadCurrentPage();
   }
 
-  /** Called by the future API adapter after receiving a server-generated CSV. */
+  changePage(page: number): void {
+    this.store.setPage(page);
+    this.loadCurrentPage();
+  }
+
+  retry(): void {
+    this.store.retry();
+    this.loadCurrentPage();
+  }
+
+  exportCsv(): void {
+    const filter = this.store.filter();
+    if (!filter || this.store.exportState() === 'exporting') return;
+    this.store.requestExport();
+    this.exportSubscription?.unsubscribe();
+    this.exportSubscription = this.api.exportCsv(filter).subscribe({
+      next: (response) =>
+        this.completeCsvExport(
+          response.body ?? new Blob([], { type: 'text/csv' }),
+          response.headers.get('Content-Disposition'),
+        ),
+      error: () => this.failCsvExport('Không thể xuất nhật ký kiểm toán.'),
+    });
+  }
+
+  /** Completes a server-generated, read-only CSV export. */
   completeCsvExport(blob: Blob, contentDisposition: string | null): void {
     this.csvDownload.download(blob, contentDisposition);
     this.store.exportSuccess();
@@ -85,5 +131,23 @@ export class AuditLogsPage {
 
   failCsvExport(message: string): void {
     this.store.exportError(message);
+  }
+
+  private loadCurrentPage(): void {
+    const filter = this.store.filter();
+    if (!filter) return;
+    this.loadSubscription?.unsubscribe();
+    this.store.startLoading();
+    this.loadSubscription = this.api
+      .list(filter, this.store.page(), this.store.pageSize())
+      .subscribe({
+        next: (result) =>
+          this.store.loadSuccess(
+            result.rows,
+            result.total,
+            result.totalPages,
+          ),
+        error: () => this.store.loadError('Không thể tải nhật ký kiểm toán.'),
+      });
   }
 }
