@@ -1,5 +1,21 @@
+@if (pendingPaymentContext(); as pending) {
+  <section class="mx-auto max-w-[960px] px-4 py-4" aria-label="Khôi phục checkout">
+    <nz-alert nzType="warning" nzShowIcon nzMessage="Bạn có một lịch hẹn đang chờ thanh toán"
+      nzDescription="Hệ thống đã giữ ID checkout để kiểm tra với backend. Lịch mới sẽ không tự xử lý giao dịch cũ."></nz-alert>
+    <p class="mt-3 break-words text-sm text-slate-700" role="status">Mã lịch: {{ checkoutStatus()?.appointmentCode || pending.appointmentId }} — {{ checkoutStatus()?.transactionStatus || 'Đang xác minh' }}</p>
+    @if (checkoutStatus()?.failureCode === 'PROVIDER_REJECTED') {
+      <p class="mt-2 text-sm text-slate-700">Cổng thanh toán đã từ chối lần thử này. Nếu còn thời gian giữ chỗ, bạn có thể thử lại hoặc đổi phương thức.</p>
+    }
+    <div class="mt-3 flex flex-wrap gap-3">
+      <button type="button" (click)="retryPendingPayment()" [disabled]="loading()" class="min-h-[44px] rounded-xl border border-sky-300 bg-white px-4 text-sm font-semibold text-sky-800 disabled:opacity-60">{{ recoveryActive() ? 'Kiểm tra trạng thái' : 'Tiếp tục thanh toán / Đổi phương thức' }}</button>
+      <button type="button" (click)="cancelPendingPayment()" [disabled]="loading()" class="min-h-[44px] rounded-xl border border-rose-300 bg-rose-50 px-4 text-sm font-semibold text-rose-800 disabled:opacity-60">Hủy giao dịch chờ</button>
+      <button type="button" (click)="startNewBooking()" [disabled]="loading()" class="min-h-[44px] rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-60">Bắt đầu đặt lịch mới</button>
+    </div>
+  </section>
+}
+
 <!-- ─── COUNTDOWN BANNER (hiển thị từ Bước 2 trở đi) ─── -->
-@if (step() >= 2) {
+@if (step() >= 2 && !pendingPaymentContext() && !payAtClinicReceipt()) {
   <div class="bg-[#FFFBEB] border-b border-[#FEF3C7] py-2 px-4 sticky top-0 z-30">
     <div class="max-w-[1120px] mx-auto w-full flex items-center justify-between text-xs text-amber-900">
       <div class="flex items-center gap-1.5 font-medium">
@@ -660,46 +676,6 @@
             </div>
           </div>
 
-          @if (pendingPaymentContext(); as pendingPayment) {
-            <div class="space-y-3">
-              <nz-alert
-                nzType="warning"
-                nzShowIcon
-                [nzMessage]="pendingAlertTitle"
-                [nzDescription]="pendingAlertDesc"
-                class="rounded-xl border border-amber-200"
-              ></nz-alert>
-              <ng-template #pendingAlertTitle>
-                <div class="font-bold text-amber-900 text-sm leading-snug">
-                  Lịch hẹn đã được tạo và đang chờ thanh toán.
-                </div>
-              </ng-template>
-              <ng-template #pendingAlertDesc>
-                <div class="text-xs text-amber-800 mt-1 leading-relaxed">
-                  Tiếp tục giao dịch <span class="font-semibold">{{ pendingPayment.provider }}</span>. Hệ thống sẽ không tạo lại lịch hẹn mới khi giao dịch này chưa hoàn tất.
-                </div>
-              </ng-template>
-
-              <div class="flex flex-col sm:flex-row gap-2.5">
-                <button
-                  type="button"
-                  (click)="retryPendingPayment()"
-                  [disabled]="loading()"
-                  class="min-h-[44px] flex-1 rounded-xl bg-sky-600 px-5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60 shadow-sm"
-                >
-                  Tiếp tục thanh toán
-                </button>
-                <button
-                  type="button"
-                  (click)="cancelPendingPayment()"
-                  [disabled]="loading()"
-                  class="min-h-[44px] sm:w-auto rounded-xl border border-rose-300 bg-rose-50 px-5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Hủy giao dịch chờ này để đặt lại
-                </button>
-              </div>
-            </div>
-          }
 
           <!-- Payment method selection -->
           <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
@@ -709,6 +685,8 @@
                 <button
                   type="button"
                   (click)="selectPayment(pm.id)"
+                  [disabled]="loading() || (recoveryActive() && (pm.id === 'PAY_AT_CLINIC' ? !canFallback() : !canPay()))"
+                  [attr.aria-pressed]="paymentMethod() === pm.id"
                   class="py-3 px-4 rounded-xl border flex items-center gap-2.5 transition-all text-left"
                   [class.border-sky-500]="paymentMethod() === pm.id"
                   [class.bg-sky-50]="paymentMethod() === pm.id"
@@ -719,9 +697,9 @@
                 >
                   <span class="text-xl leading-none">
                     @if (pm.iconPath) {
-                    <img [src]="pm.iconPath" [alt]="pm.label" class="w-6 h-6">
+                    <img [src]="pm.iconPath" alt="" class="w-6 h-6">
                       } @else {
-                    <span class="text-xl leading-none">{{ pm.icon }}</span>
+                    <svg aria-hidden="true" class="h-6 w-6 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V9l7-6 7 6v12M9 12h6M12 9v6M10 21v-4h4v4"/></svg>
                   }
                   </span>
                   <span class="text-xs font-semibold"
@@ -811,9 +789,9 @@
                     class="min-h-[44px] px-5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
               ← Sửa hồ sơ
             </button>
-            <button type="button" (click)="submitBooking()" [disabled]="loading()"
+            <button type="button" (click)="submitBooking()" [disabled]="loading() || (recoveryActive() && (paymentMethod() === 'PAY_AT_CLINIC' ? !canFallback() : !canPay()))"
                     class="min-h-[44px] px-8 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-xs font-bold text-white shadow-md transition">
-              @if (loading()) { Đang xử lý... } @else { Xác nhận đặt khám }
+              @if (loading()) { Đang xử lý... } @else if (recoveryActive()) { {{ paymentMethod() === 'PAY_AT_CLINIC' ? 'Xác nhận thanh toán tại viện' : 'Thanh toán lịch hẹn hiện tại' }} } @else { Xác nhận đặt khám }
             </button>
           </div>
 

@@ -2,12 +2,62 @@ import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { AppointmentStatus, PaymentMethod, PaymentStatus, PaymentTransactionStatus } from '@shared/enums';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { PatientBookingApiService } from '../../data-access/patient-booking-api.service';
 import { PaymentResultPage } from './payment-result.page';
 
 describe('PaymentResultPage', () => {
   afterEach(() => sessionStorage.clear());
+
+  it('keeps a failed attempt recoverable while its appointment is pending', fakeAsync(() => {
+    const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['getPaymentStatus']);
+    api.getPaymentStatus.and.returnValue(of({ appointmentId: 'appointment-id', appointmentStatus: AppointmentStatus.PENDING_PAYMENT,
+      paymentStatus: PaymentStatus.FAILED, provider: PaymentMethod.VNPAY, transactionStatus: PaymentTransactionStatus.FAILED,
+      canRetry: true, canFallbackToClinic: true, expiresAt: null, paidAt: null }));
+    TestBed.configureTestingModule({ imports: [PaymentResultPage, NoopAnimationsModule], providers: [
+      { provide: PatientBookingApiService, useValue: api },
+      { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: { get: () => 'appointment-id' } } } },
+    ] });
+    sessionStorage.setItem('pendingPaymentContext', '{"appointmentId":"appointment-id"}');
+    const fixture = TestBed.createComponent(PaymentResultPage);
+    tick();
+    expect(fixture.componentInstance.state()).toBe('recoverable');
+    expect(sessionStorage.getItem('pendingPaymentContext')).not.toBeNull();
+    fixture.destroy();
+  }));
+
+  it('does not clear a newer checkout when showing an older completed result', fakeAsync(() => {
+    const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['getPaymentStatus']);
+    api.getPaymentStatus.and.returnValue(of({ appointmentId: 'old-id', appointmentStatus: AppointmentStatus.CONFIRMED,
+      paymentStatus: PaymentStatus.PAID, provider: PaymentMethod.VNPAY, transactionStatus: PaymentTransactionStatus.SUCCESS, expiresAt: null, paidAt: null }));
+    TestBed.configureTestingModule({ imports: [PaymentResultPage, NoopAnimationsModule], providers: [
+      { provide: PatientBookingApiService, useValue: api },
+      { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: { get: () => 'old-id' } } } },
+    ] });
+    sessionStorage.setItem('pendingPaymentContext', '{"appointmentId":"new-id"}');
+    sessionStorage.setItem('pendingPaymentAppointmentId', 'new-id');
+    const fixture = TestBed.createComponent(PaymentResultPage);
+    tick();
+    expect(fixture.componentInstance.state()).toBe('success');
+    expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBe('new-id');
+    expect(JSON.parse(sessionStorage.getItem('pendingPaymentContext')!).appointmentId).toBe('new-id');
+    fixture.destroy();
+  }));
+
+  it('retains context when status polling fails', fakeAsync(() => {
+    const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['getPaymentStatus']);
+    api.getPaymentStatus.and.returnValue(throwError(() => new Error('offline')));
+    TestBed.configureTestingModule({ imports: [PaymentResultPage, NoopAnimationsModule], providers: [
+      { provide: PatientBookingApiService, useValue: api },
+      { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: { get: () => 'appointment-id' } } } },
+    ] });
+    sessionStorage.setItem('pendingPaymentContext', '{"appointmentId":"appointment-id"}');
+    const fixture = TestBed.createComponent(PaymentResultPage);
+    tick();
+    expect(fixture.componentInstance.state()).toBe('error');
+    expect(sessionStorage.getItem('pendingPaymentContext')).not.toBeNull();
+    fixture.destroy();
+  }));
 
   it('shows success only from the ownership-safe backend status', fakeAsync(() => {
     const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['getPaymentStatus']);
@@ -40,7 +90,7 @@ describe('PaymentResultPage', () => {
     expect(sessionStorage.getItem('pendingPaymentContext')).toBeNull();
   }));
 
-  it('keeps the pending appointment in session storage while reconciliation is required', fakeAsync(() => {
+  it('clears terminal appointment context even when its transaction needs reconciliation', fakeAsync(() => {
     const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['getPaymentStatus']);
     api.getPaymentStatus.and.returnValue(of({
       appointmentId: 'appointment-id',
@@ -67,7 +117,7 @@ describe('PaymentResultPage', () => {
 
     expect(fixture.componentInstance.state()).toBe('warning');
     expect(api.getPaymentStatus).toHaveBeenCalledWith('appointment-id');
-    expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBe('appointment-id');
-    expect(sessionStorage.getItem('pendingPaymentContext')).not.toBeNull();
+    expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBeNull();
+    expect(sessionStorage.getItem('pendingPaymentContext')).toBeNull();
   }));
 });
