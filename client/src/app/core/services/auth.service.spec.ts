@@ -125,7 +125,7 @@ describe('AuthService', () => {
       expect(profile).toBeTruthy();
     });
 
-    const req = httpMock.expectOne('/api/v1/auth/me');
+    const req = httpMock.expectOne('/api/v1/auth/profile');
     expect(req.request.method).toBe('GET');
     req.flush({
       userId: 'user-001',

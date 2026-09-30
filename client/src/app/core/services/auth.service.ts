@@ -115,7 +115,7 @@ export class AuthService {
   }
 
   fetchProfile(): Observable<CurrentUser> {
-    return this.http.get<CurrentUser>(`${API_BASE}/auth/me`).pipe(
+    return this.http.get<CurrentUser>(`${API_BASE}/auth/profile`).pipe(
       tap((user) => {
         if (user) {
           const current = this.tokenStore.currentUser();

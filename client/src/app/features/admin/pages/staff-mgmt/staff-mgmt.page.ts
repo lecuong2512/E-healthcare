@@ -73,19 +73,31 @@ export class StaffMgmtPage {
   readonly staffPageCount = computed(() => this.pageCount(this.filteredStaff().length));
   readonly roomPageCount = computed(() => this.pageCount(this.roomCatalog().length));
   readonly shiftPageCount = computed(() => this.pageCount(this.recurringShifts().length));
+  readonly availableRooms = computed<{ roomNumber: string; label: string }[]>(() => {
+    if (this.roomCatalog().length > 0) {
+      return this.roomCatalog().map(r => ({
+        roomNumber: r.roomNumber,
+        label: r.roomName ? `${r.roomNumber} — ${r.roomName}` : r.roomNumber,
+      }));
+    }
+    return this.rooms().map(r => ({ roomNumber: r, label: r }));
+  });
 
   readonly staffForm = this.formBuilder.nonNullable.group({
     fullName: ['', [Validators.required, Validators.maxLength(100)]],
     email: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required, Validators.minLength(8)]],
     phoneNumber: [''], role: ['ROLE_DOCTOR'], gender: ['MALE'], dateOfBirth: ['', Validators.required],
-    specialtyId: [''], licenseNumber: [''], roomNumber: [''], academicTitle: [''],
+    specialtyId: [''],
+    licenseNumber: ['', [Validators.pattern(/^[A-Za-z0-9][A-Za-z0-9./-]{4,49}$/)]],
+    roomNumber: [''], academicTitle: [''],
     yearsExperience: [0, [Validators.min(0)]],
   });
   readonly detailForm = this.formBuilder.nonNullable.group({
     fullName: ['', [Validators.required, Validators.maxLength(100)]],
     phoneNumber: [''], gender: ['MALE'], dateOfBirth: ['', Validators.required],
-    licenseNumber: [''], roomNumber: [''], academicTitle: [''],
+    licenseNumber: ['', [Validators.pattern(/^[A-Za-z0-9][A-Za-z0-9./-]{4,49}$/)]],
+    roomNumber: [''], academicTitle: [''],
     yearsExperience: [0, [Validators.min(0)]],
   });
   readonly roomForm = this.formBuilder.nonNullable.group({ roomNumber: ['', Validators.required], roomName: [''], specialtyId: [''], roomType: ['CONSULTATION'], location: [''], notes: [''] });
@@ -116,8 +128,29 @@ export class StaffMgmtPage {
     this.selectedCreateSpecialtyIds.update(values => checked ? [...values, id] : values.filter(value => value !== id));
   }
 
+  onRoomSelected(roomNumber: string): void {
+    if (!roomNumber) return;
+    const room = this.roomCatalog().find(r => r.roomNumber === roomNumber);
+    if (room?.specialtyId && !this.selectedCreateSpecialtyIds().includes(room.specialtyId)) {
+      this.selectedCreateSpecialtyIds.update(ids => [...ids, room.specialtyId!]);
+    }
+  }
+
+  getDoctorInRoom(roomNumber: string): string {
+    const doctor = this.staff().find(s => s.roomNumber === roomNumber);
+    return doctor ? doctor.name : '';
+  }
+
   createStaff(): void {
-    if (this.staffForm.invalid) { this.staffForm.markAllAsTouched(); return; }
+    if (this.staffForm.invalid) {
+      this.staffForm.markAllAsTouched();
+      if (this.staffForm.controls.licenseNumber.invalid) {
+        this.errorMessage.set('Số CCHN không đúng định dạng: chỉ gồm chữ, số, dấu chấm, gạch chéo hoặc gạch ngang (tối thiểu 5 ký tự).');
+      } else {
+        this.errorMessage.set('Vui lòng kiểm tra lại các trường thông tin bắt buộc.');
+      }
+      return;
+    }
     const value = this.staffForm.getRawValue();
     const typedIds = value.specialtyId.split(',').map(item => item.trim()).filter(Boolean);
     const specialtyIds = this.selectedCreateSpecialtyIds().length ? this.selectedCreateSpecialtyIds() : typedIds;
@@ -130,8 +163,14 @@ export class StaffMgmtPage {
         this.submitting.set(false); this.showForm.set(false); this.selectedCreateSpecialtyIds.set([]);
         this.staffForm.reset({ role: Role.DOCTOR, gender: 'MALE', fullName: '', email: '', phoneNumber: '', password: '', dateOfBirth: '', specialtyId: '', licenseNumber: '', roomNumber: '', academicTitle: '', yearsExperience: 0 });
         this.loadStaff();
+        this.loadRooms();
+        this.loadRoomCatalog();
       },
-      error: () => { this.submitting.set(false); this.errorMessage.set('Không thể tạo tài khoản. Vui lòng kiểm tra lại thông tin.'); },
+      error: (err) => {
+        this.submitting.set(false);
+        const msg = err?.error?.message;
+        this.errorMessage.set(Array.isArray(msg) ? msg.join(', ') : (msg || 'Không thể tạo tài khoản. Vui lòng kiểm tra lại thông tin.'));
+      },
     });
   }
 
@@ -151,8 +190,8 @@ export class StaffMgmtPage {
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
     const file = input.files[0];
-    if (file.size > 2 * 1024 * 1024) {
-      this.avatarUploadError.set('Ảnh vượt quá dung lượng 2MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      this.avatarUploadError.set('Ảnh vượt quá dung lượng 10MB.');
       return;
     }
     const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
@@ -183,15 +222,24 @@ export class StaffMgmtPage {
 
   saveDetails(): void {
     const person = this.selectedStaff();
-    if (!person || this.detailForm.invalid) return;
+    if (!person || this.detailForm.invalid) {
+      if (this.detailForm.controls.licenseNumber.invalid) {
+        this.errorMessage.set('Số CCHN không đúng định dạng (tối thiểu 5 ký tự).');
+      }
+      return;
+    }
     const specialtyIds = this.selectedDetailSpecialtyIds();
     if (person.roleValue === Role.DOCTOR && !specialtyIds.length) {
       this.errorMessage.set('Bác sĩ phải thuộc ít nhất một chuyên khoa.'); return;
     }
     this.savingDetails.set(true); this.errorMessage.set('');
     this.api.updateProfile(person.id, { ...this.detailForm.getRawValue(), specialtyIds }).subscribe({
-      next: () => { this.savingDetails.set(false); this.selectedStaff.set(null); this.loadStaff(); },
-      error: () => { this.savingDetails.set(false); this.errorMessage.set('Không thể lưu hồ sơ nhân sự.'); },
+      next: () => { this.savingDetails.set(false); this.selectedStaff.set(null); this.loadStaff(); this.loadRooms(); this.loadRoomCatalog(); },
+      error: (err) => {
+        this.savingDetails.set(false);
+        const msg = err?.error?.message;
+        this.errorMessage.set(Array.isArray(msg) ? msg.join(', ') : (msg || 'Không thể lưu hồ sơ nhân sự.'));
+      },
     });
   }
 

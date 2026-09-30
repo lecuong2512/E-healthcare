@@ -95,10 +95,19 @@ export class SessionController {
     @Res({ passthrough: true }) response: Response,
   ) {
     response.setHeader("Cache-Control", "no-store");
-    const user = await this.sessions.getCurrentUser(
+    return { userId: request.auth!.userId, role: request.auth!.role };
+  }
+
+  @Get("profile")
+  @Roles(Role.PATIENT, Role.DOCTOR, Role.RECEPTIONIST, Role.ADMIN)
+  async profile(
+    @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader("Cache-Control", "no-store");
+    return this.sessions.getCurrentUser(
       request.auth!.userId,
       request.auth!.role,
     );
-    return { userId: request.auth!.userId, role: request.auth!.role, user };
   }
 }

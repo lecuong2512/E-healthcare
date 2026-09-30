@@ -122,8 +122,26 @@ export class StaffAdminService {
       const user = await manager.save(manager.create(UserEntity, { fullName: input.fullName.trim(), email: input.email.trim().toLowerCase(), phoneNumber: input.phoneNumber?.trim() || null, passwordHash: await hashPassword(input.password), gender: input.gender, dateOfBirth: input.dateOfBirth, status: UserStatus.ACTIVE, dateOfBirthPrecision: DateOfBirthPrecision.FULL_DATE, failedLoginAttempts: 0, loginLockedUntil: null, googleSubject: null }));
       await manager.save(manager.create(UserRoleEntity, { userId: user.id, role: input.role }));
       if (input.role === Role.DOCTOR) {
-        const doctor = await manager.save(manager.create(DoctorEntity, { userId: user.id, specialtyId: specialtyIds[0], licenseNumber: input.licenseNumber!, academicTitle: input.academicTitle ?? null, yearsExperience: input.yearsExperience!, consultationFee: 0, bioDescription: null, roomNumber: input.roomNumber!, ratingAverage: 5 }));
+        const normRoom = input.roomNumber!.trim().toUpperCase();
+        const doctor = await manager.save(manager.create(DoctorEntity, { userId: user.id, specialtyId: specialtyIds[0], licenseNumber: input.licenseNumber!, academicTitle: input.academicTitle ?? null, yearsExperience: input.yearsExperience!, consultationFee: 0, bioDescription: null, roomNumber: normRoom, ratingAverage: 5 }));
         for (const [index, specialtyId] of specialtyIds.entries()) await manager.save(manager.create(DoctorSpecialtyEntity, { doctorId: doctor.id, specialtyId, isPrimary: index === 0 }));
+
+        // Đồng bộ phòng khám: đảm bảo phòng tồn tại trong danh mục clinic_rooms
+        const roomRepo = manager.getRepository?.(ClinicRoomEntity);
+        if (roomRepo?.findOneBy) {
+          const clinicRoom = await roomRepo.findOneBy({ roomNumber: normRoom });
+          if (!clinicRoom) {
+            await roomRepo.save(roomRepo.create({
+              roomNumber: normRoom,
+              roomName: `Phòng ${normRoom}`,
+              specialtyId: specialtyIds[0] || null,
+              isActive: true,
+            }));
+          } else if (!clinicRoom.specialtyId && specialtyIds[0]) {
+            clinicRoom.specialtyId = specialtyIds[0];
+            await roomRepo.save(clinicRoom);
+          }
+        }
       }
       return user;
     });
@@ -145,7 +163,22 @@ export class StaffAdminService {
       if (doctor) {
         if (input.avatarUrl !== undefined) doctor.avatarUrl = input.avatarUrl;
         if (input.licenseNumber?.trim()) { await this.validateLicenseNumber(input.licenseNumber, doctor.id); doctor.licenseNumber = input.licenseNumber.trim().toUpperCase(); }
-        if (input.roomNumber?.trim()) doctor.roomNumber = input.roomNumber.trim();
+        if (input.roomNumber?.trim()) {
+          const normRoom = input.roomNumber.trim().toUpperCase();
+          doctor.roomNumber = normRoom;
+          const roomRepo = manager.getRepository?.(ClinicRoomEntity);
+          if (roomRepo?.findOneBy) {
+            const clinicRoom = await roomRepo.findOneBy({ roomNumber: normRoom });
+            if (!clinicRoom) {
+              await roomRepo.save(roomRepo.create({
+                roomNumber: normRoom,
+                roomName: `Phòng ${normRoom}`,
+                specialtyId: doctor.specialtyId || null,
+                isActive: true,
+              }));
+            }
+          }
+        }
         if (input.academicTitle !== undefined) doctor.academicTitle = input.academicTitle?.trim() || null;
         if (input.yearsExperience !== undefined) {
           if (input.yearsExperience < 0) throw new BadRequestException('Số năm kinh nghiệm không hợp lệ.');

@@ -55,7 +55,7 @@
     }
 
     @if (activeTab() === 'rooms') {
-      <article class="table-card"><h2>Danh mục Phòng/Buồng khám</h2><form class="room-form room-form-grid" [formGroup]="roomForm" (ngSubmit)="createRoom()"><input formControlName="roomNumber" placeholder="Mã phòng, ví dụ P007" /><input formControlName="roomName" placeholder="Tên phòng/buồng" /><select formControlName="specialtyId"><option value="">Chọn chuyên khoa</option>@for (specialty of specialties(); track specialty.id) { <option [value]="specialty.id">{{ specialty.name }}</option> }</select><select formControlName="roomType"><option value="CONSULTATION">Phòng khám</option><option value="EXAMINATION">Buồng khám</option><option value="PROCEDURE">Phòng thủ thuật</option><option value="OTHER">Khác</option></select><input formControlName="location" placeholder="Tầng/khu vực" /><input formControlName="notes" placeholder="Ghi chú" /><button class="primary" type="submit">Thêm phòng</button></form>@if (roomMessage()) { <p class="room-success">{{ roomMessage() }}</p> } @if (roomError()) { <p class="form-error">{{ roomError() }}</p> }<div class="table-scroll"><table><thead><tr><th>Mã phòng</th><th>Tên phòng/buồng</th><th>Chuyên khoa</th><th>Loại</th><th>Khu vực</th><th>Trạng thái</th><th>Hành động</th></tr></thead><tbody>@for (room of pagedRooms(); track room.id) { <tr><td>{{ room.roomNumber }}</td><td>{{ room.roomName || '—' }}</td><td>{{ specialtyName(room.specialtyId) }}</td><td>{{ room.roomType === 'CONSULTATION' ? 'Phòng khám' : room.roomType === 'EXAMINATION' ? 'Buồng khám' : room.roomType === 'PROCEDURE' ? 'Phòng thủ thuật' : room.roomType || '—' }}</td><td>{{ room.location || '—' }}</td><td><span [class.blocked]="!room.isActive">{{ room.isActive ? 'Hoạt động' : 'Đã khóa' }}</span></td><td><div class="actions"><button class="row-action detail-action" data-testid="room-details" type="button" (click)="openRoomDetails(room)">Xem chi tiết</button><button class="row-action" type="button" (click)="lockRoom(room)">{{ room.isActive ? 'Khóa' : 'Mở khóa' }}</button><button class="row-action" data-testid="room-edit" type="button" (click)="openRoomEdit(room)">Chỉnh sửa</button></div></td></tr> } @empty { <tr><td colspan="7" class="empty">Chưa có phòng/buồng.</td></tr> }</tbody></table></div><div class="pagination"><span>Trang {{ roomPage() }} / {{ roomPageCount() }}</span><button type="button" (click)="changePage('room', roomPage() - 1)" [disabled]="roomPage() === 1">Trước</button><button type="button" (click)="changePage('room', roomPage() + 1)" [disabled]="roomPage() === roomPageCount()">Sau</button></div></article>
+      <article class="table-card"><h2>Danh mục Phòng/Buồng khám</h2><form class="room-form room-form-grid" [formGroup]="roomForm" (ngSubmit)="createRoom()"><input formControlName="roomNumber" placeholder="Mã phòng, ví dụ P007" /><input formControlName="roomName" placeholder="Tên phòng/buồng" /><select formControlName="specialtyId"><option value="">Chọn chuyên khoa</option>@for (specialty of specialties(); track specialty.id) { <option [value]="specialty.id">{{ specialty.name }}</option> }</select><select formControlName="roomType"><option value="CONSULTATION">Phòng khám</option><option value="EXAMINATION">Buồng khám</option><option value="PROCEDURE">Phòng thủ thuật</option><option value="OTHER">Khác</option></select><input formControlName="location" placeholder="Tầng/khu vực" /><input formControlName="notes" placeholder="Ghi chú" /><button class="primary" type="submit">Thêm phòng</button></form>@if (roomMessage()) { <p class="room-success">{{ roomMessage() }}</p> } @if (roomError()) { <p class="form-error">{{ roomError() }}</p> }<div class="table-scroll"><table><thead><tr><th>Mã phòng</th><th>Tên phòng/buồng</th><th>Bác sĩ phụ trách</th><th>Chuyên khoa</th><th>Loại</th><th>Khu vực</th><th>Trạng thái</th><th>Hành động</th></tr></thead><tbody>@for (room of pagedRooms(); track room.id) { <tr><td>{{ room.roomNumber }}</td><td>{{ room.roomName || '—' }}</td><td><strong>{{ getDoctorInRoom(room.roomNumber) || 'Chưa phân công' }}</strong></td><td>{{ specialtyName(room.specialtyId) }}</td><td>{{ room.roomType === 'CONSULTATION' ? 'Phòng khám' : room.roomType === 'EXAMINATION' ? 'Buồng khám' : room.roomType === 'PROCEDURE' ? 'Phòng thủ thuật' : room.roomType || '—' }}</td><td>{{ room.location || '—' }}</td><td><span [class.blocked]="!room.isActive">{{ room.isActive ? 'Hoạt động' : 'Đã khóa' }}</span></td><td><div class="actions"><button class="row-action detail-action" data-testid="room-details" type="button" (click)="openRoomDetails(room)">Xem chi tiết</button><button class="row-action" type="button" (click)="lockRoom(room)">{{ room.isActive ? 'Khóa' : 'Mở khóa' }}</button><button class="row-action" data-testid="room-edit" type="button" (click)="openRoomEdit(room)">Chỉnh sửa</button></div></td></tr> } @empty { <tr><td colspan="8" class="empty">Chưa có phòng/buồng.</td></tr> }</tbody></table></div><div class="pagination"><span>Trang {{ roomPage() }} / {{ roomPageCount() }}</span><button type="button" (click)="changePage('room', roomPage() - 1)" [disabled]="roomPage() === 1">Trước</button><button type="button" (click)="changePage('room', roomPage() + 1)" [disabled]="roomPage() === roomPageCount()">Sau</button></div></article>
     }
 
     @if (activeTab() === 'shifts') {
@@ -73,13 +73,32 @@
   @if (showForm()) {
     <div class="shade"><form [formGroup]="staffForm" (ngSubmit)="createStaff()">
       <header><div><h2>Thêm nhân sự</h2><p>Tạo tài khoản và hồ sơ chuyên môn.</p></div><button type="button" class="close" (click)="showForm.set(false)">×</button></header>
+      @if (errorMessage()) {
+        <div style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+          <span>⚠️ {{ errorMessage() }}</span>
+        </div>
+      }
       <div class="form-grid">
         <label>Họ tên<input formControlName="fullName" required /></label><label>Email<input formControlName="email" type="email" required /></label>
         <label>Số điện thoại<input formControlName="phoneNumber" type="tel" /></label><label>Giới tính<select formControlName="gender"><option value="MALE">Nam</option><option value="FEMALE">Nữ</option><option value="OTHER">Khác</option></select></label>
         <label>Mật khẩu tạm thời<input formControlName="password" type="password" required /></label><label>Ngày sinh<input formControlName="dateOfBirth" type="date" required /></label>
         <label>Vai trò<select formControlName="role"><option [value]="Role.DOCTOR">Bác sĩ</option><option [value]="Role.RECEPTIONIST">Lễ tân</option><option [value]="Role.ADMIN">Quản trị</option></select></label>
         @if (staffForm.controls.role.value === Role.DOCTOR) {
-          <label>Số CCHN<input formControlName="licenseNumber" /></label><label>Phòng/Buồng khám<select formControlName="roomNumber"><option value="">Chọn phòng/buồng</option>@for (room of rooms(); track room) { <option [value]="room">{{ room }}</option> }</select></label>
+          <label>
+            Số CCHN
+            <input formControlName="licenseNumber" placeholder="Ví dụ: CCHN-00123" />
+            @if (staffForm.controls.licenseNumber.invalid && staffForm.controls.licenseNumber.touched) {
+              <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Tối thiểu 5 ký tự (chữ, số, ., /, -)</span>
+            }
+          </label>
+          <label>Phòng/Buồng khám
+            <select formControlName="roomNumber" (change)="onRoomSelected($any($event.target).value)">
+              <option value="">Chọn phòng/buồng</option>
+              @for (room of availableRooms(); track room.roomNumber) {
+                <option [value]="room.roomNumber">{{ room.label }}</option>
+              }
+            </select>
+          </label>
           <label>Số năm kinh nghiệm<input formControlName="yearsExperience" type="number" min="0" /></label><label>Học hàm / học vị<input formControlName="academicTitle" /></label>
           <fieldset class="specialties"><legend>Chuyên khoa (chọn một hoặc nhiều)</legend>@for (specialty of specialties(); track specialty.id) { <label><input type="checkbox" data-testid="create-specialty-option" [checked]="selectedCreateSpecialtyIds().includes(specialty.id)" (change)="toggleCreateSpecialty(specialty.id, $any($event.target).checked)" />{{ specialty.name }}</label> }</fieldset>
         }
@@ -92,6 +111,11 @@
   @if (selectedStaff(); as person) {
     <div class="shade"><form class="detail-form" [formGroup]="detailForm" (ngSubmit)="saveDetails()">
       <header><div><span class="staff-code">{{ person.code }}</span><h2>Hồ sơ nhân sự</h2><p>{{ person.email || 'Chưa có email' }}</p></div><button type="button" class="close" (click)="selectedStaff.set(null)">×</button></header>
+      @if (errorMessage()) {
+        <div style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin: 0 16px 12px 16px; display: flex; align-items: center; gap: 8px;">
+          <span>⚠️ {{ errorMessage() }}</span>
+        </div>
+      }
       <div style="display: flex; align-items: center; gap: 16px; padding: 12px 16px; margin: 0 16px 16px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
         <img
           [src]="staffAvatarPreview() || person.avatarUrl || 'assets/doctor.png'"
@@ -99,7 +123,8 @@
           style="width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 2px solid #0284c7;"
         />
         <div>
-          <div style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 4px;">Ảnh đại diện</div>
+          <div style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 2px;">Ảnh đại diện</div>
+          <span style="font-size: 11px; color: #64748b; display: block; margin-bottom: 6px;">JPG, PNG, WEBP (tối đa 10MB)</span>
           <label style="cursor: pointer; display: inline-block; padding: 4px 10px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-weight: 500; color: #0284c7;">
             {{ uploadingAvatar() ? 'Đang tải lên...' : 'Chọn ảnh mới' }}
             <input type="file" style="display: none;" accept="image/png,image/jpeg,image/jpg,image/webp" [disabled]="uploadingAvatar()" (change)="onAvatarSelected($event)" />
@@ -117,8 +142,23 @@
         <label>Số điện thoại<input formControlName="phoneNumber" type="tel" /></label><label>Giới tính<select formControlName="gender"><option value="MALE">Nam</option><option value="FEMALE">Nữ</option><option value="OTHER">Khác</option></select></label>
         <label>Ngày sinh<input formControlName="dateOfBirth" type="date" /></label><label>Email<input [value]="person.email" disabled /></label>
         @if (person.roleValue === Role.DOCTOR) {
-          <label>Học hàm / học vị<input formControlName="academicTitle" /></label><label>Số CCHN<input formControlName="licenseNumber" /></label>
-          <label>Số năm kinh nghiệm<input formControlName="yearsExperience" type="number" min="0" /></label><label>Phòng/Buồng khám<select formControlName="roomNumber"><option value="">Chọn phòng/buồng</option>@for (room of rooms(); track room) { <option [value]="room">{{ room }}</option> }</select></label>
+          <label>Học hàm / học vị<input formControlName="academicTitle" /></label>
+          <label>
+            Số CCHN
+            <input formControlName="licenseNumber" />
+            @if (detailForm.controls.licenseNumber.invalid && detailForm.controls.licenseNumber.touched) {
+              <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Tối thiểu 5 ký tự (chữ, số, ., /, -)</span>
+            }
+          </label>
+          <label>Số năm kinh nghiệm<input formControlName="yearsExperience" type="number" min="0" /></label>
+          <label>Phòng/Buồng khám
+            <select formControlName="roomNumber">
+              <option value="">Chọn phòng/buồng</option>
+              @for (room of availableRooms(); track room.roomNumber) {
+                <option [value]="room.roomNumber">{{ room.label }}</option>
+              }
+            </select>
+          </label>
           <fieldset class="specialties"><legend>Chuyên khoa (chọn một hoặc nhiều)</legend>@for (specialty of specialties(); track specialty.id) { <label><input type="checkbox" data-testid="specialty-option" [checked]="selectedDetailSpecialtyIds().includes(specialty.id)" (change)="toggleDetailSpecialty(specialty.id, $any($event.target).checked)" />{{ specialty.name }}</label> }</fieldset>
         }
       </div>
