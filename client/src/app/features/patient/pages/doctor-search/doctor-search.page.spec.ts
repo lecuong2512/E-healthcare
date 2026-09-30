@@ -47,6 +47,80 @@ describe('DoctorSearchPage', () => {
     expect(api.searchDoctors.calls.mostRecent().args[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
+  it('normalizes specialty comparison flexibly (e.g. Khoa Tim Mạch matches Tim mạch)', async () => {
+    const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['searchDoctors']);
+    api.searchDoctors.and.returnValue(of({
+      data: [
+        {
+          id: 'doc-cardio',
+          fullName: 'Nguyễn Văn An',
+          academicTitle: 'BS.CKI',
+          specialty: { id: 's1', name: 'Khoa Tim Mạch' },
+          consultationFee: 350_000,
+          bioDescription: null,
+          roomNumber: '101',
+          ratingAverage: 4.9,
+        },
+        {
+          id: 'doc-pedia',
+          fullName: 'Trần Thị Bình',
+          academicTitle: null,
+          specialty: { id: 's2', name: 'Khoa Nhi' },
+          consultationFee: 350_000,
+          bioDescription: null,
+          roomNumber: '102',
+          ratingAverage: 4.7,
+        },
+      ],
+      pagination: { page: 1, limit: 100, total: 2, totalPages: 1 },
+    }));
+    await TestBed.configureTestingModule({
+      imports: [DoctorSearchPage],
+      providers: [{ provide: PatientBookingApiService, useValue: api }],
+    }).compileComponents();
+
+    const component = TestBed.createComponent(DoctorSearchPage).componentInstance;
+    component.selectedSpecialty.set('Tim mạch');
+
+    expect(component.filteredDoctors().map((d) => d.id)).toEqual(['doc-cardio']);
+  });
+
+  it('filters doctors by selectedDate when date is selected', async () => {
+    const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['searchDoctors']);
+    api.searchDoctors.and.returnValue(of({
+      data: [
+        {
+          id: 'doc-today',
+          fullName: 'Nguyễn Văn An',
+          academicTitle: 'BS.CKI',
+          specialty: { id: 's1', name: 'Tim mạch' },
+          consultationFee: 350_000,
+          bioDescription: null,
+          roomNumber: '101',
+          ratingAverage: 4.9,
+        },
+      ],
+      pagination: { page: 1, limit: 100, total: 1, totalPages: 1 },
+    }));
+    await TestBed.configureTestingModule({
+      imports: [DoctorSearchPage],
+      providers: [{ provide: PatientBookingApiService, useValue: api }],
+    }).compileComponents();
+
+    const component = TestBed.createComponent(DoctorSearchPage).componentInstance;
+    expect(component.filteredDoctors().length).toBe(1);
+
+    // Filter by specific custom date where doctor has no schedules
+    component.selectedDate.set('2026-11-20');
+    expect(component.filteredDoctors().length).toBe(0);
+
+    // If doctor has schedule on that date
+    component.doctors.update(docs => [
+      { ...docs[0], availableDates: ['2026-11-20'] },
+    ]);
+    expect(component.filteredDoctors().length).toBe(1);
+  });
+
   it('does not advertise today slots when the server returns no availability', async () => {
     const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['searchDoctors']);
     const doctor = {

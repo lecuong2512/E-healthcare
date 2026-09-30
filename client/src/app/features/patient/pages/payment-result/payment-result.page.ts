@@ -8,7 +8,7 @@ import { NzAlertModule } from 'ng-zorro-antd/alert';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzResultModule } from 'ng-zorro-antd/result';
 import { NzSpinModule } from 'ng-zorro-antd/spin';
-import { EMPTY, catchError, switchMap, takeWhile, timer } from 'rxjs';
+import { EMPTY, catchError, finalize, switchMap, takeWhile, timer } from 'rxjs';
 import { PatientBookingApiService } from '../../data-access/patient-booking-api.service';
 
 type ResultState = 'loading' | 'success' | 'warning' | 'recoverable' | 'error';
@@ -52,10 +52,25 @@ type ResultState = 'loading' | 'success' | 'warning' | 'recoverable' | 'error';
             </div>
           </nz-result>
         } @else if (state() === 'recoverable') {
-          <nz-result nzStatus="warning" nzTitle="Lần thanh toán chưa thành công"
-            nzSubTitle="Lịch hẹn vẫn đang được giữ. Bạn có thể thử lại, đổi cổng hoặc chuyển sang thanh toán tại viện nếu hệ thống cho phép.">
+          <nz-result
+            nzStatus="warning"
+            nzTitle="Lần thanh toán chưa thành công"
+            [nzSubTitle]="isUserCancelled()
+              ? 'Bạn đã hủy giao dịch trên cổng thanh toán. Lịch hẹn của bạn vẫn đang được giữ chỗ trong thời gian quy định.'
+              : 'Lịch hẹn vẫn đang được giữ. Bạn có thể thử lại, đổi cổng hoặc chuyển sang thanh toán tại viện nếu hệ thống cho phép.'"
+          >
             <div nz-result-extra class="flex flex-wrap justify-center gap-3">
-              <a nz-button nzType="primary" routerLink="/patient/booking" [queryParams]="{ appointmentId: appointmentId }">Khôi phục checkout</a>
+              <a nz-button nzType="primary" routerLink="/patient/booking" [queryParams]="{ appointmentId: appointmentId }">
+                Thử lại thanh toán / Chọn phương thức khác
+              </a>
+              @if (status()?.canFallbackToClinic) {
+                <button nz-button (click)="fallbackToClinic()" [nzLoading]="isSubmitting()">
+                  Chuyển sang thanh toán tại viện
+                </button>
+              }
+              <button nz-button nzDanger (click)="cancelPendingPayment()" [nzLoading]="isSubmitting()">
+                Hủy giữ chỗ lịch hẹn
+              </button>
               <button nz-button (click)="refresh()">Kiểm tra lại</button>
             </div>
           </nz-result>
@@ -93,13 +108,27 @@ export class PaymentResultPage {
   private readonly destroyRef = inject(DestroyRef);
   readonly appointmentId =
     this.route.snapshot.queryParamMap.get('appointmentId') ||
+    this.route.snapshot.queryParamMap.get('orderId') ||
+    this.route.snapshot.queryParamMap.get('vnp_TxnRef') ||
     sessionStorage.getItem('pendingPaymentAppointmentId');
 
   readonly status = signal<PaymentStatusResponse | null>(null);
   readonly errorMessage = signal<string | null>(null);
+  readonly isUserCancelled = signal(false);
+  readonly isSubmitting = signal(false);
+  private readonly pollCount = signal(0);
+
   readonly state = computed<ResultState>(() => this.toState(this.status()));
 
   constructor() {
+    const query = this.route.snapshot.queryParamMap;
+    const resultCode = query.get('resultCode');
+    const vnpResponseCode = query.get('vnp_ResponseCode');
+
+    if (resultCode === '1006' || vnpResponseCode === '24') {
+      this.isUserCancelled.set(true);
+    }
+
     if (!this.appointmentId) {
       this.errorMessage.set('Không tìm thấy lịch hẹn cần kiểm tra.');
       return;
@@ -116,9 +145,51 @@ export class PaymentResultPage {
     });
   }
 
+  fallbackToClinic(): void {
+    if (!this.appointmentId || this.isSubmitting()) return;
+    this.isSubmitting.set(true);
+    this.errorMessage.set(null);
+    this.api.fallbackToClinic(this.appointmentId).pipe(
+      finalize(() => this.isSubmitting.set(false)),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe({
+      next: () => this.refresh(),
+      error: () => this.errorMessage.set('Không thể chuyển sang thanh toán tại viện. Vui lòng thử lại.'),
+    });
+  }
+
+  cancelPendingPayment(): void {
+    if (!this.appointmentId || this.isSubmitting()) return;
+    this.isSubmitting.set(true);
+    this.errorMessage.set(null);
+    this.api.cancelPendingPayment(this.appointmentId).pipe(
+      finalize(() => this.isSubmitting.set(false)),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe({
+      next: () => this.refresh(),
+      error: () => this.errorMessage.set('Không thể hủy giữ chỗ lịch hẹn. Vui lòng thử lại.'),
+    });
+  }
+
   private poll(): void {
+    if (this.isUserCancelled()) {
+      this.api.getPaymentStatus(this.appointmentId!).pipe(
+        catchError(() => {
+          this.errorMessage.set('Không thể tải trạng thái thanh toán. Vui lòng thử lại.');
+          return EMPTY;
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      ).subscribe((status) => {
+        this.acceptStatus(status);
+      });
+      return;
+    }
+
     timer(0, 2_000).pipe(
-      switchMap(() => this.api.getPaymentStatus(this.appointmentId!)),
+      switchMap(() => {
+        this.pollCount.update((count) => count + 1);
+        return this.api.getPaymentStatus(this.appointmentId!);
+      }),
       takeWhile((status) => this.toState(status) === 'loading', true),
       catchError(() => {
         this.errorMessage.set('Không thể tải trạng thái thanh toán. Vui lòng thử lại.');
@@ -131,7 +202,10 @@ export class PaymentResultPage {
   }
 
   private toState(status: PaymentStatusResponse | null): ResultState {
-    if (!status) return this.errorMessage() ? 'error' : 'loading';
+    if (!status) {
+      if (this.isUserCancelled()) return 'recoverable';
+      return this.errorMessage() ? 'error' : 'loading';
+    }
     if (status.provider === PaymentMethod.PAY_AT_CLINIC && status.appointmentStatus === AppointmentStatus.CONFIRMED && status.paymentStatus === PaymentStatus.UNPAID) return 'success';
     if (
       status.transactionStatus === PaymentTransactionStatus.SUCCESS &&
@@ -143,8 +217,15 @@ export class PaymentResultPage {
       status.transactionStatus === PaymentTransactionStatus.LATE_SUCCESS ||
       status.paymentStatus === PaymentStatus.REFUND_PENDING
     ) return 'warning';
-    if (status.appointmentStatus === AppointmentStatus.PENDING_PAYMENT && status.canRetry === true &&
-      [PaymentTransactionStatus.FAILED, PaymentTransactionStatus.TIMEOUT].includes(status.transactionStatus as PaymentTransactionStatus)) return 'recoverable';
+    if (
+      status.appointmentStatus === AppointmentStatus.PENDING_PAYMENT &&
+      status.canRetry === true &&
+      (
+        [PaymentTransactionStatus.FAILED, PaymentTransactionStatus.TIMEOUT].includes(status.transactionStatus as PaymentTransactionStatus) ||
+        this.isUserCancelled() ||
+        (this.pollCount() >= 3 && status.transactionStatus === PaymentTransactionStatus.PENDING)
+      )
+    ) return 'recoverable';
     if (
       [PaymentTransactionStatus.FAILED, PaymentTransactionStatus.TIMEOUT].includes(
         status.transactionStatus as PaymentTransactionStatus,

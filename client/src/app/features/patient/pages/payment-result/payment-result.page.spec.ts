@@ -26,6 +26,140 @@ describe('PaymentResultPage', () => {
     fixture.destroy();
   }));
 
+  it('stops polling and sets recoverable state when user cancelled on MoMo (resultCode 1006)', fakeAsync(() => {
+    const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['getPaymentStatus', 'fallbackToClinic', 'cancelPendingPayment']);
+    api.getPaymentStatus.and.returnValue(of({
+      appointmentId: 'apt-momo',
+      appointmentStatus: AppointmentStatus.PENDING_PAYMENT,
+      paymentStatus: PaymentStatus.PENDING,
+      provider: PaymentMethod.MOMO,
+      transactionStatus: PaymentTransactionStatus.PENDING,
+      canRetry: true,
+      canFallbackToClinic: true,
+      expiresAt: null,
+      paidAt: null,
+    }));
+    TestBed.configureTestingModule({
+      imports: [PaymentResultPage, NoopAnimationsModule],
+      providers: [
+        { provide: PatientBookingApiService, useValue: api },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: {
+                get: (key: string) => {
+                  if (key === 'appointmentId') return 'apt-momo';
+                  if (key === 'resultCode') return '1006';
+                  return null;
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PaymentResultPage);
+    tick();
+    expect(fixture.componentInstance.isUserCancelled()).toBeTrue();
+    expect(fixture.componentInstance.state()).toBe('recoverable');
+    // Only 1 status call should have been made, not continuous timer polling
+    expect(api.getPaymentStatus.calls.count()).toBe(1);
+    tick(5000);
+    expect(api.getPaymentStatus.calls.count()).toBe(1);
+    fixture.destroy();
+  }));
+
+  it('stops polling and sets recoverable state when user cancelled on VNPAY (vnp_ResponseCode 24)', fakeAsync(() => {
+    const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['getPaymentStatus']);
+    api.getPaymentStatus.and.returnValue(of({
+      appointmentId: 'apt-vnpay',
+      appointmentStatus: AppointmentStatus.PENDING_PAYMENT,
+      paymentStatus: PaymentStatus.PENDING,
+      provider: PaymentMethod.VNPAY,
+      transactionStatus: PaymentTransactionStatus.PENDING,
+      canRetry: true,
+      canFallbackToClinic: true,
+      expiresAt: null,
+      paidAt: null,
+    }));
+    TestBed.configureTestingModule({
+      imports: [PaymentResultPage, NoopAnimationsModule],
+      providers: [
+        { provide: PatientBookingApiService, useValue: api },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: {
+                get: (key: string) => {
+                  if (key === 'appointmentId') return 'apt-vnpay';
+                  if (key === 'vnp_ResponseCode') return '24';
+                  return null;
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PaymentResultPage);
+    tick();
+    expect(fixture.componentInstance.isUserCancelled()).toBeTrue();
+    expect(fixture.componentInstance.state()).toBe('recoverable');
+    fixture.destroy();
+  }));
+
+  it('transitions to recoverable after 3 polls when transaction remains PENDING and canRetry is true', fakeAsync(() => {
+    const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['getPaymentStatus']);
+    api.getPaymentStatus.and.returnValue(of({
+      appointmentId: 'apt-pending',
+      appointmentStatus: AppointmentStatus.PENDING_PAYMENT,
+      paymentStatus: PaymentStatus.PENDING,
+      provider: PaymentMethod.VNPAY,
+      transactionStatus: PaymentTransactionStatus.PENDING,
+      canRetry: true,
+      canFallbackToClinic: true,
+      expiresAt: null,
+      paidAt: null,
+    }));
+    TestBed.configureTestingModule({
+      imports: [PaymentResultPage, NoopAnimationsModule],
+      providers: [
+        { provide: PatientBookingApiService, useValue: api },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: {
+                get: (key: string) => key === 'appointmentId' ? 'apt-pending' : null,
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PaymentResultPage);
+    // Poll 1 at 0ms
+    tick(0);
+    expect(fixture.componentInstance.state()).toBe('loading');
+    // Poll 2 at 2000ms
+    tick(2000);
+    expect(fixture.componentInstance.state()).toBe('loading');
+    // Poll 3 at 4000ms -> should transition to recoverable
+    tick(2000);
+    expect(fixture.componentInstance.state()).toBe('recoverable');
+
+    // Polling should have terminated
+    const countAfter3 = api.getPaymentStatus.calls.count();
+    tick(10000);
+    expect(api.getPaymentStatus.calls.count()).toBe(countAfter3);
+    fixture.destroy();
+  }));
+
   it('does not clear a newer checkout when showing an older completed result', fakeAsync(() => {
     const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['getPaymentStatus']);
     api.getPaymentStatus.and.returnValue(of({ appointmentId: 'old-id', appointmentStatus: AppointmentStatus.CONFIRMED,

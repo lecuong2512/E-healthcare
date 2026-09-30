@@ -1,11 +1,16 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter, ActivatedRoute } from '@angular/router';
+import { provideRouter, ActivatedRoute, Router } from '@angular/router';
 import { of } from 'rxjs';
 import { ConsultationPage } from './consultation.page';
 import { PhrService } from '../../../../core/services/phr.service';
 import { ClinicalService } from '../../../../core/services/clinical.service';
 import { Gender } from '@shared/enums';
-import { PhrProfile, MedicalRecordDetailResponse, EmrHistoryResponse, EmrAddendumData } from '@shared/interfaces';
+import {
+  PhrProfile,
+  MedicalRecordDetailResponse,
+  EmrHistoryResponse,
+  EmrAddendumData,
+} from '@shared/interfaces';
 
 describe('ConsultationPage (SRS-DOC-03, SRS-DOC-04 & Section 5.4)', () => {
   let component: ConsultationPage;
@@ -64,11 +69,27 @@ describe('ConsultationPage (SRS-DOC-03, SRS-DOC-04 & Section 5.4)', () => {
       'getMedicalRecordByAppointment',
       'getEmrHistory',
       'createEmrAddendum',
+      'createMedicalRecord',
+      'updateMedicalRecord',
+      'completeConsultation',
+      'downloadPrescriptionPdf',
     ]);
 
     phrService.getMyPhr.and.returnValue(of(mockPhr));
     clinicalService.getMedicalRecordByAppointment.and.returnValue(of(mockRecord));
     clinicalService.getEmrHistory.and.returnValue(of(mockHistory));
+    clinicalService.createMedicalRecord.and.returnValue(of(mockRecord));
+    clinicalService.updateMedicalRecord.and.returnValue(of(mockRecord));
+    clinicalService.completeConsultation.and.returnValue(
+      of({
+        ...mockRecord,
+        isLocked: true,
+        completedAt: '2026-09-30T10:00:00Z',
+      }),
+    );
+    clinicalService.downloadPrescriptionPdf.and.returnValue(
+      of(new Blob(['fake-pdf'], { type: 'application/pdf' })),
+    );
 
     await TestBed.configureTestingModule({
       imports: [ConsultationPage],
@@ -80,7 +101,11 @@ describe('ConsultationPage (SRS-DOC-03, SRS-DOC-04 & Section 5.4)', () => {
           provide: ActivatedRoute,
           useValue: {
             paramMap: of(new Map([['appointmentId', 'app-123']])),
-            queryParams: of({ name: 'Nguyễn Văn Bệnh Nhân', gender: 'Nam', year: '1990' }),
+            queryParams: of({
+              name: 'Nguyễn Văn Bệnh Nhân',
+              gender: 'Nam',
+              year: '1990',
+            }),
           },
         },
       ],
@@ -233,5 +258,41 @@ describe('ConsultationPage (SRS-DOC-03, SRS-DOC-04 & Section 5.4)', () => {
 
     expect(component.addendumError).toBe('Vui lòng nhập lý do y khoa tạo phụ lục.');
     expect(clinicalService.createEmrAddendum).not.toHaveBeenCalled();
+  });
+
+  it('TC-UI-CONSULT-11: should call updateMedicalRecord when saveDraft is invoked on existing record', () => {
+    component.isLocked = false;
+    component.recordId = 'rec-123';
+    component.saveDraft();
+
+    expect(clinicalService.updateMedicalRecord).toHaveBeenCalled();
+    expect(component.saveMessage).toBe('Đã lưu nháp bệnh án thành công vào cơ sở dữ liệu.');
+  });
+
+  it('TC-UI-CONSULT-12: should show confirmation modal and complete consultation with locking and status update', () => {
+    const router = TestBed.inject(Router);
+    spyOn(router, 'navigate');
+
+    component.isLocked = false;
+    component.recordId = 'rec-123';
+    component.completeConsultation();
+
+    expect(component.showConfirmCompleteModal).toBe(true);
+
+    component.confirmCompleteConsultation();
+
+    expect(clinicalService.completeConsultation).toHaveBeenCalledWith('rec-123');
+    expect(component.showCompleteSuccessModal).toBe(true);
+    expect(component.saveMessage).toContain('hoàn tất và chốt bệnh án thành công');
+
+    component.finishAndNavigateToQueue();
+    expect(router.navigate).toHaveBeenCalledWith(['/doctor/queue']);
+  });
+
+  it('TC-UI-CONSULT-13: should download signed prescription PDF after completion', () => {
+    component.appointmentId = 'app-123';
+    component.downloadPrescription();
+
+    expect(clinicalService.downloadPrescriptionPdf).toHaveBeenCalledWith('app-123');
   });
 });

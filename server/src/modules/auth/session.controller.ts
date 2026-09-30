@@ -27,7 +27,7 @@ export function writeSession(response: Response, session: IssuedSession) {
       (session.refreshExpiresIn ?? REFRESH_TTL) * 1000,
     ),
   });
-  return { accessToken: session.accessToken, role: session.role };
+  return { accessToken: session.accessToken, role: session.role, user: session.user };
 }
 
 @Controller("auth")
@@ -90,11 +90,15 @@ export class SessionController {
 
   @Get("me")
   @Roles(Role.PATIENT, Role.DOCTOR, Role.RECEPTIONIST, Role.ADMIN)
-  me(
+  async me(
     @Req() request: AuthenticatedRequest,
     @Res({ passthrough: true }) response: Response,
   ) {
     response.setHeader("Cache-Control", "no-store");
-    return { userId: request.auth!.userId, role: request.auth!.role };
+    const user = await this.sessions.getCurrentUser(
+      request.auth!.userId,
+      request.auth!.role,
+    );
+    return { userId: request.auth!.userId, role: request.auth!.role, user };
   }
 }

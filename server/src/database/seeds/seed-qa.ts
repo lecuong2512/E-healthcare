@@ -22,6 +22,13 @@ import {
   QueueSource,
 } from "@shared/enums";
 
+function formatDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 async function runSeed() {
   const url = environment.DATABASE_MIGRATION_URL ?? requiredEnvironment("DATABASE_URL");
   console.log(`Connecting to database: ${url.replace(/:[^:@]+@/, ":***@")}`);
@@ -44,8 +51,40 @@ async function runSeed() {
   const specCardio = await specialtyRepo.save(
     specialtyRepo.create({
       name: "Khoa Tim Mạch",
-      description: "Chẩn đoán và điều trị các bệnh lý tim mạch, huyết áp.",
+      description: "Chẩn đoán và điều trị các bệnh lý tim mạch, tăng huyết áp, rối loạn nhịp.",
       iconUrl: "heart",
+      isActive: true,
+    })
+  );
+  const specDermatology = await specialtyRepo.save(
+    specialtyRepo.create({
+      name: "Khoa Da Liễu",
+      description: "Chẩn đoán và điều trị các bệnh lý về da liễu, tóc, móng và thẩm mỹ da.",
+      iconUrl: "sparkles",
+      isActive: true,
+    })
+  );
+  const specPediatrics = await specialtyRepo.save(
+    specialtyRepo.create({
+      name: "Khoa Nhi",
+      description: "Chăm sóc sức khỏe toàn diện và điều trị bệnh lý chuyên sâu cho trẻ nhỏ.",
+      iconUrl: "baby",
+      isActive: true,
+    })
+  );
+  const specGeneralSurgery = await specialtyRepo.save(
+    specialtyRepo.create({
+      name: "Khoa Ngoại Tổng Quát",
+      description: "Phẫu thuật và can thiệp ngoại khoa điều trị bệnh lý ổ bụng, tiêu hóa, chấn thương.",
+      iconUrl: "activity",
+      isActive: true,
+    })
+  );
+  const specEnt = await specialtyRepo.save(
+    specialtyRepo.create({
+      name: "Khoa Tai Mũi Họng",
+      description: "Khám và điều trị các bệnh lý tai mũi họng cho người lớn và trẻ em.",
+      iconUrl: "ear",
       isActive: true,
     })
   );
@@ -57,25 +96,19 @@ async function runSeed() {
       isActive: true,
     })
   );
-  const specPediatrics = await specialtyRepo.save(
-    specialtyRepo.create({
-      name: "Khoa Nhi",
-      description: "Chăm sóc sức khỏe toàn diện và điều trị bệnh lý cho trẻ nhỏ.",
-      iconUrl: "baby",
-      isActive: true,
-    })
-  );
-  console.log("Seeded 3 Specialties.");
+  console.log("Seeded 6 Specialties.");
 
-  // 2. Clinic Rooms
+  // 2. Clinic Rooms (P.101, P.102, P.103, P.104, P.105, P.001)
   const roomRepo = dataSource.getRepository(ClinicRoomEntity);
   await roomRepo.save([
     roomRepo.create({ roomNumber: "P.101", roomName: "Phòng khám Tim Mạch", specialtyId: specCardio.id, location: "Tầng 1 - Khu A", isActive: true }),
-    roomRepo.create({ roomNumber: "P.102", roomName: "Phòng khám Nội Tổng Quát", specialtyId: specGeneral.id, location: "Tầng 1 - Khu A", isActive: true }),
+    roomRepo.create({ roomNumber: "P.102", roomName: "Phòng khám Da Liễu", specialtyId: specDermatology.id, location: "Tầng 1 - Khu A", isActive: true }),
     roomRepo.create({ roomNumber: "P.103", roomName: "Phòng khám Nhi", specialtyId: specPediatrics.id, location: "Tầng 1 - Khu B", isActive: true }),
+    roomRepo.create({ roomNumber: "P.104", roomName: "Phòng khám Ngoại Tổng Quát", specialtyId: specGeneralSurgery.id, location: "Tầng 1 - Khu B", isActive: true }),
+    roomRepo.create({ roomNumber: "P.105", roomName: "Phòng khám Tai Mũi Họng", specialtyId: specEnt.id, location: "Tầng 1 - Khu C", isActive: true }),
     roomRepo.create({ roomNumber: "P.001", roomName: "Quầy Tiếp Đón Lễ Tân", location: "Sảnh Tầng 1", isActive: true }),
   ]);
-  console.log("Seeded 4 Clinic Rooms.");
+  console.log("Seeded 6 Clinic Rooms (P.101 - P.105, P.001).");
 
   // 3. Admin Catalogs (Medicines, Services, ICD-10)
   const medRepo = dataSource.getRepository(MedicineEntity);
@@ -134,33 +167,125 @@ async function runSeed() {
   );
   console.log("Seeded PATIENT: patient@ehealth.local (0901234001)");
 
-  // 4.2 DOCTOR
-  const doctorUser = await userRepo.save(
-    userRepo.create({
-      email: "doctor@ehealth.local",
-      phoneNumber: "0901234002",
-      passwordHash,
-      fullName: "BS.CKI Trần Văn Bình",
-      gender: Gender.MALE,
-      dateOfBirth: "1982-08-20",
-      status: UserStatus.ACTIVE,
-    })
-  );
-  await roleRepo.save(roleRepo.create({ userId: doctorUser.id, role: Role.DOCTOR }));
-  const doctor = await docRepo.save(
-    docRepo.create({
-      userId: doctorUser.id,
-      specialtyId: specCardio.id,
-      licenseNumber: "CCHN-001234-HN",
-      academicTitle: "BS.CKI",
-      consultationFee: 200000,
-      roomNumber: "P.101",
-      ratingAverage: 4.95,
-      yearsExperience: 15,
-      bioDescription: "Chuyên gia hàng đầu về tim mạch can thiệp, hơn 15 năm kinh nghiệm tại Bệnh viện Tim.",
-    })
-  );
-  console.log("Seeded DOCTOR: doctor@ehealth.local (0901234002)");
+  // 4.2 DOCTORS
+  const doctorSeeds = [
+    {
+      user: {
+        email: "doctor@ehealth.local",
+        phoneNumber: "0901234002",
+        fullName: "BS.CKI Trần Văn Bình",
+        gender: Gender.MALE,
+        dateOfBirth: "1982-08-20",
+      },
+      doctor: {
+        specialtyId: specCardio.id,
+        licenseNumber: "CCHN-001234-HN",
+        academicTitle: "BS.CKI",
+        consultationFee: 200000,
+        roomNumber: "P.101",
+        ratingAverage: 4.95,
+        yearsExperience: 15,
+        bioDescription: "Chuyên gia hàng đầu về tim mạch can thiệp, hơn 15 năm kinh nghiệm tại Bệnh viện Tim.",
+      },
+    },
+    {
+      user: {
+        email: "doctor.hang@ehealth.local",
+        phoneNumber: "0901234005",
+        fullName: "BS.CKII Nguyễn Thu Hằng",
+        gender: Gender.FEMALE,
+        dateOfBirth: "1985-03-12",
+      },
+      doctor: {
+        specialtyId: specDermatology.id,
+        licenseNumber: "CCHN-001235-HN",
+        academicTitle: "BS.CKII",
+        consultationFee: 250000,
+        roomNumber: "P.102",
+        ratingAverage: 4.90,
+        yearsExperience: 12,
+        bioDescription: "Bác sĩ Chuyên khoa II Da liễu với hơn 12 năm kinh nghiệm trong điều trị và phục hồi da.",
+      },
+    },
+    {
+      user: {
+        email: "doctor.long@ehealth.local",
+        phoneNumber: "0901234006",
+        fullName: "ThS.BS Lê Hoàng Long",
+        gender: Gender.MALE,
+        dateOfBirth: "1988-10-05",
+      },
+      doctor: {
+        specialtyId: specPediatrics.id,
+        licenseNumber: "CCHN-001236-HN",
+        academicTitle: "ThS.BS",
+        consultationFee: 200000,
+        roomNumber: "P.103",
+        ratingAverage: 4.85,
+        yearsExperience: 10,
+        bioDescription: "Thạc sĩ Bác sĩ Nhi khoa tận tâm, nhiều năm công tác tại Bệnh viện Nhi Trung ương.",
+      },
+    },
+    {
+      user: {
+        email: "doctor.duc@ehealth.local",
+        phoneNumber: "0901234007",
+        fullName: "BSCKII Phạm Minh Đức",
+        gender: Gender.MALE,
+        dateOfBirth: "1979-06-18",
+      },
+      doctor: {
+        specialtyId: specGeneralSurgery.id,
+        licenseNumber: "CCHN-001237-HN",
+        academicTitle: "BSCKII",
+        consultationFee: 300000,
+        roomNumber: "P.104",
+        ratingAverage: 4.98,
+        yearsExperience: 20,
+        bioDescription: "Bác sĩ Chuyên khoa II Ngoại khoa, chuyên gia phẫu thuật nội soi và ngoại tiêu hóa.",
+      },
+    },
+    {
+      user: {
+        email: "doctor.maianh@ehealth.local",
+        phoneNumber: "0901234008",
+        fullName: "BS Vũ Mai Anh",
+        gender: Gender.FEMALE,
+        dateOfBirth: "1992-09-25",
+      },
+      doctor: {
+        specialtyId: specEnt.id,
+        licenseNumber: "CCHN-001238-HN",
+        academicTitle: "BS",
+        consultationFee: 180000,
+        roomNumber: "P.105",
+        ratingAverage: 4.80,
+        yearsExperience: 7,
+        bioDescription: "Bác sĩ Tai Mũi Họng giàu kinh nghiệm trong nội soi và điều trị viêm xoang, viêm họng hạt.",
+      },
+    },
+  ];
+
+  const createdDoctors: DoctorEntity[] = [];
+
+  for (const item of doctorSeeds) {
+    const dUser = await userRepo.save(
+      userRepo.create({
+        ...item.user,
+        passwordHash,
+        status: UserStatus.ACTIVE,
+      })
+    );
+    await roleRepo.save(roleRepo.create({ userId: dUser.id, role: Role.DOCTOR }));
+    const doc = await docRepo.save(
+      docRepo.create({
+        ...item.doctor,
+        userId: dUser.id,
+      })
+    );
+    createdDoctors.push(doc);
+    console.log(`Seeded DOCTOR: ${item.user.fullName} (${item.user.email}) - Phòng ${item.doctor.roomNumber}`);
+  }
 
   // 4.3 RECEPTIONIST
   const receptionist = await userRepo.save(
@@ -192,49 +317,76 @@ async function runSeed() {
   await roleRepo.save(roleRepo.create({ userId: admin.id, role: Role.ADMIN }));
   console.log("Seeded ADMIN: admin@ehealth.local (0901234004)");
 
-  // 5. Doctor Schedules (Today and next 3 days)
-  const today = new Date();
-  const times = [
+  // 5. Doctor Schedules (Hôm nay và 4 ngày tới: 3 ca trực phủ kín)
+  const shiftTimes = [
+    // Ca Sáng: 08:00 - 12:00 (các slot 30 phút)
     { start: "08:00:00", end: "08:30:00" },
     { start: "08:30:00", end: "09:00:00" },
     { start: "09:00:00", end: "09:30:00" },
     { start: "09:30:00", end: "10:00:00" },
+    { start: "10:00:00", end: "10:30:00" },
+    { start: "10:30:00", end: "11:00:00" },
+    { start: "11:00:00", end: "11:30:00" },
+    { start: "11:30:00", end: "12:00:00" },
+    // Ca Chiều: 13:30 - 17:30 (các slot 30 phút)
+    { start: "13:30:00", end: "14:00:00" },
     { start: "14:00:00", end: "14:30:00" },
     { start: "14:30:00", end: "15:00:00" },
     { start: "15:00:00", end: "15:30:00" },
+    { start: "15:30:00", end: "16:00:00" },
+    { start: "16:00:00", end: "16:30:00" },
+    { start: "16:30:00", end: "17:00:00" },
+    { start: "17:00:00", end: "17:30:00" },
+    // Ca Tối: 18:00 - 22:30 (các slot 30 phút - ĐẶC BIỆT QUAN TRỌNG ĐỂ TEST WALK-IN BAN ĐÊM)
+    { start: "18:00:00", end: "18:30:00" },
+    { start: "18:30:00", end: "19:00:00" },
+    { start: "19:00:00", end: "19:30:00" },
+    { start: "19:30:00", end: "20:00:00" },
+    { start: "20:00:00", end: "20:30:00" },
+    { start: "20:30:00", end: "21:00:00" },
+    { start: "21:00:00", end: "21:30:00" },
+    { start: "21:30:00", end: "22:00:00" },
+    { start: "22:00:00", end: "22:30:00" },
   ];
 
   let firstSchedule: DoctorScheduleEntity | null = null;
-  for (let d = 0; d < 4; d++) {
-    const curDate = new Date(today);
-    curDate.setDate(today.getDate() + d);
-    const dateStr = curDate.toISOString().split("T")[0];
+  const schedulesToSave: DoctorScheduleEntity[] = [];
 
-    for (let i = 0; i < times.length; i++) {
-      const isBooked = (d === 0 && i === 0);
-      const sched = await schedRepo.save(
-        schedRepo.create({
-          doctorId: doctor.id,
+  for (let d = 0; d < 5; d++) {
+    const curDate = new Date();
+    curDate.setDate(curDate.getDate() + d);
+    const dateStr = formatDate(curDate);
+
+    for (let docIdx = 0; docIdx < createdDoctors.length; docIdx++) {
+      const doc = createdDoctors[docIdx];
+      for (let sIdx = 0; sIdx < shiftTimes.length; sIdx++) {
+        const isBooked = (d === 0 && docIdx === 0 && sIdx === 0);
+        const sched = schedRepo.create({
+          doctorId: doc.id,
           date: dateStr,
-          startTime: times[i].start,
-          endTime: times[i].end,
+          startTime: shiftTimes[sIdx].start,
+          endTime: shiftTimes[sIdx].end,
           status: isBooked ? SlotStatus.BOOKED : SlotStatus.AVAILABLE,
-        })
-      );
-      if (isBooked) {
-        firstSchedule = sched;
+        });
+        schedulesToSave.push(sched);
       }
     }
   }
-  console.log("Seeded Doctor Schedules for next 4 days.");
+
+  // Save schedules in chunks
+  const savedSchedules = await schedRepo.save(schedulesToSave, { chunk: 100 });
+  console.log(`Seeded ${savedSchedules.length} Doctor Schedules across 5 days (Morning, Afternoon, Evening shifts).`);
+
+  // First booked slot for sample appointment
+  firstSchedule = savedSchedules.find(s => s.status === SlotStatus.BOOKED) ?? null;
 
   // 6. Sample Appointment for QA
-  if (firstSchedule) {
+  if (firstSchedule && createdDoctors.length > 0) {
     const appt = await apptRepo.save(
       apptRepo.create({
         appointmentCode: "APPT-QA-0001",
         patientId: patient.id,
-        doctorId: doctor.id,
+        doctorId: createdDoctors[0].id,
         scheduleId: firstSchedule.id,
         status: AppointmentStatus.CONFIRMED,
         reasonForVisit: "Tức ngực, hồi hộp, muốn kiểm tra điện tâm đồ.",

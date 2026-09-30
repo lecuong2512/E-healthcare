@@ -73,17 +73,46 @@
           <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">NGÀY KHÁM</p>
           <div class="space-y-2 text-xs text-slate-700">
             <label class="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="dateOpt" value="today" [(ngModel)]="selectedDate" class="accent-sky-600" />
+              <input
+                type="radio"
+                name="dateOpt"
+                value="today"
+                [checked]="selectedDate() === 'today' || selectedDate() === todayStr"
+                (change)="selectDate('today')"
+                class="accent-sky-600"
+              />
               <span>Hôm nay</span>
             </label>
             <label class="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="dateOpt" value="tomorrow" [(ngModel)]="selectedDate" class="accent-sky-600" />
+              <input
+                type="radio"
+                name="dateOpt"
+                value="tomorrow"
+                [checked]="selectedDate() === 'tomorrow' || selectedDate() === tomorrowStr"
+                (change)="selectDate('tomorrow')"
+                class="accent-sky-600"
+              />
               <span>Ngày mai</span>
             </label>
             <label class="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="dateOpt" value="pick" [(ngModel)]="selectedDate" class="accent-sky-600" />
+              <input
+                type="radio"
+                name="dateOpt"
+                value="pick"
+                [checked]="isCustomDateSelected() || selectedDate() === 'pick'"
+                (change)="selectDate('pick')"
+                class="accent-sky-600"
+              />
               <span>Chọn ngày khám</span>
             </label>
+            @if (isCustomDateSelected() || selectedDate() === 'pick') {
+              <input
+                type="date"
+                [ngModel]="customDate()"
+                (ngModelChange)="onCustomDateChange($event)"
+                class="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-700 focus:border-sky-500 focus:outline-none"
+              />
+            }
           </div>
         </div>
 

@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed, discardPeriodicTasks, fakeAsync, tick } from '@angular/core/testing';
-import { HttpErrorResponse } from '@angular/common/http';
+import { signal } from '@angular/core';
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -13,6 +15,8 @@ import { of, throwError } from 'rxjs';
 import { PatientBookingApiService, PatientDoctorDetail } from '../../data-access/patient-booking-api.service';
 import { PaymentRedirectService } from '../../data-access/payment-redirect.service';
 import { BookingStepperPage } from './booking-stepper.page';
+import { PhrService } from '../../../../core/services/phr.service';
+import { AuthService } from '../../../../core/services/auth.service';
 
 describe('BookingStepperPage payment flow', () => {
   const doctorId = '11111111-1111-4111-8111-111111111111';
@@ -44,8 +48,17 @@ describe('BookingStepperPage payment flow', () => {
   let router: jasmine.SpyObj<Router>;
   let redirect: jasmine.SpyObj<PaymentRedirectService>;
   let modal: jasmine.SpyObj<NzModalService>;
+  let phrServiceSpy: jasmine.SpyObj<PhrService>;
+  let authServiceSpy: jasmine.SpyObj<AuthService>;
+  let currentUserSignal = signal<any>(null);
 
   beforeEach(async () => {
+    currentUserSignal = signal<any>(null);
+    phrServiceSpy = jasmine.createSpyObj<PhrService>('PhrService', ['getMyPhr']);
+    phrServiceSpy.getMyPhr.and.returnValue(of(null as any));
+    authServiceSpy = jasmine.createSpyObj<AuthService>('AuthService', ['getCurrentUser'], {
+      currentUser: currentUserSignal,
+    });
     api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', [
       'searchDoctors', 'getDoctor', 'reserveSlot', 'releaseSlot', 'confirmBooking', 'initiatePayment',
       'getPaymentStatus', 'getVouchers', 'validateVoucher', 'cancelAppointment', 'cancelPendingPayment', 'fallbackToClinic',
@@ -108,6 +121,8 @@ describe('BookingStepperPage payment flow', () => {
         { provide: NzModalService, useValue: modal },
         { provide: Router, useValue: router },
         { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: { get: () => null } } } },
+        { provide: PhrService, useValue: phrServiceSpy },
+        { provide: AuthService, useValue: authServiceSpy },
       ],
     }).overrideProvider(NzModalService, { useValue: modal }).compileComponents();
 
@@ -509,5 +524,44 @@ describe('BookingStepperPage payment flow', () => {
     expect(api.validateVoucher).toHaveBeenCalledWith('COMPENSATE-20', 350_000);
     expect(component.discountAmount()).toBe(70_000);
     expect(component.payableAmount()).toBe(280_000);
+  });
+
+  it('supports bookingFor self vs other, pre-filling from PhrService and clearing on other', () => {
+    const phrMock = {
+      fullName: 'Lê Văn Cường',
+      gender: 'MALE' as any,
+      dateOfBirth: '1998-12-25',
+      citizenId: null,
+      address: null,
+      healthInsurance: null,
+      bloodType: null,
+      allergies: null,
+      chronicDiseases: null,
+      surgeryHistory: null,
+    };
+    phrServiceSpy.getMyPhr.and.returnValue(of(phrMock));
+    currentUserSignal.set({ fullName: 'Lê Văn Cường', phoneNumber: '0987654321', role: 'PATIENT' });
+
+    component.setBookingFor('self');
+
+    expect(component.bookingFor()).toBe('self');
+    expect(component.patientForm.value.fullName).toBe('Lê Văn Cường');
+    expect(component.patientForm.value.phone).toBe('0987654321');
+    expect(component.patientForm.value.dob).toBe('1998-12-25');
+    expect(component.patientForm.value.gender).toBe('male');
+
+    // Switch to other
+    component.setBookingFor('other');
+    expect(component.bookingFor()).toBe('other');
+    expect(component.patientForm.value.fullName).toBeFalsy();
+    expect(component.patientForm.value.phone).toBeFalsy();
+    expect(component.patientForm.value.dob).toBeFalsy();
+    expect(component.patientForm.value.gender).toBeFalsy();
+
+    // Switch back to self
+    component.setBookingFor('self');
+    expect(component.bookingFor()).toBe('self');
+    expect(component.patientForm.value.fullName).toBe('Lê Văn Cường');
+    expect(component.patientForm.value.phone).toBe('0987654321');
   });
 });

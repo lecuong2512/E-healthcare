@@ -15,6 +15,8 @@ import { PatientConsentCheckboxComponent } from '../../../../shared/components/p
 import { PatientBookingApiService, PatientDoctorDetail, PatientDoctorSchedule, PatientDoctorSummary, PatientVoucher } from '../../data-access/patient-booking-api.service';
 import { PaymentRedirectService } from '../../data-access/payment-redirect.service';
 import { WebPushService } from '../../../../core/services/web-push.service';
+import { PhrService } from '../../../../core/services/phr.service';
+import { AuthService } from '../../../../core/services/auth.service';
 
 const TOTAL_SECONDS = 10 * 60;
 const PENDING_PAYMENT_CONTEXT_KEY = 'pendingPaymentContext';
@@ -121,6 +123,10 @@ export class BookingStepperPage implements OnDestroy {
     return slot ? `${slot.time} – ${this.calcEndTime(slot.time)}` : '';
   }
 
+  private readonly phrService = inject(PhrService, { optional: true });
+  private readonly authService = inject(AuthService, { optional: true });
+  readonly bookingFor = signal<'self' | 'other'>('self');
+
   readonly patientForm = this.fb.group({
     fullName: ['', Validators.required],
     phone: ['', [Validators.required, Validators.pattern(/^[0-9]{10}$/)]],
@@ -128,6 +134,61 @@ export class BookingStepperPage implements OnDestroy {
     gender: [''],
     reason: [''],
   });
+
+  setBookingFor(target: 'self' | 'other'): void {
+    this.bookingFor.set(target);
+    if (target === 'self') {
+      this.populateSelfInfo();
+    } else {
+      this.patientForm.reset({
+        fullName: '',
+        phone: '',
+        dob: '',
+        gender: '',
+        reason: '',
+      });
+      this.selectedFileName.set(null);
+    }
+  }
+
+  populateSelfInfo(): void {
+    const user = this.authService?.currentUser?.() ?? null;
+    const fallbackPhone = user?.phoneNumber || '';
+    const fallbackName = user?.fullName || '';
+
+    if (fallbackName || fallbackPhone) {
+      this.patientForm.patchValue({
+        fullName: fallbackName,
+        phone: fallbackPhone ? fallbackPhone.replace(/^\+84/, '0').replace(/\D/g, '') : '',
+      });
+    }
+
+    if (this.phrService) {
+      this.phrService.getMyPhr().pipe(
+        catchError(() => of(null)),
+        takeUntilDestroyed(this.destroyRef),
+      ).subscribe((phr) => {
+        if (this.bookingFor() !== 'self') return;
+        const fullName = phr?.fullName || fallbackName || '';
+        const phone = fallbackPhone ? fallbackPhone.replace(/^\+84/, '0').replace(/\D/g, '') : '';
+        let dob = '';
+        if (phr?.dateOfBirth) {
+          dob = phr.dateOfBirth.includes('T') ? phr.dateOfBirth.split('T')[0] : phr.dateOfBirth;
+        }
+        let gender = '';
+        if (phr?.gender) {
+          gender = phr.gender.toLowerCase();
+        }
+
+        this.patientForm.patchValue({
+          fullName,
+          phone: phone || (this.patientForm.value.phone || ''),
+          dob: dob || (this.patientForm.value.dob || ''),
+          gender: gender || (this.patientForm.value.gender || ''),
+        });
+      });
+    }
+  }
 
   readonly paymentMethod = signal<PaymentMethod>(PaymentMethod.VNPAY);
   readonly paymentMethods = [
@@ -191,6 +252,7 @@ export class BookingStepperPage implements OnDestroy {
       this.checkPendingPayment(pendingPayment, false);
     }
     if (doctorId && !this.recoveryActive()) this.loadDoctor(doctorId);
+    this.populateSelfInfo();
   }
 
   startTimer(ttlSeconds = TOTAL_SECONDS): void {
@@ -515,6 +577,8 @@ export class BookingStepperPage implements OnDestroy {
     this.selectedFileName.set(null);
     this.countdownSeconds.set(TOTAL_SECONDS);
     this.patientForm.reset();
+    this.bookingFor.set('self');
+    this.populateSelfInfo();
     this.consentAccepted = false;
     this.consentError = false;
     this.step.set(1);
@@ -524,6 +588,9 @@ export class BookingStepperPage implements OnDestroy {
     if (!this.recoveryActive() && !this.loading()) {
       this.errorMessage.set(null);
       this.step.set(step);
+      if (step === 3 && this.bookingFor() === 'self' && !this.patientForm.value.fullName) {
+        this.populateSelfInfo();
+      }
     }
   }
   starArray(rating: number): boolean[] { return Array.from({ length: 5 }, (_, index) => index < Math.round(rating)); }

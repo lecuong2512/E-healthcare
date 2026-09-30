@@ -147,6 +147,22 @@ describe('NavbarComponent', () => {
       expect(component.currentUser().email).toBe('tuanpm@example.com');
     });
 
+    it('displays avatar image when avatarUrl is provided in user profile', () => {
+      tokenStore.setSession('fake-token', Role.PATIENT, {
+        fullName: 'Phạm Minh Tuấn',
+        email: 'tuanpm@example.com',
+        phoneNumber: '0909999999',
+        role: Role.PATIENT,
+        avatarUrl: 'https://example.com/avatar.jpg',
+      });
+      fixture.detectChanges();
+
+      const el = fixture.nativeElement as HTMLElement;
+      const avatarImg = el.querySelector('button img[alt="Phạm Minh Tuấn"]');
+      expect(avatarImg).not.toBeNull();
+      expect(avatarImg?.getAttribute('src')).toBe('https://example.com/avatar.jpg');
+    });
+
     it('opens and closes dropdown menu when avatar button is clicked', () => {
       tokenStore.setSession('fake-token', Role.PATIENT);
       fixture.detectChanges();
@@ -231,6 +247,35 @@ describe('NavbarComponent', () => {
       expect(authServiceSpy.logout).toHaveBeenCalled();
       expect(tokenStore.isAuthenticated()).toBeFalse();
       expect(router.navigateByUrl).toHaveBeenCalledWith('/login');
+    });
+  });
+
+  describe('Brand Logo and homeRoute', () => {
+    it('computes homeRoute based on user role', () => {
+      tokenStore.clear();
+      expect(component.homeRoute()).toBe('/login');
+
+      tokenStore.setSession('fake-token', Role.PATIENT);
+      expect(component.homeRoute()).toBe('/patient/doctor-search');
+
+      tokenStore.setSession('fake-token', Role.DOCTOR);
+      expect(component.homeRoute()).toBe('/doctor/queue');
+
+      tokenStore.setSession('fake-token', Role.RECEPTIONIST);
+      expect(component.homeRoute()).toBe('/receptionist/checkin');
+
+      tokenStore.setSession('fake-token', Role.ADMIN);
+      expect(component.homeRoute()).toBe('/admin/dashboard');
+    });
+
+    it('binds brand logo anchor to homeRoute', () => {
+      tokenStore.setSession('fake-token', Role.PATIENT);
+      fixture.detectChanges();
+
+      const el = fixture.nativeElement as HTMLElement;
+      const logoLink = el.querySelector('a[aria-label="Trang chủ E-Healthcare"]');
+      expect(logoLink).not.toBeNull();
+      expect(logoLink?.getAttribute('href')).toBe('/patient/doctor-search');
     });
   });
 });

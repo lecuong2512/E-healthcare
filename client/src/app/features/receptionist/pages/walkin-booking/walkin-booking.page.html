@@ -275,8 +275,16 @@
                 }
               </div>
             } @else {
-              <div class="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
-                Dùng bộ lọc để tìm bác sĩ còn lịch trống hôm nay.
+              <div class="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-900" role="alert">
+                <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-2xl text-amber-600">
+                  ⚠️
+                </div>
+                <strong class="block text-base font-bold text-amber-950">
+                  Không còn ca khám trống hôm nay
+                </strong>
+                <p class="mt-2 text-sm text-amber-800 leading-relaxed">
+                  Hiện tại đã hết ca khám còn trống trong ngày hôm nay. Vui lòng hướng dẫn bệnh nhân đặt lịch hẹn cho các ngày tiếp theo hoặc liên hệ khoa cấp cứu.
+                </p>
               </div>
             }
           </section>

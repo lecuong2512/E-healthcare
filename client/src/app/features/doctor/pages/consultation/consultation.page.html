@@ -1,26 +1,239 @@
 <main class="min-h-screen bg-slate-50 px-3 py-4 text-xs text-slate-700 sm:px-6">
   <div class="mx-auto max-w-6xl pb-20">
     <header class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4">
-      <div><h1 class="text-base font-bold text-slate-900">{{patientName}} <span class="font-normal text-slate-500">· {{patientGender}} · {{patientYear}}</span></h1><p class="mt-1 font-mono text-sky-700">Mã hồ sơ: {{recordCode}}</p></div>
-      @if(isLocked){<span class="rounded-full bg-red-100 border border-red-300 px-3 py-1.5 font-bold text-red-800">HỒ SƠ ĐÃ KHÓA 24H (CHỈ ĐỌC)</span>}@else{<span class="rounded-full bg-purple-100 px-3 py-1.5 font-bold text-purple-800">Đang khám</span>}
+      <div>
+        <h1 class="text-base font-bold text-slate-900">
+          {{patientName}} <span class="font-normal text-slate-500">· {{patientGender}} · {{patientYear}}</span>
+        </h1>
+        <p class="mt-1 font-mono text-sky-700">Mã hồ sơ: {{recordCode}}</p>
+      </div>
+      @if(isLocked){
+        <span class="rounded-full bg-red-100 border border-red-300 px-3 py-1.5 font-bold text-red-800">
+          HỒ SƠ ĐÃ KHÓA 24H (CHỈ ĐỌC)
+        </span>
+      }@else if(completedAt){
+        <span class="rounded-full bg-emerald-100 border border-emerald-300 px-3 py-1.5 font-bold text-emerald-800">
+          ĐÃ HOÀN TẤT CA KHÁM
+        </span>
+      }@else{
+        <span class="rounded-full bg-purple-100 px-3 py-1.5 font-bold text-purple-800">
+          Đang khám
+        </span>
+      }
     </header>
-    @if(isLocked){<div class="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-red-900 flex items-center justify-between"><div><p class="font-bold">⚠️ Bệnh án này đã bị khóa sau 24 giờ. Không thể sửa trực tiếp.</p><p class="text-xs text-red-700">Mọi bổ sung lâm sàng bắt buộc phải tạo bản ghi Phụ lục bệnh án (EMR Addendum).</p></div><button (click)="openAddendumModal()" class="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-700 shadow-sm shrink-0">Tạo Phụ lục Bệnh án (Addendum)</button></div>}
-    <section class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950"><h2 class="font-bold">Thông tin tiền sử từ PHR</h2><p class="mt-1">Nhóm máu: <b>{{bloodType}}</b> · Dị ứng: <b class="text-red-700">{{allergies}}</b> · Bệnh mạn tính: <b>{{chronicDiseases}}</b></p><p class="mt-1">Tiền sử phẫu thuật: {{surgeryHistory}}</p></section>
-    <nav class="mt-4 flex gap-2 border-b"><button (click)="activeTab='record'" class="border-b-2 px-4 py-2 font-semibold" [class.border-sky-600]="activeTab==='record'" [class.text-sky-700]="activeTab==='record'">Hồ sơ khám</button><button (click)="activeTab='attachments'" class="border-b-2 px-4 py-2 font-semibold" [class.border-sky-600]="activeTab==='attachments'" [class.text-sky-700]="activeTab==='attachments'">Tệp đính kèm ({{attachments.length}})</button><button (click)="activeTab='history'" class="border-b-2 px-4 py-2 font-semibold" [class.border-sky-600]="activeTab==='history'" [class.text-sky-700]="activeTab==='history'">Lịch sử phụ lục ({{emrHistory?.addendums?.length || 0}})</button></nav>
+
+    @if(isLocked){
+      <div class="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-red-900 flex items-center justify-between">
+        <div>
+          <p class="font-bold">⚠️ Bệnh án này đã bị khóa sau 24 giờ. Không thể sửa trực tiếp.</p>
+          <p class="text-xs text-red-700">Mọi bổ sung lâm sàng bắt buộc phải tạo bản ghi Phụ lục bệnh án (EMR Addendum).</p>
+        </div>
+        <button (click)="openAddendumModal()" class="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-700 shadow-sm shrink-0 cursor-pointer">
+          Tạo Phụ lục Bệnh án (Addendum)
+        </button>
+      </div>
+    }
+
+    <section class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950">
+      <h2 class="font-bold">Thông tin tiền sử từ PHR</h2>
+      <p class="mt-1">Nhóm máu: <b>{{bloodType}}</b> · Dị ứng: <b class="text-red-700">{{allergies}}</b> · Bệnh mạn tính: <b>{{chronicDiseases}}</b></p>
+      <p class="mt-1">Tiền sử phẫu thuật: {{surgeryHistory}}</p>
+    </section>
+
+    <nav class="mt-4 flex gap-2 border-b">
+      <button (click)="activeTab='record'" class="border-b-2 px-4 py-2 font-semibold cursor-pointer" [class.border-sky-600]="activeTab==='record'" [class.text-sky-700]="activeTab==='record'">
+        Hồ sơ khám
+      </button>
+      <button (click)="activeTab='attachments'" class="border-b-2 px-4 py-2 font-semibold cursor-pointer" [class.border-sky-600]="activeTab==='attachments'" [class.text-sky-700]="activeTab==='attachments'">
+        Tệp đính kèm ({{attachments.length}})
+      </button>
+      <button (click)="activeTab='history'" class="border-b-2 px-4 py-2 font-semibold cursor-pointer" [class.border-sky-600]="activeTab==='history'" [class.text-sky-700]="activeTab==='history'">
+        Lịch sử phụ lục ({{emrHistory?.addendums?.length || 0}})
+      </button>
+    </nav>
+
     @if(activeTab==='record') {
       <fieldset [disabled]="isLocked" class="contents">
-      <div class="mt-3 grid items-start gap-3 lg:grid-cols-2">
-        <section class="space-y-3">
-          <div class="rounded-xl border bg-white p-4"><h2 class="mb-3 font-bold text-slate-900">Triệu chứng & lý do khám</h2><label class="block">Triệu chứng lâm sàng<textarea [(ngModel)]="symptoms" rows="3" placeholder="Mô tả triệu chứng và lý do bệnh nhân đến khám..." class="mt-1 w-full rounded border p-3"></textarea></label><label class="mt-3 block">Thời gian khởi phát<input [(ngModel)]="onsetDuration" placeholder="Ví dụ: khởi phát 2 ngày trước, đau tăng khi gắng sức" class="mt-1 w-full rounded border p-2" /></label></div>
-          <div class="rounded-xl border bg-white p-4"><h2 class="mb-3 font-bold text-slate-900">Chỉ số sinh tồn</h2><div class="grid grid-cols-2 gap-3 sm:grid-cols-3"><label>Huyết áp (mmHg)<input [(ngModel)]="bp" class="mt-1 w-full rounded border p-2" /></label><label>Mạch (lần/phút)<input type="number" [(ngModel)]="pulse" class="mt-1 w-full rounded border p-2" /></label><label>Thân nhiệt (°C)<input type="number" step="0.1" [(ngModel)]="temp" class="mt-1 w-full rounded border p-2" /></label><label>Nhịp thở (lần/phút)<input type="number" [(ngModel)]="respiratoryRate" class="mt-1 w-full rounded border p-2" /></label><label>SpO₂ (%)<input type="number" [(ngModel)]="spo2" class="mt-1 w-full rounded border p-2" /></label><br><label>Cân nặng (kg)<input type="number" [(ngModel)]="weight" (change)="calcBmi()" class="mt-1 w-full rounded border p-2" /></label><label>Chiều cao (cm)<input type="number" [(ngModel)]="height" (change)="calcBmi()" class="mt-1 w-full rounded border p-2" /></label></div><p class="mt-3">BMI: <b [style.color]="getBmiColor(bmi)">{{ bmi }}</b></p></div>
-          <div class="rounded-xl border bg-white p-4"><h2 class="mb-3 font-bold text-slate-900">Khám lâm sàng</h2><label class="block">Khám tổng quát<textarea [(ngModel)]="generalExam" rows="3" placeholder="Ghi nhận khám tổng quát..." class="mt-1 w-full rounded border p-3"></textarea></label><label class="mt-3 block">Khám chuyên khoa<textarea [(ngModel)]="specialtyExam" rows="3" placeholder="Ghi nhận kết quả khám chuyên khoa..." class="mt-1 w-full rounded border p-3"></textarea></label></div>
-          <div class="rounded-xl border bg-white p-4"><h2 class="mb-3 font-bold text-slate-900">Chẩn đoán ICD-10</h2><div class="mb-2 flex flex-wrap gap-2">@for(tag of icdTags;track tag.code;let i=$index){<span class="rounded-full bg-sky-50 px-3 py-1 text-sky-800">{{i===0?'Bệnh chính':'Bệnh kèm theo'}} · {{tag.code}} — {{tag.name}} <button (click)="removeIcd(i)" class="ml-1 font-bold text-red-600">×</button></span>}</div><input [(ngModel)]="icdSearch" placeholder="Tìm nhanh mã ICD-10 hoặc tên bệnh tiếng Việt..." class="w-full rounded border p-2" />@if(filteredIcd.length){<div class="mt-1 max-h-40 overflow-auto rounded border bg-white">@for(d of filteredIcd;track d.code){<button (click)="addIcd(d)" class="block w-full p-2 text-left hover:bg-sky-50"><b>{{d.code}}</b> — {{d.name}}</button>}</div>}<label class="mt-3 block">Chẩn đoán phân biệt / Ghi chú chuyên môn<textarea [(ngModel)]="differentialDiagnosis" rows="3" placeholder="Nhập chẩn đoán phân biệt hoặc ghi chú chuyên môn..." class="mt-1 w-full rounded border p-3"></textarea></label></div>
-        </section>
-        <section class="rounded-xl border bg-white p-4"><div class="mb-3 flex justify-between"><h2 class="font-bold text-slate-900">Kê đơn thuốc</h2><span>{{rxList.length}} thuốc</span></div>@if(hasChronicOver30Warning){<div class="mb-3 rounded-lg bg-amber-50 border border-amber-300 p-2 text-amber-900 text-xs flex items-center gap-2" role="alert"><span class="font-bold text-amber-700">⚠️ Lưu ý quy chế kê đơn:</span><span>Bệnh nhân có bệnh mạn tính, đơn thuốc không được kê quá 30 ngày theo Thông tư 52/2017/TT-BYT.</span></div>}<div class="flex gap-2"><input [(ngModel)]="drugSearch" placeholder="Tìm tên thuốc / hoạt chất..." class="min-w-0 flex-1 rounded border p-2" /><button (click)="tryAddDrug()" [disabled]="!selectedCatalogDrug" class="rounded bg-sky-600 px-4 font-bold text-white disabled:opacity-50">Thêm</button></div>@if(drugSearch && !selectedCatalogDrug){<div class="mt-1 max-h-40 overflow-auto rounded border">@for(d of filteredDrugs;track d.name){<button (click)="selectDrug(d)" class="block w-full p-2 text-left hover:bg-sky-50">{{d.name}} <span class="text-slate-500">({{d.ingredient}})</span></button>}</div>}<div class="mt-3 space-y-3">@for(rx of rxList;track rx.id;let i=$index){<article class="rounded-lg border p-3"><div class="flex justify-between"><b>{{rx.drugName}}</b><button (click)="removeRx(i)" class="text-red-600">Xóa</button></div><p class="text-slate-500">{{rx.ingredient}}</p><div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">@for(label of ['Sáng','Trưa','Chiều','Tối'];track label;let j=$index){<label>{{label}}<input type="number" min="0" step="0.5" [(ngModel)]="rx.doses[j]" class="mt-1 w-full rounded border p-1.5" /></label>}</div><div class="mt-2 flex flex-wrap gap-3"><label>Số lượng <input type="number" min="1" [(ngModel)]="rx.quantity" class="w-20 rounded border p-1.5" /></label><label>Thời điểm dùng <select [(ngModel)]="rx.timing" class="rounded border p-1.5"><option>Trước ăn</option><option>Trong bữa ăn</option><option>Sau ăn</option><option>Khi cần</option></select></label></div>@if(isChronicPatient && getRxDays(rx) > 30){<div class="mt-2 rounded bg-amber-100 border border-amber-300 p-2 text-amber-900 font-medium text-xs flex items-center gap-1.5" role="alert"><span>⚠️</span><span><b>Cảnh báo TT 52/2017/TT-BYT:</b> Đơn thuốc mạn tính không được kê quá 30 ngày (ước tính {{getRxDays(rx)}} ngày).</span></div>}</article>}@empty{<p class="rounded border border-dashed p-6 text-center text-slate-400">Chưa có thuốc được kê.</p>}</div></section>
-      </div>
+        <div class="mt-3 grid items-start gap-3 lg:grid-cols-2">
+          <section class="space-y-3">
+            <div class="rounded-xl border bg-white p-4">
+              <h2 class="mb-3 font-bold text-slate-900">Triệu chứng & lý do khám</h2>
+              <label class="block">
+                Triệu chứng lâm sàng
+                <textarea [(ngModel)]="symptoms" rows="3" placeholder="Mô tả triệu chứng và lý do bệnh nhân đến khám..." class="mt-1 w-full rounded border p-3"></textarea>
+              </label>
+              <label class="mt-3 block">
+                Thời gian khởi phát
+                <input [(ngModel)]="onsetDuration" placeholder="Ví dụ: khởi phát 2 ngày trước, đau tăng khi gắng sức" class="mt-1 w-full rounded border p-2" />
+              </label>
+            </div>
+
+            <div class="rounded-xl border bg-white p-4">
+              <h2 class="mb-3 font-bold text-slate-900">Chỉ số sinh tồn</h2>
+              <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <label>Huyết áp (mmHg)<input [(ngModel)]="bp" placeholder="120/80" class="mt-1 w-full rounded border p-2" /></label>
+                <label>Mạch (lần/phút)<input type="number" [(ngModel)]="pulse" class="mt-1 w-full rounded border p-2" /></label>
+                <label>Thân nhiệt (°C)<input type="number" step="0.1" [(ngModel)]="temp" class="mt-1 w-full rounded border p-2" /></label>
+                <label>Nhịp thở (lần/phút)<input type="number" [(ngModel)]="respiratoryRate" class="mt-1 w-full rounded border p-2" /></label>
+                <label>SpO₂ (%)<input type="number" [(ngModel)]="spo2" class="mt-1 w-full rounded border p-2" /></label>
+                <br>
+                <label>Cân nặng (kg)<input type="number" [(ngModel)]="weight" (change)="calcBmi()" class="mt-1 w-full rounded border p-2" /></label>
+                <label>Chiều cao (cm)<input type="number" [(ngModel)]="height" (change)="calcBmi()" class="mt-1 w-full rounded border p-2" /></label>
+              </div>
+              <p class="mt-3">BMI: <b [style.color]="getBmiColor(bmi)">{{ bmi }}</b></p>
+            </div>
+
+            <div class="rounded-xl border bg-white p-4">
+              <h2 class="mb-3 font-bold text-slate-900">Khám lâm sàng</h2>
+              <label class="block">
+                Khám tổng quát
+                <textarea [(ngModel)]="generalExam" rows="3" placeholder="Ghi nhận khám tổng quát..." class="mt-1 w-full rounded border p-3"></textarea>
+              </label>
+              <label class="mt-3 block">
+                Khám chuyên khoa
+                <textarea [(ngModel)]="specialtyExam" rows="3" placeholder="Ghi nhận kết quả khám chuyên khoa..." class="mt-1 w-full rounded border p-3"></textarea>
+              </label>
+            </div>
+
+            <div class="rounded-xl border bg-white p-4">
+              <h2 class="mb-3 font-bold text-slate-900">Chẩn đoán ICD-10</h2>
+              <div class="mb-2 flex flex-wrap gap-2">
+                @for(tag of icdTags;track tag.code;let i=$index){
+                  <span class="rounded-full bg-sky-50 px-3 py-1 text-sky-800">
+                    {{i===0?'Bệnh chính':'Bệnh kèm theo'}} · {{tag.code}} — {{tag.name}}
+                    <button (click)="removeIcd(i)" class="ml-1 font-bold text-red-600">×</button>
+                  </span>
+                }
+              </div>
+              <input [(ngModel)]="icdSearch" placeholder="Tìm nhanh mã ICD-10 hoặc tên bệnh tiếng Việt..." class="w-full rounded border p-2" />
+              @if(filteredIcd.length){
+                <div class="mt-1 max-h-40 overflow-auto rounded border bg-white">
+                  @for(d of filteredIcd;track d.code){
+                    <button (click)="addIcd(d)" class="block w-full p-2 text-left hover:bg-sky-50">
+                      <b>{{d.code}}</b> — {{d.name}}
+                    </button>
+                  }
+                </div>
+              }
+              <label class="mt-3 block">
+                Chẩn đoán phân biệt / Ghi chú chuyên môn
+                <textarea [(ngModel)]="differentialDiagnosis" rows="3" placeholder="Nhập chẩn đoán phân biệt hoặc ghi chú chuyên môn..." class="mt-1 w-full rounded border p-3"></textarea>
+              </label>
+              <label class="mt-3 block">
+                Ghi chú diễn tiến lâm sàng
+                <textarea [(ngModel)]="clinicalNotes" rows="2" placeholder="Ghi chú thêm về diễn tiến bệnh án..." class="mt-1 w-full rounded border p-3"></textarea>
+              </label>
+              <label class="mt-3 block">
+                Lời dặn bác sĩ
+                <textarea [(ngModel)]="doctorAdvice" rows="2" placeholder="Lời dặn về chế độ ăn uống, dùng thuốc, vận động..." class="mt-1 w-full rounded border p-2"></textarea>
+              </label>
+              <label class="mt-3 block">
+                Ngày hẹn tái khám
+                <input type="date" [(ngModel)]="followUpDate" class="mt-1 w-full rounded border p-2" />
+              </label>
+            </div>
+          </section>
+
+          <section class="rounded-xl border bg-white p-4">
+            <div class="mb-3 flex justify-between">
+              <h2 class="font-bold text-slate-900">Kê đơn thuốc</h2>
+              <span>{{rxList.length}} thuốc</span>
+            </div>
+            @if(hasChronicOver30Warning){
+              <div class="mb-3 rounded-lg bg-amber-50 border border-amber-300 p-2 text-amber-900 text-xs flex items-center gap-2" role="alert">
+                <span class="font-bold text-amber-700">⚠️ Lưu ý quy chế kê đơn:</span>
+                <span>Bệnh nhân có bệnh mạn tính, đơn thuốc không được kê quá 30 ngày theo Thông tư 52/2017/TT-BYT.</span>
+              </div>
+            }
+            <div class="flex gap-2">
+              <input [(ngModel)]="drugSearch" placeholder="Tìm tên thuốc / hoạt chất..." class="min-w-0 flex-1 rounded border p-2" />
+              <button (click)="tryAddDrug()" [disabled]="!selectedCatalogDrug" class="rounded bg-sky-600 px-4 font-bold text-white disabled:opacity-50 cursor-pointer">
+                Thêm
+              </button>
+            </div>
+            @if(drugSearch && !selectedCatalogDrug){
+              <div class="mt-1 max-h-40 overflow-auto rounded border">
+                @for(d of filteredDrugs;track d.name){
+                  <button (click)="selectDrug(d)" class="block w-full p-2 text-left hover:bg-sky-50">
+                    {{d.name}} <span class="text-slate-500">({{d.ingredient}})</span>
+                  </button>
+                }
+              </div>
+            }
+            <div class="mt-3 space-y-3">
+              @for(rx of rxList;track rx.id;let i=$index){
+                <article class="rounded-lg border p-3">
+                  <div class="flex justify-between">
+                    <b>{{rx.drugName}}</b>
+                    <button (click)="removeRx(i)" class="text-red-600 cursor-pointer">Xóa</button>
+                  </div>
+                  <p class="text-slate-500">{{rx.ingredient}}</p>
+                  <div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    @for(label of ['Sáng','Trưa','Chiều','Tối'];track label;let j=$index){
+                      <label>{{label}}<input type="number" min="0" step="0.5" [(ngModel)]="rx.doses[j]" class="mt-1 w-full rounded border p-1.5" /></label>
+                    }
+                  </div>
+                  <div class="mt-2 flex flex-wrap gap-3">
+                    <label>Số lượng <input type="number" min="1" [(ngModel)]="rx.quantity" class="w-20 rounded border p-1.5" /></label>
+                    <label>Thời điểm dùng
+                      <select [(ngModel)]="rx.timing" class="rounded border p-1.5">
+                        <option>Trước ăn</option>
+                        <option>Trong bữa ăn</option>
+                        <option>Sau ăn</option>
+                        <option>Khi cần</option>
+                      </select>
+                    </label>
+                  </div>
+                  @if(isChronicPatient && getRxDays(rx) > 30){
+                    <div class="mt-2 rounded bg-amber-100 border border-amber-300 p-2 text-amber-900 font-medium text-xs flex items-center gap-1.5" role="alert">
+                      <span>⚠️</span>
+                      <span><b>Cảnh báo TT 52/2017/TT-BYT:</b> Đơn thuốc mạn tính không được kê quá 30 ngày (ước tính {{getRxDays(rx)}} ngày).</span>
+                    </div>
+                  }
+                </article>
+              }@empty{
+                <p class="rounded border border-dashed p-6 text-center text-slate-400">Chưa có thuốc được kê.</p>
+              }
+            </div>
+          </section>
+        </div>
       </fieldset>
     }
-    @if(activeTab==='attachments') {<section class="mt-3 rounded-xl border bg-white p-4"><div class="flex flex-wrap items-center justify-between gap-2"><div><h2 class="font-bold text-slate-900">Tệp đính kèm hồ sơ bệnh nhân</h2><p class="mt-1 text-slate-500">Ảnh đơn cũ, xét nghiệm máu, phim X-quang · JPG, PNG, PDF · Tối đa 10 MB/tệp</p></div><label class="cursor-pointer rounded-lg bg-sky-600 px-4 py-2 font-bold text-white">Tải tệp lên<input type="file" multiple accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" (change)="onFiles($event)" class="hidden" /></label></div>@if(saveMessage){<p class="mt-3 text-amber-700">{{saveMessage}}</p>}<div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">@for(file of attachments;track file.url){<button (click)="openPreview(file)" class="overflow-hidden rounded-lg border text-left hover:border-sky-500"><div class="flex h-36 items-center justify-center bg-slate-100">@if(file.type==='application/pdf'){<span class="text-3xl font-bold text-red-600">PDF</span>}@else{<img [src]="file.url" [alt]="file.name" class="h-full w-full object-cover" />}</div><span class="block truncate p-2">{{file.name}}</span></button>}@empty{<p class="col-span-full py-12 text-center text-slate-400">Chưa có tệp đính kèm. Tải ảnh hoặc PDF để xem trước tại đây.</p>}</div></section>}
+
+    @if(activeTab==='attachments') {
+      <section class="mt-3 rounded-xl border bg-white p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="font-bold text-slate-900">Tệp đính kèm hồ sơ bệnh nhân</h2>
+            <p class="mt-1 text-slate-500">Ảnh đơn cũ, xét nghiệm máu, phim X-quang · JPG, PNG, PDF · Tối đa 10 MB/tệp</p>
+          </div>
+          <label class="cursor-pointer rounded-lg bg-sky-600 px-4 py-2 font-bold text-white">
+            Tải tệp lên
+            <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" (change)="onFiles($event)" class="hidden" />
+          </label>
+        </div>
+        @if(saveMessage){
+          <p class="mt-3 text-amber-700">{{saveMessage}}</p>
+        }
+        <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          @for(file of attachments;track file.url){
+            <button (click)="openPreview(file)" class="overflow-hidden rounded-lg border text-left hover:border-sky-500">
+              <div class="flex h-36 items-center justify-center bg-slate-100">
+                @if(file.type==='application/pdf'){
+                  <span class="text-3xl font-bold text-red-600">PDF</span>
+                }@else{
+                  <img [src]="file.url" [alt]="file.name" class="h-full w-full object-cover" />
+                }
+              </div>
+              <span class="block truncate p-2">{{file.name}}</span>
+            </button>
+          }@empty{
+            <p class="col-span-full py-12 text-center text-slate-400">Chưa có tệp đính kèm. Tải ảnh hoặc PDF để xem trước tại đây.</p>
+          }
+        </div>
+      </section>
+    }
+
     @if(activeTab==='history') {
       <section class="mt-3 space-y-3">
         <article class="rounded-xl border bg-white p-4">
@@ -47,7 +260,74 @@
       </section>
     }
   </div>
-  <footer class="fixed inset-x-0 bottom-0 z-20 flex items-center justify-end gap-2 border-t bg-white/95 px-4 py-3"><span class="mr-auto text-emerald-700">{{saveMessage}}</span>@if(!isLocked){<button (click)="saveDraft()" class="rounded border px-4 py-2 font-semibold">Lưu nháp (Draft)</button><button (click)="completeConsultation()" class="rounded bg-sky-600 px-4 py-2 font-bold text-white">Hoàn thành ca khám</button>}@else{<button (click)="openAddendumModal()" class="rounded bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700 shadow">Tạo Phụ lục Bệnh án (Addendum)</button>}</footer>
+
+  <footer class="fixed inset-x-0 bottom-0 z-20 flex items-center justify-end gap-2 border-t bg-white/95 px-4 py-3">
+    <span class="mr-auto text-emerald-700 font-medium">{{saveMessage}}</span>
+    @if(!isLocked){
+      <button (click)="saveDraft()" class="rounded border px-4 py-2 font-semibold hover:bg-slate-50 cursor-pointer">
+        Lưu nháp (Draft)
+      </button>
+      <button (click)="completeConsultation()" class="rounded bg-sky-600 px-4 py-2 font-bold text-white hover:bg-sky-700 shadow-sm cursor-pointer">
+        Hoàn thành ca khám
+      </button>
+    }@else{
+      <button (click)="openAddendumModal()" class="rounded bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700 shadow cursor-pointer">
+        Tạo Phụ lục Bệnh án (Addendum)
+      </button>
+    }
+  </footer>
+
+  <!-- Confirm Complete Consultation Modal -->
+  @if(showConfirmCompleteModal){
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="cancelComplete()">
+      <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" (click)="$event.stopPropagation()">
+        <div class="flex items-center gap-3 text-sky-900">
+          <span class="flex h-10 w-10 items-center justify-center rounded-full bg-sky-100 text-xl font-bold text-sky-700">✓</span>
+          <h2 class="text-base font-bold text-slate-900">Xác nhận hoàn tất ca khám</h2>
+        </div>
+        <p class="mt-4 text-sm text-slate-700 leading-relaxed font-medium">
+          Bạn có chắc chắn muốn hoàn tất ca khám này và khóa bệnh án?
+        </p>
+        <p class="mt-2 text-xs text-slate-500">
+          Sau khi hoàn tất, bệnh án sẽ được chốt, sinh mã băm SHA-256 chữ ký số điện tử và chuyển trạng thái lịch khám sang ĐÃ HOÀN TẤT (COMPLETED).
+        </p>
+        <div class="mt-6 flex justify-end gap-2">
+          <button (click)="cancelComplete()" class="rounded-lg border px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
+            Hủy
+          </button>
+          <button (click)="confirmCompleteConsultation()" [disabled]="isCompleting" class="rounded-lg bg-sky-600 px-5 py-2 font-bold text-white hover:bg-sky-700 disabled:opacity-50 cursor-pointer">
+            {{ isCompleting ? 'Đang xử lý...' : 'Xác nhận hoàn tất' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Success Complete Consultation Modal -->
+  @if(showCompleteSuccessModal){
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl text-center" (click)="$event.stopPropagation()">
+        <span class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl font-bold text-emerald-700">✓</span>
+        <h2 class="mt-4 text-lg font-bold text-slate-900">Ca khám đã hoàn tất thành công!</h2>
+        <p class="mt-2 text-sm text-slate-600">
+          Bệnh án đã được chốt và ký số điện tử bảo mật SHA-256. Lịch hẹn chuyển sang trạng thái <b>COMPLETED</b>.
+        </p>
+        <div class="mt-6 flex flex-wrap justify-center gap-3">
+          <button (click)="viewPrescriptionPdf()" [disabled]="prescriptionPdfLoading" class="rounded-xl border border-sky-300 bg-sky-50 px-4 py-2.5 font-bold text-sky-800 hover:bg-sky-100 cursor-pointer">
+            📄 Xem đơn thuốc PDF
+          </button>
+          <button (click)="downloadPrescription()" [disabled]="prescriptionPdfLoading" class="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 font-bold text-emerald-800 hover:bg-emerald-100 cursor-pointer">
+            ⬇ Tải đơn thuốc PDF
+          </button>
+          <button (click)="finishAndNavigateToQueue()" class="rounded-xl bg-sky-600 px-5 py-2.5 font-bold text-white hover:bg-sky-700 shadow-sm cursor-pointer">
+            Quay về hàng đợi khám →
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Addendum Modal -->
   @if(showAddendumModal){
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" (click)="closeAddendumModal()">
       <div class="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl bg-white p-5 shadow-2xl overflow-y-auto" (click)="$event.stopPropagation()">
@@ -69,6 +349,23 @@
       </div>
     </div>
   }
-  @if(preview){<div class="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4" (click)="closePreview()"><div class="flex max-h-full w-full max-w-5xl flex-col rounded-xl bg-white p-3" (click)="$event.stopPropagation()"><div class="mb-2 flex justify-between"><b class="truncate">{{preview.name}}</b><button (click)="closePreview()" class="px-2 text-xl">×</button></div>@if(preview.type==='application/pdf'){<iframe [src]="safePreviewUrl" title="Xem trước PDF" class="h-[80vh] w-full"></iframe>}@else{<img [src]="preview.url" [alt]="preview.name" class="max-h-[80vh] object-contain" />}</div></div>}
-  @if(showAllergyModal && pendingDrug){<app-allergy-alert-modal [drugName]="pendingDrug.name" [allergyGroup]="pendingDrug.allergyGroup || ''" (cancel)="onModalCancel()" (override)="onModalOverride($event)"></app-allergy-alert-modal>}
+
+  <!-- PDF / Image Preview Modal -->
+  @if(preview){
+    <div class="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4" (click)="closePreview()">
+      <div class="flex max-h-full w-full max-w-5xl flex-col rounded-xl bg-white p-3" (click)="$event.stopPropagation()">
+        <div class="mb-2 flex justify-between"><b class="truncate">{{preview.name}}</b><button (click)="closePreview()" class="px-2 text-xl">×</button></div>
+        @if(preview.type==='application/pdf'){
+          <iframe [src]="safePreviewUrl" title="Xem trước PDF" class="h-[80vh] w-full"></iframe>
+        }@else{
+          <img [src]="preview.url" [alt]="preview.name" class="max-h-[80vh] object-contain" />
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Allergy Modal -->
+  @if(showAllergyModal && pendingDrug){
+    <app-allergy-alert-modal [drugName]="pendingDrug.name" [allergyGroup]="pendingDrug.allergyGroup || ''" (cancel)="onModalCancel()" (override)="onModalOverride($event)"></app-allergy-alert-modal>
+  }
 </main>

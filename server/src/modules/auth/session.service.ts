@@ -7,6 +7,7 @@ import { requiredEnvironment } from "../../config/environment";
 import { AuthSessionEntity, UserRoleEntity } from "../../database/entities/auth.entity";
 import { UserEntity } from "../../database/entities/user.entity";
 import { UserStatus } from "@shared/enums";
+import { CurrentUser } from "@shared/interfaces";
 import { RedisService } from "../../common/redis/redis.service";
 
 export const ACCESS_TTL = 900;
@@ -18,6 +19,7 @@ export interface IssuedSession {
   role: Role;
   refreshToken: string;
   refreshExpiresIn?: number;
+  user?: CurrentUser;
 }
 export interface AccessClaims {
   userId: string;
@@ -79,7 +81,31 @@ export class SessionService {
       expiresAt: new Date(Date.now() + REFRESH_TTL * 1000),
       revokedAt: null,
     }));
+    const user = await manager.getRepository(UserEntity).findOneBy({ id: userId });
+    if (user) {
+      tokens.user = {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        role,
+        avatarUrl: user.avatarUrl ?? null,
+      };
+    }
     return tokens;
+  }
+
+  async getCurrentUser(userId: string, role: Role): Promise<CurrentUser | null> {
+    const user = await this.database.manager.getRepository(UserEntity).findOneBy({ id: userId });
+    if (!user) return null;
+    return {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      role,
+      avatarUrl: user.avatarUrl ?? null,
+    };
   }
 
   async refresh(token: string | undefined): Promise<IssuedSession> {
@@ -126,6 +152,14 @@ export class SessionService {
             Math.floor((session.expiresAt.getTime() - now.getTime()) / 1000),
           ),
         );
+        tokens.user = {
+          id: user.id,
+          fullName: user.fullName,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          role,
+          avatarUrl: user.avatarUrl ?? null,
+        };
         await sessions.update(session.id, {
           refreshTokenHash: this.digest(tokens.refreshToken),
         });

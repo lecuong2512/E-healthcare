@@ -68,7 +68,7 @@ export function getInitials(name: string): string {
   <div class="mx-auto flex h-14 w-full max-w-[1440px] items-center justify-between gap-2 px-3 sm:px-4 lg:px-6">
     <!-- Brand Logo -->
     <a 
-      routerLink="/" 
+      [routerLink]="homeRoute()" 
       class="inline-flex items-center gap-2 shrink-0 cursor-pointer transition-opacity hover:opacity-90"
       aria-label="Trang chủ E-Healthcare"
     >
@@ -215,12 +215,20 @@ export function getInitials(name: string): string {
               </span>
             </div>
 
-            <!-- Avatar Circle with initials -->
-            <span
-              class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white shadow-xs ring-2 ring-white"
-            >
-              {{ userInitials() }}
-            </span>
+            <!-- Avatar Circle with image or initials -->
+            @if (currentUser().avatarUrl) {
+              <img
+                [src]="currentUser().avatarUrl"
+                [alt]="currentUser().fullName"
+                class="inline-flex h-9 w-9 shrink-0 rounded-full object-cover shadow-xs ring-2 ring-white"
+              />
+            } @else {
+              <span
+                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white shadow-xs ring-2 ring-white"
+              >
+                {{ userInitials() }}
+              </span>
+            }
 
             <!-- Dropdown caret -->
             <svg class="h-4 w-4 text-slate-400 max-sm:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -241,9 +249,17 @@ export function getInitials(name: string): string {
               <!-- Dropdown Header: Họ tên, Email/SĐT, Badge vai trò -->
               <div class="border-b border-slate-100 px-4 py-3">
                 <div class="flex items-center gap-3">
-                  <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white">
-                    {{ userInitials() }}
-                  </span>
+                  @if (currentUser().avatarUrl) {
+                    <img
+                      [src]="currentUser().avatarUrl"
+                      [alt]="currentUser().fullName"
+                      class="inline-flex h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-slate-100"
+                    />
+                  } @else {
+                    <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white">
+                      {{ userInitials() }}
+                    </span>
+                  }
                   <div class="min-w-0 flex-1">
                     <p class="truncate text-sm font-semibold text-slate-900">
                       {{ currentUser().fullName }}
@@ -424,7 +440,17 @@ export class NavbarComponent {
   readonly isUserMenuOpen = signal(false);
 
   readonly currentRole = computed<Role | null>(() => {
-    return (this.tokenStore.userRole() as Role) || null;
+    return (this.tokenStore.userRole() as Role) || (this.tokenStore.currentUser()?.role as Role) || null;
+  });
+
+  readonly homeRoute = computed<string>(() => {
+    switch (this.currentRole()) {
+      case Role.PATIENT: return '/patient/doctor-search';
+      case Role.DOCTOR: return '/doctor/queue';
+      case Role.RECEPTIONIST: return '/receptionist/checkin';
+      case Role.ADMIN: return '/admin/dashboard';
+      default: return '/login';
+    }
   });
 
   readonly isAuthenticated = computed<boolean>(() => {

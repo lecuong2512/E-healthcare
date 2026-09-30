@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Patch,
   Put,
   Req,
 } from "@nestjs/common";
@@ -30,6 +31,17 @@ export class PhrController {
 
   @Put("me")
   async updateMyPhr(
+    @Req() req: AuthenticatedRequest,
+    @Body() request: UpdatePhrProfileDto,
+  ): Promise<PhrProfile> {
+    return this.phrService.updateMyPhr(
+      req.auth!.userId,
+      request,
+    );
+  }
+
+  @Patch("me")
+  async patchMyPhr(
     @Req() req: AuthenticatedRequest,
     @Body() request: UpdatePhrProfileDto,
   ): Promise<PhrProfile> {

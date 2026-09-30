@@ -147,4 +147,15 @@ describe('WalkinBookingPage', () => {
     expect(searchSpy).toHaveBeenCalledTimes(1);
     expect(bookingSpy).not.toHaveBeenCalled();
   });
+
+  it('displays friendly empty state warning when no doctors are available today', () => {
+    component.doctors = [];
+    fixture.componentRef.setInput('loadingDoctors', false);
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain(
+      'Hiện tại đã hết ca khám còn trống trong ngày hôm nay. Vui lòng hướng dẫn bệnh nhân đặt lịch hẹn cho các ngày tiếp theo hoặc liên hệ khoa cấp cứu.',
+    );
+  });
 });

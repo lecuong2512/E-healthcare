@@ -1,19 +1,21 @@
 import { Injectable, signal } from '@angular/core';
 import { CurrentUser } from '@shared/interfaces';
 
-export type UserProfileInfo = CurrentUser;
+export type UserProfileInfo = CurrentUser & {
+  avatarUrl?: string | null;
+};
 
 @Injectable({ providedIn: 'root' })
 export class TokenStoreService {
   private readonly _accessToken = signal<string | null>(null);
-  private readonly _userRole = signal<string | null>(null);
+  private readonly _userRole = signal<string | null>(this.readSavedUser()?.role ?? null);
   private readonly _currentUser = signal<UserProfileInfo | null>(this.readSavedUser());
 
   readonly accessToken = this._accessToken.asReadonly();
   readonly userRole = this._userRole.asReadonly();
   readonly currentUser = this._currentUser.asReadonly();
 
-  private readSavedUser(): UserProfileInfo | null {
+  readSavedUser(): UserProfileInfo | null {
     try {
       const saved = localStorage.getItem('currentUser');
       return saved ? (JSON.parse(saved) as UserProfileInfo) : null;

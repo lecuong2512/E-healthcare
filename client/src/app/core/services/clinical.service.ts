@@ -3,9 +3,11 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   CreateEmrAddendumRequest,
+  CreateMedicalRecordRequest,
   EmrAddendumData,
   EmrHistoryResponse,
   MedicalRecordDetailResponse,
+  UpdateMedicalRecordRequest,
 } from '@shared/interfaces';
 import { TokenStoreService } from './token-store.service';
 
@@ -15,6 +17,37 @@ const API_BASE = '/api/v1/clinical';
 export class ClinicalService {
   private readonly http = inject(HttpClient);
   private readonly tokenStore = inject(TokenStoreService);
+
+  createMedicalRecord(
+    request: CreateMedicalRecordRequest,
+  ): Observable<MedicalRecordDetailResponse> {
+    return this.http.post<MedicalRecordDetailResponse>(
+      `${API_BASE}/medical-records`,
+      request,
+      { headers: this.authHeaders() },
+    );
+  }
+
+  updateMedicalRecord(
+    recordId: string,
+    request: UpdateMedicalRecordRequest,
+  ): Observable<MedicalRecordDetailResponse> {
+    return this.http.patch<MedicalRecordDetailResponse>(
+      `${API_BASE}/medical-records/${recordId}`,
+      request,
+      { headers: this.authHeaders() },
+    );
+  }
+
+  completeConsultation(
+    recordId: string,
+  ): Observable<MedicalRecordDetailResponse> {
+    return this.http.post<MedicalRecordDetailResponse>(
+      `${API_BASE}/medical-records/${recordId}/complete`,
+      {},
+      { headers: this.authHeaders() },
+    );
+  }
 
   getMedicalRecord(recordId: string): Observable<MedicalRecordDetailResponse> {
     return this.http.get<MedicalRecordDetailResponse>(

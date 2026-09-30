@@ -443,6 +443,60 @@
           <p class="text-xs text-slate-500 mt-0.5">Điền đầy đủ thông tin để bác sĩ chuẩn bị trước</p>
         </div>
 
+        <!-- Tùy chọn đối tượng khám: Đặt cho bản thân hoặc người thân -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-2">
+          <label class="block text-xs font-semibold text-slate-800">Đặt lịch cho ai?</label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              (click)="setBookingFor('self')"
+              class="flex items-center gap-3 p-3 rounded-xl border text-left transition-all"
+              [class.border-sky-500]="bookingFor() === 'self'"
+              [class.bg-sky-50]="bookingFor() === 'self'"
+              [class.text-sky-900]="bookingFor() === 'self'"
+              [class.border-slate-200]="bookingFor() !== 'self'"
+              [class.text-slate-700]="bookingFor() !== 'self'"
+            >
+              <span class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0"
+                    [class.border-sky-600]="bookingFor() === 'self'"
+                    [class.bg-sky-600]="bookingFor() === 'self'"
+                    [class.border-slate-300]="bookingFor() !== 'self'">
+                @if (bookingFor() === 'self') {
+                  <span class="w-1.5 h-1.5 rounded-full bg-white"></span>
+                }
+              </span>
+              <div>
+                <span class="text-xs font-bold block">Đặt cho bản thân</span>
+                <span class="text-[11px] text-slate-500">Tự động điền thông tin từ hồ sơ cá nhân</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              (click)="setBookingFor('other')"
+              class="flex items-center gap-3 p-3 rounded-xl border text-left transition-all"
+              [class.border-sky-500]="bookingFor() === 'other'"
+              [class.bg-sky-50]="bookingFor() === 'other'"
+              [class.text-sky-900]="bookingFor() === 'other'"
+              [class.border-slate-200]="bookingFor() !== 'other'"
+              [class.text-slate-700]="bookingFor() !== 'other'"
+            >
+              <span class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0"
+                    [class.border-sky-600]="bookingFor() === 'other'"
+                    [class.bg-sky-600]="bookingFor() === 'other'"
+                    [class.border-slate-300]="bookingFor() !== 'other'">
+                @if (bookingFor() === 'other') {
+                  <span class="w-1.5 h-1.5 rounded-full bg-white"></span>
+                }
+              </span>
+              <div>
+                <span class="text-xs font-bold block">Đặt cho người thân / người khác</span>
+                <span class="text-[11px] text-slate-500">Nhập mới thông tin của người khám</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
         <!-- Patient form -->
         <form [formGroup]="patientForm" class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
 

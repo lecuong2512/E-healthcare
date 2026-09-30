@@ -98,7 +98,7 @@ export class AuthService {
         withCredentials: true,
       })
       .pipe(
-        tap((res) => this.tokenStore.setSession(res.accessToken, res.role)),
+        tap((res) => this.tokenStore.setSession(res.accessToken, res.role, res.user)),
       );
   }
 
@@ -112,5 +112,23 @@ export class AuthService {
       .pipe(
         tap((res) => this.tokenStore.setSession(res.accessToken, res.role, res.user)),
       );
+  }
+
+  fetchProfile(): Observable<CurrentUser> {
+    return this.http.get<CurrentUser>(`${API_BASE}/auth/me`).pipe(
+      tap((user) => {
+        if (user) {
+          const current = this.tokenStore.currentUser();
+          const merged: CurrentUser = {
+            id: user.id ?? (user as any).userId ?? current?.id,
+            fullName: user.fullName ?? current?.fullName ?? '',
+            email: user.email ?? current?.email,
+            phoneNumber: user.phoneNumber ?? current?.phoneNumber,
+            role: user.role ?? current?.role ?? '',
+          };
+          this.tokenStore.setCurrentUser(merged);
+        }
+      }),
+    );
   }
 }

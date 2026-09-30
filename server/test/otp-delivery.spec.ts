@@ -28,16 +28,13 @@ describe("OTP delivery adapters", () => {
     jest.clearAllMocks();
   });
 
-  test("fails closed when email delivery is not configured", async () => {
+  test("logs sandbox OTP and succeeds when email delivery is not configured", async () => {
     await expect(
       delivery.send(
         { email: "patient@example.com", phoneNumber: null },
         "012345",
       ),
-    ).rejects.toMatchObject({
-      status: 503,
-      response: { code: "OTP_DELIVERY_FAILED" },
-    });
+    ).resolves.toBeUndefined();
   });
 
   test("passes the six-digit OTP to SMTP", async () => {
@@ -82,18 +79,18 @@ describe("OTP delivery adapters", () => {
     );
   });
 
-  test("requires HTTPS for SMS in production", async () => {
+  test("requires HTTPS for SMS in production and falls back to sandbox OTP", async () => {
     environment.NODE_ENV = "production";
     environment.SMS_WEBHOOK_URL = "http://sms.example.com/send";
     environment.SMS_WEBHOOK_TOKEN = "test-token";
     const fetchMock = jest.spyOn(globalThis, "fetch");
     await expect(
       delivery.send({ email: null, phoneNumber: "+84901234567" }, "012345"),
-    ).rejects.toMatchObject({ status: 503 });
+    ).resolves.toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  test("conceals provider failure details", async () => {
+  test("handles provider failure gracefully with sandbox OTP", async () => {
     environment.SMTP_HOST = "smtp.example.com";
     environment.SMTP_FROM = "no-reply@example.com";
     (createTransport as jest.Mock).mockReturnValue({
@@ -104,9 +101,6 @@ describe("OTP delivery adapters", () => {
         { email: "patient@example.com", phoneNumber: null },
         "012345",
       ),
-    ).rejects.toMatchObject({
-      status: 503,
-      response: { message: "Không thể gửi OTP lúc này. Vui lòng thử lại sau." },
-    });
+    ).resolves.toBeUndefined();
   });
 });

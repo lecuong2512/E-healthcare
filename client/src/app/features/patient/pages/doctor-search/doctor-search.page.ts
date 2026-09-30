@@ -21,7 +21,11 @@ export interface Doctor {
   rating: number;
   reviewCount: number;
   avatarUrl?: string | null;
+  availableDates?: string[];
+  schedules?: { date: string }[];
 }
+
+const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
 @Component({
   selector: 'app-doctor-search-page',
@@ -42,7 +46,8 @@ export class DoctorSearchPage {
   ];
   readonly searchQuery = signal('');
   readonly selectedSpecialty = signal<string | null>(null);
-  readonly selectedDate = signal<'today' | 'tomorrow' | 'pick'>('today');
+  readonly selectedDate = signal<string | null>(null);
+  readonly customDate = signal<string>('');
   readonly selectedFee = signal<string | null>(null);
   readonly filterHighRating = signal(false);
   readonly filterAvailableToday = signal(false);
@@ -51,16 +56,42 @@ export class DoctorSearchPage {
   readonly loadError = signal<string | null>(null);
   readonly doctors = signal<Doctor[]>([]);
 
+  readonly todayStr: string;
+  readonly tomorrowStr: string;
+  private readonly availableDoctorIdsByDate = new Map<string, Set<string>>();
+  private readonly availabilityLoaded = signal(0);
+
   readonly filteredDoctors = computed(() => {
+    this.availabilityLoaded();
     const query = this.searchQuery().toLocaleLowerCase('vi').trim();
     const specialty = this.selectedSpecialty();
     const fee = this.selectedFee();
+    const dateVal = this.selectedDate();
+
     return this.doctors().filter((doctor) => {
       const matchesSearch = !query || [doctor.name, doctor.specialty, doctor.hospital]
         .some((value) => value.toLocaleLowerCase('vi').includes(query));
-      const matchesSpecialty = !specialty || doctor.specialty === specialty;
+
+      const matchesSpecialty = !specialty || (() => {
+        const normSpecialty = normalize(specialty);
+        const normDocSpecialty = normalize(doctor.specialty || '');
+        return normDocSpecialty.includes(normSpecialty) ||
+          normSpecialty.includes(normDocSpecialty) ||
+          (doctor.tags && doctor.tags.some(tag => normalize(tag).includes(normSpecialty)));
+      })();
+
       const matchesRating = !this.filterHighRating() || doctor.rating >= 4;
       const matchesAvailability = !this.filterAvailableToday() || doctor.availableToday;
+
+      let matchesDate = true;
+      if (dateVal && dateVal !== 'pick') {
+        const targetDate = dateVal === 'today' ? this.todayStr : dateVal === 'tomorrow' ? this.tomorrowStr : dateVal;
+        matchesDate = (targetDate === this.todayStr && doctor.availableToday)
+          || (doctor.availableDates?.includes(targetDate) ?? false)
+          || (doctor.schedules?.some(s => s.date === targetDate) ?? false)
+          || (this.availableDoctorIdsByDate.get(targetDate)?.has(doctor.id) ?? false);
+      }
+
       const matchesFee = fee === 'low'
         ? doctor.price < 300_000
         : fee === 'mid'
@@ -68,7 +99,8 @@ export class DoctorSearchPage {
           : fee === 'high'
             ? doctor.price > 500_000
             : true;
-      return matchesSearch && matchesSpecialty && matchesRating && matchesAvailability && matchesFee;
+
+      return matchesSearch && matchesSpecialty && matchesRating && matchesAvailability && matchesDate && matchesFee;
     });
   });
 
@@ -77,13 +109,23 @@ export class DoctorSearchPage {
       timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
     }).formatToParts(new Date());
     const part = (type: string) => parts.find(item => item.type === type)?.value;
-    const today = `${part('year')}-${part('month')}-${part('day')}`;
+    this.todayStr = `${part('year')}-${part('month')}-${part('day')}`;
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tmwParts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(tomorrow);
+    const tmwPart = (type: string) => tmwParts.find(item => item.type === type)?.value;
+    this.tomorrowStr = `${tmwPart('year')}-${tmwPart('month')}-${tmwPart('day')}`;
+
     forkJoin({
       response: this.api.searchDoctors(),
-      available: this.api.searchDoctors(today).pipe(catchError(() => of(null))),
+      available: this.api.searchDoctors(this.todayStr).pipe(catchError(() => of(null))),
     }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: ({ response, available }) => {
         const availableIds = new Set(available?.data.map(doctor => doctor.id));
+        this.availableDoctorIdsByDate.set(this.todayStr, availableIds);
         this.doctors.set(response.data.map((doctor) => ({
           id: doctor.id,
           degree: doctor.academicTitle || 'Bác sĩ',
@@ -110,6 +152,45 @@ export class DoctorSearchPage {
 
   toggleSpecialty(specialty: string): void {
     this.selectedSpecialty.update((current) => current === specialty ? null : specialty);
+  }
+
+  selectDate(opt: string | null): void {
+    if (this.selectedDate() === opt) {
+      this.selectedDate.set(null);
+      return;
+    }
+    this.selectedDate.set(opt);
+    this.fetchAvailabilityForDate(opt);
+  }
+
+  onCustomDateChange(date: string): void {
+    this.customDate.set(date);
+    if (date) {
+      this.selectedDate.set(date);
+      this.fetchAvailabilityForDate(date);
+    } else {
+      this.selectedDate.set('pick');
+    }
+  }
+
+  isCustomDateSelected(): boolean {
+    const val = this.selectedDate();
+    return !!val && val !== 'today' && val !== 'tomorrow';
+  }
+
+  fetchAvailabilityForDate(dateVal: string | null): void {
+    if (!dateVal || dateVal === 'pick') return;
+    const targetDate = dateVal === 'today' ? this.todayStr : dateVal === 'tomorrow' ? this.tomorrowStr : dateVal;
+    if (this.availableDoctorIdsByDate.has(targetDate)) return;
+    this.api.searchDoctors(targetDate).pipe(
+      catchError(() => of(null)),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((res) => {
+      if (res) {
+        this.availableDoctorIdsByDate.set(targetDate, new Set(res.data.map(d => d.id)));
+        this.availabilityLoaded.update(v => v + 1);
+      }
+    });
   }
 
   toggleFee(value: string): void {
