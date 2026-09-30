@@ -12,6 +12,7 @@ import { catchError, finalize, of, switchMap } from 'rxjs';
 import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
 import { PatientBookingApiService, PatientDoctorDetail, PatientDoctorSchedule, PatientDoctorSummary, PatientVoucher } from '../../data-access/patient-booking-api.service';
 import { PaymentRedirectService } from '../../data-access/payment-redirect.service';
+import { WebPushService } from '../../../../core/services/web-push.service';
 
 const TOTAL_SECONDS = 10 * 60;
 const PENDING_PAYMENT_CONTEXT_KEY = 'pendingPaymentContext';
@@ -30,6 +31,7 @@ export interface Doctor {
   hospital: string;
   fee: number;
   rating: number;
+  avatarUrl?: string | null;
 }
 
 export interface DayOption {
@@ -66,6 +68,14 @@ export class BookingStepperPage implements OnDestroy {
   private readonly api = inject(PatientBookingApiService);
   private readonly paymentRedirect = inject(PaymentRedirectService);
   private readonly message = inject(NzMessageService);
+  private readonly injectedWebPush = inject(WebPushService, { optional: true });
+  readonly webPush = this.injectedWebPush ?? {
+    isSubscribed: signal(false),
+    isSubscribing: signal(false),
+    isSupported: signal(false),
+    permission: signal<NotificationPermission>('default'),
+    subscribe: async () => ({ success: false, message: 'Web push is not supported or not configured.' }),
+  };
 
   readonly step = signal(1);
   readonly payAtClinicReceipt = signal<AppointmentResponse | null>(null);
@@ -381,6 +391,15 @@ export class BookingStepperPage implements OnDestroy {
     void this.router.navigate(['/patient/history']);
   }
 
+  async enableWebPush(): Promise<void> {
+    const result = await this.webPush.subscribe();
+    if (result.success) {
+      this.message.success(result.message);
+    } else {
+      this.message.warning(result.message);
+    }
+  }
+
   resetBookingFlow(): void {
     this.payAtClinicReceipt.set(null);
     this.clearPendingPaymentContext();
@@ -422,6 +441,7 @@ export class BookingStepperPage implements OnDestroy {
       hospital: `Phòng ${doctor.roomNumber}`,
       fee: Number(doctor.consultationFee),
       rating: Number(doctor.ratingAverage),
+      avatarUrl: doctor.avatarUrl ?? null,
     };
   }
 

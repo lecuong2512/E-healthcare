@@ -20,6 +20,7 @@ interface DoctorView {
   bioDescription: string | null;
   roomNumber: string;
   ratingAverage: number;
+  avatarUrl?: string | null;
 }
 
 interface SearchDoctorResult {
@@ -188,6 +189,7 @@ export class DoctorSearchService {
       bioDescription: doctor.bioDescription,
       roomNumber: doctor.roomNumber,
       ratingAverage: Number(doctor.ratingAverage),
+      avatarUrl: doctor.avatarUrl ?? doctor.user?.avatarUrl ?? null,
     };
   }
 }
