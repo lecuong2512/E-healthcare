@@ -23,6 +23,7 @@ yarn-error.log*
 # Database & Cache Data Volumes
 postgres_data/
 redis_data/
+uploads/
 
 # IDE & OS files
 .idea/

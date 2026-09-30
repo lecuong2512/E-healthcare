@@ -7,6 +7,7 @@ import { PdfProcessor } from '../src/modules/notification/processors/pdf.process
 import { EmailSenderService } from '../src/modules/notification/services/email-sender.service';
 import { SmsSenderService } from '../src/modules/notification/services/sms-sender.service';
 import { PdfGeneratorService } from '../src/modules/notification/services/pdf-generator.service';
+import { AppointmentReminderDeliveryService } from '../src/modules/notification/services/appointment-reminder-delivery.service';
 
 describe('Notification Queue Processors (Workers)', () => {
   let emailProcessor: EmailProcessor;
@@ -37,6 +38,15 @@ describe('Notification Queue Processors (Workers)', () => {
             sendAppointmentReminder2h: jest.fn().mockResolvedValue(undefined),
           },
         },
+        {
+          provide: AppointmentReminderDeliveryService,
+          useValue: {
+            deliver: jest.fn(async (_id, _type, _provider, send) => {
+              await send();
+              return true;
+            }),
+          },
+        },
         PdfGeneratorService, // Use real generator to test PDF and QR code creation
       ],
     }).compile();
@@ -52,6 +62,7 @@ describe('Notification Queue Processors (Workers)', () => {
   describe('EmailProcessor (email-queue worker)', () => {
     it('should process EMAIL_SEND_BOOKING_CONFIRMATION job successfully', async () => {
       const payload = {
+        notificationLogId: 'reminder-log-24h',
         to: 'patient@example.com',
         patientName: 'Le Thi Hoa',
         appointmentCode: 'APT-260923-0010',
@@ -89,6 +100,7 @@ describe('Notification Queue Processors (Workers)', () => {
 
     it('should process EMAIL_SEND_REMINDER_24H job', async () => {
       const payload = {
+        notificationLogId: 'reminder-log-24h',
         to: 'patient@example.com',
         patientName: 'Le Thi Hoa',
         appointmentCode: 'APT-260923-0010',
@@ -138,6 +150,7 @@ describe('Notification Queue Processors (Workers)', () => {
 
     it('should process SMS_SEND_REMINDER_2H job', async () => {
       const payload = {
+        notificationLogId: 'reminder-log-2h',
         phoneNumber: '0901234567',
         patientName: 'Pham Van Dung',
         appointmentCode: 'APT-260923-0015',
@@ -186,10 +199,10 @@ describe('Notification Queue Processors (Workers)', () => {
             activeIngredient: 'Amoxicillin',
             unit: 'viên',
             quantity: 21,
-            dosageMorning: 1,
-            dosageNoon: 1,
-            dosageAfternoon: 0,
-            dosageNight: 1,
+            dosageMorning: '1 viên',
+            dosageNoon: '1 viên',
+            dosageAfternoon: null,
+            dosageNight: '1 viên',
             usageInstruction: 'Uống sau ăn no',
           },
           {
@@ -197,16 +210,17 @@ describe('Notification Queue Processors (Workers)', () => {
             activeIngredient: 'Paracetamol',
             unit: 'viên',
             quantity: 10,
-            dosageMorning: 1,
-            dosageNoon: 0,
-            dosageAfternoon: 0,
-            dosageNight: 1,
+            dosageMorning: '1 viên',
+            dosageNoon: null,
+            dosageAfternoon: null,
+            dosageNight: '1 viên',
             usageInstruction: 'Uống khi sốt > 38.5 độ',
           },
         ],
         doctorAdvice: 'Uống nhiều nước ấm, nghỉ ngơi, tái khám sau 5 ngày nếu không thuyên giảm.',
-        createdAt: '23/09/2026',
+        createdAt: '2026-09-23T00:00:00.000Z',
         verificationHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        verificationUrl: 'https://portal.example.test/api/v1/clinical/prescriptions/RX-2026-0001/verify?hash=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
       };
 
       const result = await pdfProcessor.process({

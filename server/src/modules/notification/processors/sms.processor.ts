@@ -8,12 +8,16 @@ import {
   SmsAppointmentCancellationPayload,
 } from '@shared/interfaces';
 import { SmsSenderService } from '../services/sms-sender.service';
+import { AppointmentReminderDeliveryService } from '../services/appointment-reminder-delivery.service';
 
 @Processor(QueueName.SMS)
 export class SmsProcessor extends WorkerHost {
   private readonly logger = new Logger(SmsProcessor.name);
 
-  constructor(private readonly smsSenderService: SmsSenderService) {
+  constructor(
+    private readonly smsSenderService: SmsSenderService,
+    private readonly reminderDelivery: AppointmentReminderDeliveryService,
+  ) {
     super();
   }
 
@@ -29,7 +33,16 @@ export class SmsProcessor extends WorkerHost {
 
       case JobName.SMS_SEND_REMINDER_2H: {
         const payload = job.data as SmsAppointmentReminder2hPayload;
-        await this.smsSenderService.sendAppointmentReminder2h(payload);
+        if (payload.notificationLogId) {
+          await this.reminderDelivery.deliver(
+            payload.notificationLogId,
+            'REMINDER_2H',
+            'SMS_WEBHOOK',
+            () => this.smsSenderService.sendAppointmentReminder2h(payload),
+          );
+        } else {
+          await this.smsSenderService.sendAppointmentReminder2h(payload);
+        }
         return { success: true, appointmentCode: payload.appointmentCode };
       }
 

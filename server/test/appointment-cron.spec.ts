@@ -7,6 +7,8 @@ import { DoctorScheduleEntity } from '../src/database/entities/doctor-schedule.e
 import { AppointmentStatus, SlotStatus } from '@shared/enums';
 import { RedisService } from '../src/common/redis/redis.service';
 import { NotificationProducerService } from '../src/modules/notification/producers/notification-producer.service';
+import { AppointmentNotificationEntity } from '../src/database/entities/appointment-notification.entity';
+import { isWithinReminderWindow, localScheduleToInstant } from '../src/modules/notification/schedulers/appointment-cron.service';
 
 describe('AppointmentCronService Schedulers (Section 5.2, Section 7.1, SRS-PAT-05)', () => {
   let cronService: AppointmentCronService;
@@ -15,9 +17,14 @@ describe('AppointmentCronService Schedulers (Section 5.2, Section 7.1, SRS-PAT-0
   let mockRedisStore: Map<string, { value: string; ttl: number }>;
   let mockRedisService: Partial<RedisService>;
   let mockProducerService: Partial<NotificationProducerService>;
+  let mockNotificationRepo: Partial<Repository<AppointmentNotificationEntity>>;
+  let notificationRows: any[];
+  let notificationSequence: number;
 
   beforeEach(async () => {
     mockRedisStore = new Map();
+    notificationRows = [];
+    notificationSequence = 0;
 
     mockRedisService = {
       get: jest.fn().mockImplementation(async (key: string) => {
@@ -50,10 +57,49 @@ describe('AppointmentCronService Schedulers (Section 5.2, Section 7.1, SRS-PAT-0
       save: jest.fn().mockImplementation(async (entity) => entity),
     };
 
+    mockNotificationRepo = {
+      findOne: jest.fn().mockImplementation(async ({ where }: any) =>
+        notificationRows.find((row) => row.appointmentId === where.appointmentId && row.notificationType === where.notificationType) ?? null,
+      ),
+      create: jest.fn().mockImplementation((value: any) => ({
+        id: `notification-${++notificationSequence}`,
+        ...value,
+      })),
+      save: jest.fn().mockImplementation(async (value: any) => {
+        const existingIndex = notificationRows.findIndex((row) => row.id === value.id);
+        if (existingIndex < 0) notificationRows.push(value);
+        else notificationRows[existingIndex] = value;
+        return value;
+      }),
+      update: jest.fn().mockImplementation(async (id: string, value: any) => {
+        const row = notificationRows.find((item) => item.id === id);
+        if (!row) return { affected: 0 };
+        Object.assign(row, value);
+        return { affected: 1 };
+      }),
+      createQueryBuilder: jest.fn(() => {
+        let updateValues: any;
+        let notificationId: string;
+        const builder: any = {
+          update: () => builder,
+          set: (value: any) => { updateValues = value; return builder; },
+          where: (_query: string, params: any) => { notificationId = params.id; return builder; },
+          execute: async () => {
+            const row = notificationRows.find((item) => item.id === notificationId && item.status === 'FAILED');
+            if (!row) return { affected: 0 };
+            Object.assign(row, updateValues);
+            return { affected: 1 };
+          },
+        };
+        return builder;
+      }),
+    };
+
     const mockDataSource = {
       getRepository: jest.fn().mockImplementation((entity) => {
         if (entity === AppointmentEntity) return mockAppointmentRepo;
         if (entity === DoctorScheduleEntity) return mockScheduleRepo;
+        if (entity === AppointmentNotificationEntity) return mockNotificationRepo;
         return null;
       }),
     };
@@ -171,8 +217,8 @@ describe('AppointmentCronService Schedulers (Section 5.2, Section 7.1, SRS-PAT-0
   });
 
   describe('Cron 3: Quét tự động nhắc hẹn T-24h & T-2h (SRS-PAT-05)', () => {
-    it('should dispatch 24h reminder to email-queue and 2h reminder to sms-queue with deduplication', async () => {
-      const referenceTime = new Date('2026-09-23T10:00:00');
+    it('schedules T-24h email and T-2h SMS once through the existing queues', async () => {
+      const referenceTime = new Date('2026-09-23T03:00:00.000Z');
 
       const appointments = [
         // Appt 1: Exactly 24h away (tomorrow at 10:00). Patient has email.
@@ -221,10 +267,11 @@ describe('AppointmentCronService Schedulers (Section 5.2, Section 7.1, SRS-PAT-0
 
       // First run: should dispatch both 24h email and 2h SMS
       const firstRun = await cronService.scanAndDispatchReminders(referenceTime);
-      expect(firstRun.sent24h).toBe(1);
-      expect(firstRun.sent2h).toBe(1);
+      expect(firstRun.scheduled24h).toBe(1);
+      expect(firstRun.scheduled2h).toBe(1);
 
-      expect(mockProducerService.enqueueAppointmentReminder24h).toHaveBeenCalledWith({
+      expect(mockProducerService.enqueueAppointmentReminder24h).toHaveBeenCalledWith(expect.objectContaining({
+        notificationLogId: expect.any(String),
         to: 'mai@example.com',
         patientName: 'Nguyen Thi Mai',
         appointmentCode: 'APT-24H-001',
@@ -232,23 +279,70 @@ describe('AppointmentCronService Schedulers (Section 5.2, Section 7.1, SRS-PAT-0
         date: '2026-09-24',
         time: '10:00',
         roomNumber: 'P.101',
-      });
+        notes: expect.stringContaining('CCCD'),
+      }));
 
-      expect(mockProducerService.enqueueAppointmentReminder2h).toHaveBeenCalledWith({
+      expect(mockProducerService.enqueueAppointmentReminder2h).toHaveBeenCalledWith(expect.objectContaining({
+        notificationLogId: expect.any(String),
         phoneNumber: '0988889999',
         patientName: 'Le Van Cuong',
         appointmentCode: 'APT-2H-002',
         doctorName: 'Pham Van C',
         time: '12:00',
         roomNumber: 'P.205',
-      });
+      }));
 
-      // Second run: deduplication should prevent any second dispatch
       const secondRun = await cronService.scanAndDispatchReminders(referenceTime);
-      expect(secondRun.sent24h).toBe(0);
-      expect(secondRun.sent2h).toBe(0);
+      expect(secondRun.scheduled24h).toBe(0);
+      expect(secondRun.scheduled2h).toBe(0);
       expect(mockProducerService.enqueueAppointmentReminder24h).toHaveBeenCalledTimes(1);
       expect(mockProducerService.enqueueAppointmentReminder2h).toHaveBeenCalledTimes(1);
+      expect(notificationRows.map((row) => row.status)).toEqual(['SCHEDULED', 'SCHEDULED']);
+    });
+
+    it('does not schedule reminders for cancelled appointments', async () => {
+      (mockAppointmentRepo.find as jest.Mock).mockResolvedValue([{
+        id: 'cancelled', appointmentCode: 'APT-CANCELLED',
+        status: AppointmentStatus.CANCELLED_BY_PATIENT,
+        patient: { fullName: 'Patient', email: 'patient@example.test', phoneNumber: '0901234567' },
+        doctor: { user: { fullName: 'Doctor' }, roomNumber: 'A1' },
+        schedule: { date: '2026-09-24', startTime: '10:00' },
+      }]);
+      const result = await cronService.scanAndDispatchReminders(new Date('2026-09-23T03:00:00Z'));
+      expect(result).toEqual({ scheduled24h: 0, scheduled2h: 0 });
+      expect(notificationRows).toHaveLength(0);
+      expect(mockProducerService.enqueueAppointmentReminder24h).not.toHaveBeenCalled();
+      expect(mockProducerService.enqueueAppointmentReminder2h).not.toHaveBeenCalled();
+    });
+
+    it('uses the configured business timezone at a date boundary', () => {
+      expect(localScheduleToInstant('2026-09-24', '00:15', 'Asia/Ho_Chi_Minh')?.toISOString())
+        .toBe('2026-09-23T17:15:00.000Z');
+      expect(isWithinReminderWindow(
+        new Date('2026-09-23T17:15:00.000Z'),
+        new Date('2026-09-22T17:15:00.000Z'),
+        24,
+        0,
+      )).toBe(true);
+      expect(localScheduleToInstant('2026-03-08', '02:30', 'America/New_York')).toBeNull();
+    });
+
+    it('retries a failed queue submission from the persisted notification log', async () => {
+      (mockAppointmentRepo.find as jest.Mock).mockResolvedValue([{
+        id: 'retry-24h', appointmentCode: 'APT-RETRY', status: AppointmentStatus.CONFIRMED,
+        patient: { fullName: 'Patient', email: 'patient@example.test', phoneNumber: null },
+        doctor: { user: { fullName: 'Doctor' }, roomNumber: 'A1' },
+        schedule: { date: '2026-09-24', startTime: '10:00' },
+      }]);
+      (mockProducerService.enqueueAppointmentReminder24h as jest.Mock)
+        .mockRejectedValueOnce(new Error('queue down'))
+        .mockResolvedValueOnce({} as any);
+
+      await cronService.scanAndDispatchReminders(new Date('2026-09-23T03:00:00Z'));
+      expect(notificationRows[0].status).toBe('FAILED');
+      await cronService.scanAndDispatchReminders(new Date('2026-09-23T03:15:00Z'));
+      expect(notificationRows[0].status).toBe('SCHEDULED');
+      expect(mockProducerService.enqueueAppointmentReminder24h).toHaveBeenCalledTimes(2);
     });
   });
 });

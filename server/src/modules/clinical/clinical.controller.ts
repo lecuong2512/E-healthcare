@@ -2,24 +2,27 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
   Req,
+  StreamableFile,
 } from '@nestjs/common';
 import { Role } from '@shared/enums';
-import { Roles } from '../../common/decorators/auth.decorators';
+import { Public, Roles } from '../../common/decorators/auth.decorators';
 import { AuthenticatedRequest } from '../../common/guards/authenticated-request';
 import { ClinicalService } from './clinical.service';
 import { Icd10Service } from './icd10/icd10.service';
+import { PrescriptionPdfService } from './prescription-pdf.service';
 import {
-  CreateMedicalRecordDto,
-  UpdateMedicalRecordDto,
-  SearchIcd10Dto,
-  PrescriptionSafetyCheckDto,
   CreateEmrAddendumDto,
+  CreateMedicalRecordDto,
+  PrescriptionSafetyCheckDto,
+  SearchIcd10Dto,
+  UpdateMedicalRecordDto,
 } from './dto';
 
 @Controller('clinical')
@@ -27,7 +30,35 @@ export class ClinicalController {
   constructor(
     private readonly clinicalService: ClinicalService,
     private readonly icd10Service: Icd10Service,
+    private readonly prescriptionPdf: PrescriptionPdfService,
   ) {}
+
+  @Get('appointments/:appointmentId/prescription.pdf')
+  @Roles(Role.PATIENT)
+  @Header('Cache-Control', 'private, no-store')
+  async downloadPrescriptionPdf(
+    @Req() req: AuthenticatedRequest,
+    @Param('appointmentId', ParseUUIDPipe) appointmentId: string,
+  ): Promise<StreamableFile> {
+    const result = await this.prescriptionPdf.generateForPatient(
+      appointmentId,
+      req.auth!.userId,
+    );
+    return new StreamableFile(result.buffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${result.prescriptionCode.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf"`,
+    });
+  }
+
+  @Get('prescriptions/:prescriptionCode/verify')
+  @Public()
+  @Header('Cache-Control', 'no-store')
+  verifyPrescription(
+    @Param('prescriptionCode') prescriptionCode: string,
+    @Query('hash') hash?: string,
+  ): Promise<{ valid: boolean }> {
+    return this.prescriptionPdf.verify(prescriptionCode, hash);
+  }
 
   /**
    * Search ICD-10 catalog by code or Vietnamese disease name.

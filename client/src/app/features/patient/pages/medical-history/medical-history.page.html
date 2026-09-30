@@ -5,19 +5,15 @@
         <p class="text-sm font-semibold text-sky-700">HỒ SƠ SỨC KHỎE</p>
         <h1 class="mt-1 text-3xl font-bold text-slate-900">Lịch sử khám</h1>
         <p class="mt-2 text-slate-500">Lịch hẹn, kết quả khám và đơn thuốc của bạn</p>
-        @if (isMock()) {
-          <span class="mt-2 inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">CHẾ ĐỘ DỮ LIỆU MẪU</span>
-        }
       </div>
 
       <div class="flex gap-2">
-        <button type="button" (click)="useMockData()" class="rounded-xl border border-sky-700 bg-white px-4 py-3 font-semibold text-sky-700 hover:bg-sky-50">Dữ liệu mẫu (Demo)</button>
         <a routerLink="/patient/booking" class="rounded-xl bg-sky-700 px-4 py-3 font-semibold text-white">Đặt lịch mới</a>
       </div>
     </header>
 
     @if (toast()) {
-      <div class="rounded-xl border px-4 py-3" [class.border-emerald-200]="toastType() === 'success'" [class.bg-emerald-50]="toastType() === 'success'" [class.text-emerald-800]="toastType() === 'success'" [class.border-rose-200]="toastType() === 'error'" [class.bg-rose-50]="toastType() === 'error'" [class.text-rose-800]="toastType() === 'error'">
+      <div class="rounded-xl border px-4 py-3" [attr.role]="toastType() === 'error' ? 'alert' : 'status'" aria-live="polite" [class.border-emerald-200]="toastType() === 'success'" [class.bg-emerald-50]="toastType() === 'success'" [class.text-emerald-800]="toastType() === 'success'" [class.border-rose-200]="toastType() === 'error'" [class.bg-rose-50]="toastType() === 'error'" [class.text-rose-800]="toastType() === 'error'">
         {{ toast() }}
       </div>
     }
@@ -41,7 +37,6 @@
         <p class="font-semibold text-rose-700">{{ error() }}</p>
         <div class="mt-4 flex justify-center gap-2">
           <button (click)="load()" class="rounded-lg border px-4 py-2 text-slate-700">Thử lại</button>
-          <button type="button" (click)="useMockData()" class="rounded-lg bg-sky-700 px-4 py-2 font-semibold text-white">Xem dữ liệu mẫu (Demo)</button>
         </div>
       </section>
     } @else {
@@ -76,10 +71,12 @@
                     <span class="text-slate-400">Giờ khám</span><br>
                     <b>{{ item.schedule?.startTime | slice: 0 : 5 }} – {{ item.schedule?.endTime | slice: 0 : 5 }}</b>
                   </p>
-                  <p>
-                    <span class="text-slate-400">Mã lịch</span><br>
-                    <b>{{ item.appointmentCode || item.id }}</b>
-                  </p>
+                  @if (item.appointmentCode) {
+                    <p>
+                      <span class="text-slate-400">Mã lịch</span><br>
+                      <b>{{ item.appointmentCode }}</b>
+                    </p>
+                  }
                   <p>
                     <span class="text-slate-400">Chi phí</span><br>
                     <b>{{ item.totalAmount | number }} ₫</b>
@@ -97,7 +94,7 @@
                   <p class="mt-4 text-xs text-slate-500">Địa chỉ phòng khám do cơ sở y tế cung cấp khi xác nhận lịch.</p>
                   <div class="mt-4 flex flex-wrap gap-2">
                     <button (click)="openCancel(item)" [disabled]="!canCancel(item)" class="rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-40">
-                      Hủy lịch khám
+                      Hủy lịch hẹn
                     </button>
                     <button (click)="directions(item)" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700">
                       Chỉ đường đến phòng khám ↗
@@ -124,13 +121,24 @@
 
               @if (activeTab() === 'upcoming') {
                 <div class="flex shrink-0 flex-col items-center rounded-xl border border-slate-200 bg-slate-50 p-4 md:w-40">
-                  <div class="flex h-28 w-28 items-center justify-center rounded-lg bg-white text-center text-xs text-slate-500" [attr.data-qr]="item.appointmentCode || item.id">
-                    <div>
-                      <div class="text-4xl text-slate-900">▦</div>
-                      QR check-in
-                    </div>
-                  </div>
-                  <span class="mt-2 text-xs font-medium text-slate-600">Xuất trình khi đến viện</span>
+                  @if (item.status === 'CONFIRMED') {
+                    @if (qrStates()[item.id]; as qr) {
+                      @if (qr.dataUrl) {
+                        <img [src]="qr.dataUrl" alt="Mã QR check-in lịch hẹn" class="h-28 w-28 rounded-lg bg-white" />
+                        <button (click)="loadQr(item)" class="mt-2 text-xs font-semibold text-sky-700">Làm mới mã QR</button>
+                      } @else if (qr.loading) {
+                        <div class="flex h-28 w-28 items-center justify-center rounded-lg bg-white text-center text-xs text-slate-500" role="status">Đang tạo mã QR…</div>
+                      } @else {
+                        <p class="flex h-28 w-28 items-center justify-center rounded-lg bg-white p-2 text-center text-xs text-rose-700">{{ qr.error }}</p>
+                        <button (click)="loadQr(item)" class="mt-2 text-xs font-semibold text-sky-700">Thử lại</button>
+                      }
+                    } @else {
+                      <button (click)="loadQr(item)" class="flex h-28 w-28 items-center justify-center rounded-lg bg-white text-center text-xs font-semibold text-sky-700">Tạo mã QR check-in</button>
+                    }
+                    <span class="mt-2 text-center text-xs font-medium text-slate-600">Xuất trình khi đến viện</span>
+                  } @else {
+                    <div class="flex h-28 w-28 items-center justify-center rounded-lg bg-white p-3 text-center text-xs text-slate-500">Lịch hẹn đã check-in</div>
+                  }
                 </div>
               }
             </div>
@@ -231,7 +239,7 @@
           [disabled]="submitting() || !cancelReason.trim() || !consentAccepted"
           class="rounded-xl bg-rose-700 px-4 py-2.5 font-semibold text-white disabled:opacity-50"
         >
-          {{ submitting() ? 'Đang gửi…' : 'Xác nhận hủy' }}
+          {{ submitting() ? 'Đang hủy lịch…' : 'Xác nhận hủy' }}
         </button>
       </div>
     </section>
@@ -246,26 +254,30 @@
           <p class="text-sm font-semibold text-sky-700">HỒ SƠ LẦN KHÁM</p>
           <h2 class="text-2xl font-bold">{{ doctorName(detail()!) }}</h2>
         </div>
-        <button (click)="detail.set(null)" class="px-3 text-2xl text-slate-400">×</button>
+        <button (click)="detail.set(null)" aria-label="Đóng chi tiết kết quả khám" class="px-3 text-2xl text-slate-400">×</button>
       </div>
 
       @if (detailLoading()) {
         <p class="py-12 text-center text-slate-500">Đang tải hồ sơ…</p>
       } @else if (detailError()) {
-        <p class="mt-5 rounded-xl bg-amber-50 p-4 text-amber-800">{{ detailError() }}</p>
+        <div class="mt-5 rounded-xl bg-amber-50 p-4 text-amber-800" role="alert">
+          <p>{{ detailError() }}</p>
+          <button (click)="showDetails(detail()!)" class="mt-3 rounded-lg border border-amber-300 px-3 py-2 text-sm font-semibold">Thử tải lại</button>
+        </div>
+      } @else if (!detailRecord()) {
+        <p class="mt-5 rounded-xl bg-slate-50 p-4 text-slate-600">Hồ sơ kết quả khám hiện chưa có dữ liệu.</p>
       } @else {
         <div class="mt-5 grid gap-4 sm:grid-cols-2">
           <div class="rounded-xl bg-sky-50 p-4 sm:col-span-2">
             <h3 class="font-bold">Chẩn đoán</h3>
-            <p class="mt-2">Bệnh chính: {{ detailRecord()?.primaryDiagnosis || detailRecord()?.clinicalNotes || 'Chưa có dữ liệu' }}</p>
-            <p class="mt-1">Bệnh kèm theo: {{ secondaryDiagnosis() }}</p>
-            <p class="mt-1">Mã ICD-10: {{ detailRecord()?.icd10PrimaryCode || '—' }}<span *ngIf="detailRecord()?.icd10SecondaryCodes">, {{ detailRecord()?.icd10SecondaryCodes }}</span></p>
+            <p class="mt-2 whitespace-pre-line">{{ detailRecord()?.clinicalNotes || 'Chưa có nội dung chẩn đoán.' }}</p>
+            <p class="mt-2">ICD-10 chính: {{ detailRecord()?.icd10PrimaryCode || '—' }}</p>
+            <p class="mt-1">ICD-10 kèm theo: {{ detailRecord()?.icd10SecondaryCodes || 'Không có' }}</p>
           </div>
 
           <div class="rounded-xl bg-slate-50 p-4 sm:col-span-2">
             <h3 class="font-bold">Lời dặn bác sĩ</h3>
             <p class="mt-2 whitespace-pre-line">{{ detailRecord()?.doctorAdvice || 'Chưa có lời dặn.' }}</p>
-            <p class="mt-2">Chế độ ăn uống: {{ detailRecord()?.dietAdvice || 'Theo hướng dẫn của bác sĩ.' }}</p>
             <p class="mt-2">Tái khám: {{ detailRecord()?.followUpDate ? (detailRecord()?.followUpDate | date: 'dd/MM/yyyy') : 'Chưa hẹn' }}</p>
           </div>
         </div>
@@ -287,7 +299,7 @@
                     <span>Chiều: {{ med.dosageAfternoon || '—' }}</span>
                     <span>Tối: {{ med.dosageNight || '—' }}</span>
                   </div>
-                  <p class="mt-2 text-sm">{{ med.usageInstructions || 'Cách dùng theo hướng dẫn bác sĩ' }} <span class="text-slate-500">(trước/sau ăn theo chỉ dẫn)</span></p>
+                  <p class="mt-2 text-sm">{{ med.usageInstructions || 'Chưa có hướng dẫn sử dụng.' }}</p>
                 </article>
               }
             </div>
@@ -296,18 +308,39 @@
           }
         </section>
 
-        <div class="mt-5 flex flex-wrap gap-2">
-          <button (click)="download(detailRecord()?.prescription?.pdfUrl)" [disabled]="!detailRecord()?.prescription?.pdfUrl" class="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
-            Tải đơn thuốc PDF
-          </button>
-          <button (click)="download(detailRecord()?.resultPdfUrl)" [disabled]="!detailRecord()?.resultPdfUrl" class="rounded-xl border px-4 py-2.5 text-sm font-semibold disabled:opacity-40">
-            Tải kết quả khám PDF
-          </button>
+        <div class="mt-5 rounded-xl border border-sky-100 bg-sky-50 p-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p class="font-semibold text-sky-800">Đơn thuốc điện tử (PDF)</p>
+              <p class="mt-0.5 text-xs text-sky-600">
+                Tệp PDF có gắn mã băm SHA-256 &amp; mã QR xác thực nguồn gốc
+              </p>
+            </div>
+            @if (detailRecord()?.prescription) {
+              <button
+                id="btn-download-prescription-pdf"
+                (click)="downloadPrescriptionPdf(detail()!)"
+                [disabled]="pdfDownloading()"
+                class="flex items-center gap-2 rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                @if (pdfDownloading()) {
+                  <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                  Đang tạo PDF…
+                } @else {
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 3v12" />
+                  </svg>
+                  Tải đơn thuốc PDF
+                }
+              </button>
+            } @else {
+              <span class="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-500">Chưa có đơn thuốc</span>
+            }
+          </div>
+          @if (pdfError()) {
+            <p class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">{{ pdfError() }}</p>
+          }
         </div>
-
-        @if (detailRecord()?.prescription?.digitallySigned || detailRecord()?.digitallySigned) {
-          <p class="mt-3 text-xs text-emerald-700">✓ Tài liệu có metadata xác nhận chữ ký số của bác sĩ/phòng khám.</p>
-        }
       }
     </section>
   </div>

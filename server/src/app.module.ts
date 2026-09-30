@@ -13,6 +13,9 @@ import { ClinicalModule } from "./modules/clinical/clinical.module";
 import { QueueModule } from "./modules/queue/queue.module";
 import { NotificationModule } from "./modules/notification/notification.module";
 import { ReceptionModule } from "./modules/reception/reception.module";
+import { StaffAdminModule } from './modules/admin/staff-admin.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { AdminDashboardModule } from './modules/admin/admin-dashboard.module';
 import { PaymentModule } from "./modules/payment/payment.module";
 
 @Module({
@@ -27,6 +30,9 @@ import { PaymentModule } from "./modules/payment/payment.module";
     AppointmentModule,
     ClinicalModule,
     ReceptionModule,
+    StaffAdminModule,
+    AdminModule,
+    AdminDashboardModule,
     PaymentModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
   ],

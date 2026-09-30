@@ -151,7 +151,10 @@ describe('Card 3.10: EMR Addendum (Section 5.4 & SRS-DOC-03)', () => {
     };
 
     service = new ClinicalService(mockDataSource as any, icd10Service, mockQueueEvents as any);
-    controller = new ClinicalController(service, icd10Service);
+    controller = new ClinicalController(service, icd10Service, {
+      generateForPatient: jest.fn(),
+      verify: jest.fn(),
+    } as any);
   });
 
   describe('1. 24h Lock Enforcement on Addendum Creation', () => {

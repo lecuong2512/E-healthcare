@@ -50,6 +50,21 @@ export class ClinicalService {
     );
   }
 
+  /**
+   * Tải tệp PDF đơn thuốc điện tử cho một lịch hẹn đã hoàn thành.
+   * Backend yêu cầu JWT Role PATIENT và kiểm tra sở hữu theo appointment ID.
+   * SRS-PAT-04: "Tải tệp PDF đơn thuốc/kết quả khám có gắn chữ ký số".
+   */
+  downloadPrescriptionPdf(appointmentId: string): Observable<Blob> {
+    return this.http.get(
+      `${API_BASE}/appointments/${encodeURIComponent(appointmentId)}/prescription.pdf`,
+      {
+        headers: this.authHeaders(),
+        responseType: 'blob',
+      },
+    );
+  }
+
   private authHeaders(): HttpHeaders {
     const accessToken = this.tokenStore.accessToken();
     return new HttpHeaders({
