@@ -40,8 +40,12 @@ Việc dồn các task bổ sung vào Sprint 3 giúp:
 | **9** | **Card 3.14** | **Bệnh nhân Gửi Đánh giá 1-5 Sao & Nhận xét Bác sĩ sau ca khám** | SRS-PAT-01, Table 7 | 🔵 FE & 🩵 BE | **Nguyễn Mạnh Thi** | ⚡ **Sprint 3** |
 | **10** | **Card 4.7** | **UI Đón Kết quả Thanh toán VNPAY/MoMo & Hóa đơn Điện tử kèm QR** | SRS-PAT-03 (Mục 4.2.3) | 🔵 Frontend | **Trần Văn Tiến** | 🚀 **Sprint 4** *(chạy cùng Card 4.1 Cổng TT)* |
 | **11** | **Card 4.8** | **Diễn tập Khôi phục Thảm họa (RTO < 2h, RPO < 15m) & Audit OWASP Top 10** | NFR-AVAIL-02, NFR-SEC-03 | 🟢 QA & 🟡 DevOps | **Nguyễn Văn Tùng** (phối hợp Cường) | 🚀 **Sprint 4** *(giai đoạn nghiệm thu)* |
+| **12** | **Card 4.9** | **[UI/UX] Hệ thống điều hướng Role-based & Xóa bỏ trùng lặp 2 Header** | SRS-PAT-01..05, SRS-DOC-01, SRS-REC-01 | 🔵 Frontend | **Lê Việt Cường** | 🚀 **Sprint 4 (QA Fix)** |
+| **13** | **Card 4.10** | **[Auth/UI] Nâng cấp Avatar góc phải: Hiển thị tên thật, Dropdown Menu & Đăng xuất** | SRS-AUTH-01..03, UI/UX Shell | 🔵 Frontend | **Lê Việt Cường** | 🚀 **Sprint 4 (QA Fix)** |
+| **14** | **Card 4.11** | **[Reception] Điều hướng 2 chiều Bảng gọi số Smart TV (Lối vào & Lối thoát)** | Section 3.4, SRS-REC-01 | 🔵 Frontend | **Lê Việt Cường** | 🚀 **Sprint 4 (QA Fix)** |
+| **15** | **Card 4.12** | **[Fullstack] Bổ sung Upload Avatar (User/Doctor) & Kênh Web Push Notification** | SRS-DOC-01, SRS-PAT-05 | 🟣 Fullstack | **Lê Việt Cường** | 🚀 **Sprint 4 (QA Fix)** |
 
-> **Nhận xét phân bổ:** Có **9/11 tasks bổ sung (chiếm 82%)** được kéo thẳng vào thực hiện song song trong **Sprint 3**. Hai task còn lại (Card 4.7 & Card 4.8) gắn liền hữu cơ với Cổng thanh toán bên thứ ba và Hoạt động nghiệm thu an toàn thông tin cuối kỳ tại Sprint 4.
+> **Nhận xét phân bổ:** Có **9/11 tasks bổ sung ban đầu (chiếm 82%)** đã hoàn thành trong **Sprint 3**. Tại giai đoạn QA chốt Release Sprint 4 (30/09/2026), bổ sung tiếp **4 Cards (Card 4.9 → Card 4.12) giao cho Lê Việt Cường phụ trách** nhằm khắc phục triệt để các tồn đọng về điều hướng, trải nghiệm người dùng, tải ảnh đại diện và kênh Web Push.
 
 ---
 
@@ -251,3 +255,69 @@ Việc bổ sung tập trung **9 tasks vào Sprint 3**:
 - Giải quyết dứt điểm các màn hình còn đang để `[TODO]` trong hệ thống (`/doctor/schedule`, `/receptionist/queue-board`, `/admin/audit-logs`).
 - Hoàn thiện 100% nghiệp vụ phòng khám (tiếp đón -> gọi số sảnh -> khám bệnh -> kê đơn -> in phiếu -> khóa bệnh án -> đánh giá chất lượng) ngay trong tuần hiện tại.
 - Đảm bảo tải công việc được chia đều cho cả 6 thành viên (mỗi người 2 đến 3 tasks trong 5 ngày), khả thi cao và sẵn sàng đưa vào triển khai ngay.
+
+---
+
+## 8. CHI TIẾT CÁC CARD BỔ SUNG GIAI ĐOẠN QA CHỐT RELEASE SPRINT 4 (PHÂN CÔNG LÊ VIỆT CƯỜNG)
+
+- **Thời điểm lập:** 30/09/2026 (Phiên QA & Chuẩn bị Chốt Release v1.0.0).  
+- **Người phụ trách chính:** **Lê Việt Cường** (Technical Lead & Lead QA)  
+- **Căn cứ:** Kết quả kiểm thử thực tế trên nhánh `develop`, ghi nhận lỗi điều hướng, thiếu avatar và thiếu kênh thông báo Web Push.
+
+---
+
+### 🏷️ Card 4.9 | [UI/UX] Xây dựng hệ thống điều hướng Role-based & Xóa bỏ trùng lặp 2 Header
+- **Phân hệ:** Toàn hệ thống (Shell Layout & Role Navigation)
+- **Vai trò:** 🔵 Frontend
+- **Thành viên phụ trách:** **Lê Việt Cường**
+- **Căn cứ phát sinh:** Kết quả QA trực tiếp ngày 30/09/2026 phát hiện người dùng ở cả 4 role bị cô lập trang, thiếu menu chính và bị hiển thị 2 header chồng nhau.
+- **Checklist công việc:**
+  - [ ] **Xóa bỏ Header trùng lặp:** Xóa thẻ `<header>` nội bộ trong các trang `checkin-desk.page.html`, `walkin-booking.page.html` và `phr-profile.page.html`.
+  - [ ] **Menu Bệnh nhân:** Bổ sung thanh điều hướng nhanh: *Tìm kiếm bác sĩ* (`/patient/doctor-search`), *Lịch sử khám & Đơn thuốc* (`/patient/history`), *Hồ sơ sức khỏe* (`/patient/profile`).
+  - [ ] **Menu Bác sĩ:** Thêm nút/tab chuyển đổi giữa *Hàng đợi khám* (`/doctor/queue`) và *Cấu hình ca trực* (`/doctor/schedule`).
+  - [ ] **Menu Lễ tân:** Bổ sung nút chuyển đổi qua lại giữa *Bàn tiếp đón check-in* (`/receptionist/checkin`) và *Tiếp nhận vãng lai* (`/receptionist/walkin`).
+  - [ ] **Sidebar/Menu Admin:** Xây dựng Sidebar điều hướng xuyên suốt 4 khu vực: *Dashboard KPI*, *Danh mục y tế*, *Quản lý nhân sự*, *Audit Logs*.
+
+---
+
+### 🏷️ Card 4.10 | [Auth/UI] Nâng cấp Avatar góc phải: Hiển thị tên thật, Dropdown Menu & Nút Đăng xuất
+- **Phân hệ:** Xác thực & Header Shell (`NavbarComponent`)
+- **Vai trò:** 🔵 Frontend / Auth
+- **Thành viên phụ trách:** **Lê Việt Cường**
+- **Căn cứ phát sinh:** Khắc phục nút avatar tròn `TN` đang bị hardcode tĩnh, thiếu menu tài khoản và thiếu nút Đăng xuất.
+- **Checklist công việc:**
+  - [ ] Thay thế chuỗi cố định `TN` bằng Initials Avatar lấy từ tên người dùng thật (`AuthService.currentUser`).
+  - [ ] Hiển thị **Họ và tên + Badge vai trò** (Bệnh nhân, Bác sĩ, Lễ tân, Quản trị viên) bên cạnh Avatar trên Header.
+  - [ ] Xây dựng Menu xổ xuống (Dropdown Menu) khi click vào Avatar:
+    - [ ] **Đối với Bệnh nhân:** Thêm mục *"Thông tin & Chỉnh sửa hồ sơ sức khỏe (PHR)"* (dẫn tới `/patient/profile`) và *"Lịch sử khám"*.
+    - [ ] **Đối với Bác sĩ / Lễ tân / Admin:** Thêm mục lối tắt cấu hình trang cá nhân tương ứng.
+    - [ ] Thêm nút **"Đăng xuất (Logout)"** chuẩn để xóa session/token và đưa người dùng về lại trang Login.
+
+---
+
+### 🏷️ Card 4.11 | [Reception] Hoàn thiện điều hướng 2 chiều cho Bảng gọi số sảnh chờ Smart TV
+- **Phân hệ:** Lễ tân (`/receptionist/queue-board`)
+- **Vai trò:** 🔵 Frontend / UX
+- **Thành viên phụ trách:** **Lê Việt Cường**
+- **Căn cứ phát sinh:** Lễ tân không có nút mở trang Bảng gọi số và bị kẹt khi vào chế độ toàn màn hình.
+- **Checklist công việc:**
+  - [ ] **Lối vào:** Thêm nút *"Mở bảng gọi số sảnh chờ (Smart TV)"* tại thanh công cụ bàn làm việc của Lễ tân (`/receptionist/checkin`).
+  - [ ] **Lối thoát modal:** Bổ sung nút *"Quay lại quầy lễ tân"* hoặc icon đóng (X) trên popup *"Sẵn sàng hiển thị bảng gọi số"*.
+  - [ ] **Lối thoát trình chiếu:** Thêm nút/icon *"Thoát chế độ trình chiếu"* trên thanh tiêu đề bảng gọi số để lễ tân có thể quay lại trang làm việc bất cứ lúc nào mà không cần bấm Back trình duyệt.
+
+---
+
+### 🏷️ Card 4.12 | [Fullstack] Bổ sung tính năng Upload Avatar và Kênh thông báo Web Push theo SRS
+- **Phân hệ:** Fullstack (Bác sĩ, Bệnh nhân, Admin, Notification)
+- **Vai trò:** 🟣 Fullstack
+- **Thành viên phụ trách:** **Lê Việt Cường**
+- **Căn cứ phát sinh:** Khắc phục khoảng hụt (GAP) hiển thị avatar thực tế và bổ sung kênh Web Push còn thiếu so với SRS-PAT-05.
+- **Checklist công việc:**
+  - [ ] **Phần Avatar:**
+    - [ ] Thêm cột `avatar_url` vào bảng `users` và `doctors` trong cơ sở dữ liệu (Migration TypeORM).
+    - [ ] Xây dựng API `POST /api/v1/users/avatar` (sử dụng Multer, lưu trữ vào thư mục `/uploads`).
+    - [ ] Tích hợp component chọn/upload ảnh tại trang Hồ sơ bệnh nhân (`/patient/profile`) và form thêm bác sĩ của Admin (`/admin/staff`).
+    - [ ] Hiển thị ảnh đại diện thật của từng bác sĩ trên danh sách tìm kiếm (`doctor-search`) và bước đặt lịch (`booking-stepper`).
+  - [ ] **Phần Web Push Notification (SRS-PAT-05):**
+    - [ ] Backend: Tích hợp thư viện `web-push`, cấu hình cặp khóa VAPID Keys, tạo bảng `push_subscriptions`.
+    - [ ] Frontend: Đăng ký Service Worker (`@angular/service-worker`), hiển thị popup xin quyền nhận thông báo đẩy khi bệnh nhân đặt lịch thành công.
