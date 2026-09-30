@@ -23,6 +23,7 @@ import { RefundRequestEntity } from '../../database/entities/refund-request.enti
 import { VoucherEntity } from '../../database/entities/voucher.entity';
 import { BookingService } from '../booking/booking.service';
 import { VerifiedPaymentResult } from './types/verified-payment-result';
+import { permitsClinicFallback } from './payment-recovery.policy';
 
 export type PaymentFinalizeOutcome =
   | 'SUCCESS'
@@ -145,7 +146,7 @@ export class PaymentFinalizerService {
       const payments = await manager.getRepository(PaymentTransactionEntity)
         .createQueryBuilder('payment').setLock('pessimistic_write')
         .where('payment.appointment_id = :appointmentId', { appointmentId }).getMany();
-      if (payments.some((payment) => ![PaymentTransactionStatus.FAILED, PaymentTransactionStatus.TIMEOUT].includes(payment.status))) {
+      if (appointment.canonicalPaymentTransactionId || !permitsClinicFallback(payments)) {
         throw new ConflictException('An online payment is still unresolved. Cannot switch to clinic payment.');
       }
       const schedule = await manager.getRepository(DoctorScheduleEntity)

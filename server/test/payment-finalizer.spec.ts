@@ -172,7 +172,7 @@ describe('PaymentFinalizerService', () => {
     expect(redis.releaseReservationIfOwner).toHaveBeenCalled();
   });
 
-  it.each([PaymentTransactionStatus.PENDING, PaymentTransactionStatus.RECONCILIATION_REQUIRED, PaymentTransactionStatus.SUPERSEDED])('blocks clinic fallback for an unresolved %s attempt', async (state) => {
+  it.each([PaymentTransactionStatus.PENDING, PaymentTransactionStatus.RECONCILIATION_REQUIRED, PaymentTransactionStatus.SUCCESS, PaymentTransactionStatus.LATE_SUCCESS])('blocks clinic fallback for an unresolved %s attempt', async (state) => {
     payment.status = state;
     await expect(service.fallbackToClinic(appointment.id, 'patient-id')).rejects.toThrow(/unresolved/);
     expect(manager.save).not.toHaveBeenCalled();

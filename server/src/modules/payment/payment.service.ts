@@ -31,6 +31,7 @@ import { PaymentFinalizerService, PaymentFinalizeOutcome } from './payment-final
 import { PaymentProvider } from './providers/payment-provider.interface';
 import { PaymentConfiguration } from './payment-config';
 import { PaymentProviderError } from './providers/payment-provider.error';
+import { permitsClinicFallback } from './payment-recovery.policy';
 
 @Injectable()
 export class PaymentService {
@@ -234,8 +235,7 @@ export class PaymentService {
     const recoverable = appointment.status === AppointmentStatus.PENDING_PAYMENT &&
       !!appointment.reservationExpiresAt && appointment.reservationExpiresAt.getTime() > Date.now() &&
       ![PaymentStatus.PAID, PaymentStatus.REFUND_PENDING, PaymentStatus.REFUNDED].includes(appointment.paymentStatus) && !unresolved;
-    const canFallbackToClinic = recoverable && payments.every((payment) =>
-      [PaymentTransactionStatus.FAILED, PaymentTransactionStatus.TIMEOUT].includes(payment.status));
+    const canFallbackToClinic = recoverable && !appointment.canonicalPaymentTransactionId && permitsClinicFallback(payments);
     return {
       appointmentId,
       appointmentCode: appointment.appointmentCode,

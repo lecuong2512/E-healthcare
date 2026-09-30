@@ -206,6 +206,21 @@ describe('Payment invariants on PostgreSQL and Redis', () => {
     await expect(service.fallbackToClinic(appointmentId, patientId)).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('permits clinic fallback after switching from VNPay to a failed MoMo attempt', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1');
+    await service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.MOMO, supersedeActive: true }, '127.0.0.1');
+    const payments = await database.getRepository(PaymentTransactionEntity).find({ where: { appointmentId } });
+    expect(payments.find(payment => payment.provider === PaymentMethod.VNPAY)?.status).toBe(PaymentTransactionStatus.SUPERSEDED);
+    await finalizer.finalize(verified(payments.find(payment => payment.provider === PaymentMethod.MOMO)!, 'FINAL_FAILED'));
+    expect((await service.status(appointmentId, patientId)).canFallbackToClinic).toBe(true);
+    await service.fallbackToClinic(appointmentId, patientId);
+    const confirmed = await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId });
+    expect(confirmed).toMatchObject({ status: AppointmentStatus.CONFIRMED, paymentMethod: PaymentMethod.PAY_AT_CLINIC, paymentStatus: PaymentStatus.UNPAID });
+    expect(await database.getRepository(AppointmentEntity).countBy({ patientId })).toBe(1);
+    expect((await database.getRepository(DoctorScheduleEntity).findOneByOrFail({ id: confirmed.scheduleId })).status).toBe(SlotStatus.BOOKED);
+  });
+
   it('continues provider reconciliation after cancelling an uncertain checkout and refunds success once', async () => {
     const appointmentId = await appointment();
     await service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1');
