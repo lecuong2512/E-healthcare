@@ -14,6 +14,7 @@ import { environment } from '../../../../../environments/environment';
 import { ButtonComponent } from '../../../../shared/components/button/button.component';
 import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
 import { PhrService } from '../../../../core/services/phr.service';
+import { TokenStoreService } from '../../../../core/services/token-store.service';
 
 @Component({
   selector: 'app-phr-profile-page',
@@ -26,6 +27,7 @@ export class PhrProfilePage implements OnInit {
   private readonly http = inject(HttpClient, { optional: true });
   private readonly router = inject(Router, { optional: true });
   private readonly location = inject(Location, { optional: true });
+  private readonly tokenStore = inject(TokenStoreService, { optional: true });
 
   protected readonly Gender = Gender;
 
@@ -39,6 +41,8 @@ export class PhrProfilePage implements OnInit {
   protected consentAccepted = false;
   protected consentError = false;
 
+  protected fieldErrors: Record<string, string> = {};
+
   protected avatarPreview: string | null = null;
   protected selectedAvatarFile: File | null = null;
   protected isUploadingAvatar = false;
@@ -49,7 +53,75 @@ export class PhrProfilePage implements OnInit {
     this.loadPhr();
   }
 
+  protected validateFullName(): void {
+    if (!this.form.fullName || !this.form.fullName.trim()) {
+      this.fieldErrors['fullName'] = 'Vui lòng nhập họ và tên.';
+    } else {
+      delete this.fieldErrors['fullName'];
+    }
+  }
+
+  protected validateCitizenId(): void {
+    const val = this.form.citizenId ? this.form.citizenId.trim() : '';
+    if (!val) {
+      delete this.fieldErrors['citizenId'];
+      return;
+    }
+    if (!/^\d+$/.test(val)) {
+      this.fieldErrors['citizenId'] = 'Số CCCD/CMND chỉ được chứa chữ số.';
+      return;
+    }
+    if (val.length !== 9 && val.length !== 12) {
+      this.fieldErrors['citizenId'] = `Số CCCD/CMND phải gồm đúng 9 hoặc 12 chữ số (hiện có ${val.length} chữ số).`;
+      return;
+    }
+    delete this.fieldErrors['citizenId'];
+  }
+
+  protected validateDateOfBirth(): void {
+    if (!this.form.dateOfBirth) {
+      this.fieldErrors['dateOfBirth'] = 'Vui lòng chọn ngày sinh.';
+      return;
+    }
+    const dob = new Date(this.form.dateOfBirth);
+    const now = new Date();
+    if (isNaN(dob.getTime())) {
+      this.fieldErrors['dateOfBirth'] = 'Ngày sinh không đúng định dạng.';
+      return;
+    }
+    if (dob > now) {
+      this.fieldErrors['dateOfBirth'] = 'Ngày sinh không thể ở thời điểm tương lai.';
+      return;
+    }
+    delete this.fieldErrors['dateOfBirth'];
+  }
+
+  protected validateHealthInsurance(): void {
+    const val = this.form.healthInsurance ? this.form.healthInsurance.trim().toUpperCase() : '';
+    if (!val) {
+      delete this.fieldErrors['healthInsurance'];
+      return;
+    }
+    const bhytRegex = /^[A-Z]{2}\s?[1-5]\s?\d{2}\s?\d{9,10}$/;
+    if (!bhytRegex.test(val)) {
+      this.fieldErrors['healthInsurance'] = 'Mã thẻ BHYT phải đúng định dạng 15 ký tự chuẩn Việt Nam (VD: DN4010123456789).';
+      return;
+    }
+    delete this.fieldErrors['healthInsurance'];
+  }
+
   protected saveChanges(): void {
+    this.validateFullName();
+    this.validateCitizenId();
+    this.validateDateOfBirth();
+    this.validateHealthInsurance();
+
+    if (Object.keys(this.fieldErrors).length > 0) {
+      this.errorMessage = 'Vui lòng kiểm tra lại các trường thông tin sai định dạng bên dưới.';
+      this.isSaving = false;
+      return;
+    }
+
     if (!this.consentAccepted) {
       this.consentError = true;
       this.errorMessage = 'Vui lòng xác nhận đồng ý xử lý thông tin sức khỏe cá nhân trước khi lưu hồ sơ.';
@@ -81,14 +153,42 @@ export class PhrProfilePage implements OnInit {
       next: (profile) => {
         this.form = { ...profile };
         this.savedForm = { ...profile };
+        this.fieldErrors = {};
+
+        // Đồng bộ fullName vào tokenStore nếu cần
+        const current = this.tokenStore?.currentUser();
+        if (current && profile.fullName) {
+          this.tokenStore?.setCurrentUser({
+            ...current,
+            fullName: profile.fullName,
+          });
+        }
 
         this.isSaved = true;
         this.isSaving = false;
       },
       error: (error) => {
-        this.errorMessage =
-          error?.error?.message ??
-          'Không thể cập nhật hồ sơ sức khỏe. Vui lòng thử lại.';
+        const rawMsg = error?.error?.message;
+        if (Array.isArray(rawMsg)) {
+          this.errorMessage = rawMsg.join('; ');
+          for (const msg of rawMsg) {
+            if (typeof msg === 'string') {
+              if (msg.includes('CCCD') || msg.includes('citizenId')) {
+                this.fieldErrors['citizenId'] = msg;
+              } else if (msg.includes('BHYT') || msg.includes('healthInsurance')) {
+                this.fieldErrors['healthInsurance'] = msg;
+              } else if (msg.includes('dateOfBirth') || msg.includes('ngày sinh')) {
+                this.fieldErrors['dateOfBirth'] = msg;
+              } else if (msg.includes('fullName') || msg.includes('họ và tên')) {
+                this.fieldErrors['fullName'] = msg;
+              }
+            }
+          }
+        } else if (typeof rawMsg === 'string') {
+          this.errorMessage = rawMsg;
+        } else {
+          this.errorMessage = 'Không thể cập nhật hồ sơ sức khỏe. Vui lòng thử lại.';
+        }
 
         this.isSaving = false;
       },
@@ -97,6 +197,7 @@ export class PhrProfilePage implements OnInit {
 
   protected cancelChanges(): void {
     this.form = { ...this.savedForm };
+    this.fieldErrors = {};
     this.avatarPreview = this.resolveAvatarUrl(this.savedForm.avatarUrl);
     this.selectedAvatarFile = null;
     this.avatarUploadError = '';
@@ -170,6 +271,15 @@ export class PhrProfilePage implements OnInit {
         this.selectedAvatarFile = null;
         this.isUploadingAvatar = false;
         this.avatarUploadSuccess = true;
+
+        // Đồng bộ avatar vào TokenStore để Header cập nhật ngay tức thì
+        const current = this.tokenStore?.currentUser();
+        if (current) {
+          this.tokenStore?.setCurrentUser({
+            ...current,
+            avatarUrl: res.avatarUrl,
+          });
+        }
       },
       error: (err) => {
         this.avatarUploadError = err?.error?.message || 'Không thể tải lên ảnh đại diện.';

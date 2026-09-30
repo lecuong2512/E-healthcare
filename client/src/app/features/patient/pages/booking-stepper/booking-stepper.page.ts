@@ -130,7 +130,7 @@ export class BookingStepperPage implements OnDestroy {
   readonly patientForm = this.fb.group({
     fullName: ['', Validators.required],
     phone: ['', [Validators.required, Validators.pattern(/^[0-9]{10}$/)]],
-    dob: ['', Validators.required],
+    dob: ['', [Validators.required, (control: { value: string }) => control.value && new Date(control.value) > new Date() ? { futureDate: true } : null]],
     gender: [''],
     reason: [''],
   });

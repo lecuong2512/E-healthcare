@@ -41,7 +41,9 @@ export class AuthService {
       .pipe(
         tap((res) => {
           this.tokenStore.setSession(res.accessToken, res.role, res.user);
-          this.fetchProfile().subscribe({ error: () => {} });
+          if (!res.user) {
+            this.fetchProfile().subscribe({ error: () => {} });
+          }
         }),
       );
   }
@@ -130,7 +132,9 @@ export class AuthService {
       .pipe(
         tap((res) => {
           this.tokenStore.setSession(res.accessToken, res.role, res.user);
-          this.fetchProfile().subscribe({ error: () => {} });
+          if (!res.user) {
+            this.fetchProfile().subscribe({ error: () => {} });
+          }
         }),
       );
   }

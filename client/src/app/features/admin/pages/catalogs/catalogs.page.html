@@ -45,7 +45,7 @@
                     @case ('SPECIALTY') {
                       <td><strong>{{ row.name || '—' }}</strong></td>
                       <td>{{ row.description || '—' }}</td>
-                      <td>@if (row.iconUrl) { <img class="table-icon" [src]="row.iconUrl" alt="Biểu tượng chuyên khoa" /> } @else { — }</td>
+                      <td>@if (row.iconUrl) { <img class="table-icon" [src]="resolveMediaUrl(row.iconUrl)" alt="Biểu tượng chuyên khoa" (error)="$any($event.target).style.display = 'none'" /> } @else { — }</td>
                       <td>{{ row.headDoctorId || '—' }}</td>
                     }
                     @case ('MEDICINE') {
@@ -86,13 +86,13 @@
         <div class="form-grid">
           @if (selectedType() === 'SPECIALTY') {
             <label>Tên chuyên khoa<input formControlName="name" required /></label>
-            <label class="specialty-icon-field">Biểu tượng chuyên khoa
+            <label class="specialty-icon-field">Biểu tượng chuyên khoa (tối đa 10MB)
               <span class="icon-upload-control">
                 <input type="file" accept="image/png,image/jpeg,image/webp" (change)="onSpecialtyIconSelected($event)" />
                 <span class="icon-upload-status" aria-live="polite">
                   @if (iconUploading()) { <span>Đang tải ảnh…</span> }
                   @else if (iconUploadError()) { <span class="error">{{ iconUploadError() }}</span> }
-                  @else if (editorForm.controls.iconUrl.value) { <img [src]="editorForm.controls.iconUrl.value" alt="Biểu tượng chuyên khoa đã tải" /> }
+                  @else if (iconPreview() || editorForm.controls.iconUrl.value) { <img [src]="iconPreview() || resolveMediaUrl(editorForm.controls.iconUrl.value)" alt="Biểu tượng chuyên khoa đã tải" (error)="$any($event.target).style.display = 'none'" /> }
                 </span>
               </span>
             </label>
@@ -139,7 +139,7 @@
           @if (selectedType() === 'SPECIALTY') {
             <div><dt>Tên chuyên khoa</dt><dd>{{ row.name || '—' }}</dd></div>
             <div class="full-detail"><dt>Mô tả</dt><dd>{{ row.description || '—' }}</dd></div>
-            <div><dt>Biểu tượng</dt><dd>@if (row.iconUrl) { <img class="detail-icon" [src]="row.iconUrl" alt="Biểu tượng chuyên khoa" /> } @else { — }</dd></div>
+            <div><dt>Biểu tượng</dt><dd>@if (row.iconUrl) { <img class="detail-icon" [src]="resolveMediaUrl(row.iconUrl)" alt="Biểu tượng chuyên khoa" (error)="$any($event.target).style.display = 'none'" /> } @else { — }</dd></div>
             <div><dt>Trưởng khoa phụ trách</dt><dd>{{ row.headDoctorId || '—' }}</dd></div>
           } @else if (selectedType() === 'MEDICINE') {
             <div><dt>Mã thuốc</dt><dd>{{ row.code || '—' }}</dd></div>

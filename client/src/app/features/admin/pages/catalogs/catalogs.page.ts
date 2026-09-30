@@ -9,6 +9,7 @@ import {
   DoctorOption,
 } from '../../data-access/admin-catalog-api.service';
 import { NotificationService } from '../../../../core/services/notification.service';
+import { environment } from '../../../../../environments/environment';
 
 @Component({
   selector: 'app-catalogs-page',
@@ -40,6 +41,7 @@ export class CatalogsPage {
   readonly detail = signal<CatalogRow | null>(null);
   readonly iconUploading = signal(false);
   readonly iconUploadError = signal<string | null>(null);
+  readonly iconPreview = signal<string | null>(null);
 
   readonly types = [
     { value: 'SPECIALTY' as const, label: 'Chuyên khoa' },
@@ -121,6 +123,7 @@ export class CatalogsPage {
   openCreate(): void {
     this.editing.set(null);
     this.iconUploadError.set(null);
+    this.iconPreview.set(null);
     this.editorForm.reset();
     this.showEditor.set(true);
   }
@@ -132,6 +135,8 @@ export class CatalogsPage {
   openEdit(row: CatalogRow): void {
     this.detail.set(null);
     this.editing.set(row);
+    this.iconUploadError.set(null);
+    this.iconPreview.set(row.iconUrl ? this.resolveMediaUrl(row.iconUrl) : null);
     this.editorForm.patchValue(row);
     this.showEditor.set(true);
   }
@@ -148,13 +153,20 @@ export class CatalogsPage {
       input.value = '';
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      const message = 'Ảnh biểu tượng không được vượt quá 2MB.';
+    if (file.size > 10 * 1024 * 1024) {
+      const message = 'Ảnh biểu tượng không được vượt quá 10MB.';
       this.iconUploadError.set(message);
       this.notify.warning(message);
       input.value = '';
       return;
     }
+
+    // Hiển thị preview ngay lập tức qua FileReader để người dùng nhìn thấy ảnh đã chọn
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.iconPreview.set(reader.result as string);
+    };
+    reader.readAsDataURL(file);
 
     this.iconUploading.set(true);
     this.iconUploadError.set(null);
@@ -172,6 +184,15 @@ export class CatalogsPage {
           this.notify.error(message);
         },
       });
+  }
+
+  resolveMediaUrl(url: string | null | undefined): string | null {
+    if (!url) return null;
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+      return url;
+    }
+    const base = environment.apiBaseUrl.replace(/\/api\/v1$/, '').replace(/\/api$/, '');
+    return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
   }
 
   save(): void {

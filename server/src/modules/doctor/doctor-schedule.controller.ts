@@ -17,11 +17,12 @@ import {
 } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import { Role } from "@shared/enums";
-import { Roles } from "../../common/decorators/auth.decorators";
+import { Public, Roles } from "../../common/decorators/auth.decorators";
 import { OwnDoctor } from "../../common/decorators/own-doctor.decorator";
 import { OwnDoctorGuard } from "../../common/guards/own-doctor.guard";
 import { AuthenticatedRequest } from "../../common/guards/authenticated-request";
 import { DoctorEntity } from "../../database/entities/doctor.entity";
+import { ClinicRoomEntity } from "../../database/entities/clinic-room.entity";
 import { DoctorScheduleService } from "./doctor-schedule.service";
 import { CreateDoctorScheduleDto } from "./dto/create-schedule.dto";
 import { ScheduleRangeDto } from "./dto/schedule-range.dto";
@@ -108,6 +109,20 @@ export class DoctorSelfScheduleController {
     return this.service.deleteSchedule(doctor.id, scheduleId);
   }
 
+  @Get("rooms")
+  async getRooms() {
+    const rooms = await this.dataSource.getRepository(ClinicRoomEntity).find({
+      where: { isActive: true },
+      order: { roomNumber: 'ASC' },
+    });
+    return rooms.map((r) => ({
+      id: r.id,
+      roomNumber: r.roomNumber,
+      roomName: r.roomName || `Phòng khám ${r.roomNumber}`,
+      location: r.location,
+    }));
+  }
+
   private async findDoctorByUserId(userId?: string): Promise<DoctorEntity> {
     if (!userId) {
       throw new UnauthorizedException("Chưa đăng nhập.");
@@ -119,6 +134,26 @@ export class DoctorSelfScheduleController {
       throw new NotFoundException("Không tìm thấy thông tin bác sĩ.");
     }
     return doctor;
+  }
+}
+
+@Controller("clinic-rooms")
+@Public()
+export class ClinicRoomPublicController {
+  constructor(private readonly dataSource: DataSource) {}
+
+  @Get()
+  async getRooms() {
+    const rooms = await this.dataSource.getRepository(ClinicRoomEntity).find({
+      where: { isActive: true },
+      order: { roomNumber: 'ASC' },
+    });
+    return rooms.map((r) => ({
+      id: r.id,
+      roomNumber: r.roomNumber,
+      roomName: r.roomName || `Phòng khám ${r.roomNumber}`,
+      location: r.location,
+    }));
   }
 }
 

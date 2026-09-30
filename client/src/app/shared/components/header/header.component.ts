@@ -4,6 +4,7 @@ import { NgClass } from '@angular/common';
 import { AuthService } from '../../../core/services/auth.service';
 import { TokenStoreService, UserProfileInfo } from '../../../core/services/token-store.service';
 import { Role } from '@shared/enums';
+import { environment } from '../../../../environments/environment';
 
 export const DEFAULT_USERS: Record<Role, UserProfileInfo> = {
   [Role.PATIENT]: {
@@ -216,11 +217,12 @@ export function getInitials(name: string): string {
             </div>
 
             <!-- Avatar Circle with image or initials -->
-            @if (currentUser().avatarUrl) {
+            @if (currentUser().avatarUrl && !avatarLoadFailed()) {
               <img
-                [src]="currentUser().avatarUrl"
+                [src]="resolveAvatarUrl(currentUser().avatarUrl)"
                 [alt]="currentUser().fullName"
                 class="inline-flex h-9 w-9 shrink-0 rounded-full object-cover shadow-xs ring-2 ring-white"
+                (error)="avatarLoadFailed.set(true)"
               />
             } @else {
               <span
@@ -249,11 +251,12 @@ export function getInitials(name: string): string {
               <!-- Dropdown Header: Họ tên, Email/SĐT, Badge vai trò -->
               <div class="border-b border-slate-100 px-4 py-3">
                 <div class="flex items-center gap-3">
-                  @if (currentUser().avatarUrl) {
+                  @if (currentUser().avatarUrl && !avatarLoadFailed()) {
                     <img
-                      [src]="currentUser().avatarUrl"
+                      [src]="resolveAvatarUrl(currentUser().avatarUrl)"
                       [alt]="currentUser().fullName"
                       class="inline-flex h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-slate-100"
+                      (error)="avatarLoadFailed.set(true)"
                     />
                   } @else {
                     <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white">
@@ -438,6 +441,16 @@ export class NavbarComponent {
   readonly logo = 'assets/logo.png';
   readonly Role = Role;
   readonly isUserMenuOpen = signal(false);
+  readonly avatarLoadFailed = signal(false);
+
+  resolveAvatarUrl(url: string | null | undefined): string | null {
+    if (!url) return null;
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+      return url;
+    }
+    const base = environment.apiBaseUrl.replace(/\/api\/v1$/, '').replace(/\/api$/, '');
+    return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+  }
 
   readonly currentRole = computed<Role | null>(() => {
     return (this.tokenStore.userRole() as Role) || (this.tokenStore.currentUser()?.role as Role) || null;

@@ -20,6 +20,13 @@ export interface DoctorScheduleSlot {
   version: number;
 }
 
+export interface ClinicRoomOption {
+  id: string;
+  roomNumber: string;
+  roomName: string;
+  location?: string;
+}
+
 export interface DoctorScheduleResult {
   doctorId: string;
   roomNumber: string;
@@ -36,6 +43,10 @@ export class DoctorScheduleService {
     if (from) params = params.set('from', from);
     if (to) params = params.set('to', to);
     return this.http.get<DoctorScheduleResult>(this.baseUrl, { params });
+  }
+
+  getClinicRooms(): Observable<ClinicRoomOption[]> {
+    return this.http.get<ClinicRoomOption[]>(`${this.baseUrl}/rooms`);
   }
 
   createSchedule(payload: CreateDoctorSchedulePayload | any): Observable<DoctorScheduleResult> {

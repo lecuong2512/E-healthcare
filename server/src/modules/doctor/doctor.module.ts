@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { OwnDoctorGuard } from "../../common/guards/own-doctor.guard";
 import { DatabaseModule } from "../../database/database.module";
 import {
+  ClinicRoomPublicController,
   DoctorScheduleController,
   DoctorSelfScheduleController,
 } from "./doctor-schedule.controller";
@@ -17,6 +18,7 @@ import { DoctorReviewService } from "./doctor-review.service";
   controllers: [
     DoctorScheduleController,
     DoctorSelfScheduleController,
+    ClinicRoomPublicController,
     DoctorSearchController,
     DoctorReviewController,
   ],
