@@ -19,6 +19,8 @@ export class AuthService {
   private readonly tokenStore = inject(TokenStoreService);
   private readonly socketService = inject(SocketService);
 
+  readonly userRole = this.tokenStore.userRole;
+
   login(identifier: string, password: string): Observable<LoginResponse> {
     return this.http
       .post<LoginResponse>(
