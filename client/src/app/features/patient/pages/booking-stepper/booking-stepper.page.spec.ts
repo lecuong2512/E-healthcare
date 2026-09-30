@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed, discardPeriodicTasks, fakeAsync, tick } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { NzModalService } from 'ng-zorro-antd/modal';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   AppointmentStatus,
@@ -41,11 +42,12 @@ describe('BookingStepperPage payment flow', () => {
   let api: jasmine.SpyObj<PatientBookingApiService>;
   let router: jasmine.SpyObj<Router>;
   let redirect: jasmine.SpyObj<PaymentRedirectService>;
+  let modal: jasmine.SpyObj<NzModalService>;
 
   beforeEach(async () => {
     api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', [
       'searchDoctors', 'getDoctor', 'reserveSlot', 'releaseSlot', 'confirmBooking', 'initiatePayment',
-      'getPaymentStatus', 'getVouchers', 'validateVoucher', 'cancelAppointment',
+      'getPaymentStatus', 'getVouchers', 'validateVoucher', 'cancelAppointment', 'cancelPendingPayment', 'fallbackToClinic',
     ]);
     api.searchDoctors.and.returnValue(of({
       data: [doctor],
@@ -54,6 +56,8 @@ describe('BookingStepperPage payment flow', () => {
     api.getDoctor.and.returnValue(of(doctor));
     api.getVouchers.and.returnValue(of([]));
     api.cancelAppointment.and.returnValue(of({ success: true, message: 'ok' }));
+    api.cancelPendingPayment.and.returnValue(of({ appointmentId, appointmentStatus: AppointmentStatus.CANCELLED, paymentStatus: PaymentStatus.FAILED }));
+    api.fallbackToClinic.and.returnValue(of({ appointmentId }));
     api.reserveSlot.and.returnValue(of({
       success: true,
       message: 'ok',
@@ -86,21 +90,25 @@ describe('BookingStepperPage payment flow', () => {
       paymentStatus: PaymentStatus.PENDING,
       provider: PaymentMethod.VNPAY,
       transactionStatus: PaymentTransactionStatus.PENDING,
+      idempotencyKey: '55555555-5555-4555-8555-555555555555',
+      canRetry: true, canSwitchProvider: true, canFallbackToClinic: false,
       expiresAt: new Date().toISOString(),
       paidAt: null,
     }));
     router = jasmine.createSpyObj<Router>('Router', ['navigate']);
     redirect = jasmine.createSpyObj<PaymentRedirectService>('PaymentRedirectService', ['redirect']);
+    modal = jasmine.createSpyObj<NzModalService>('NzModalService', ['confirm']);
 
     await TestBed.configureTestingModule({
       imports: [BookingStepperPage, NoopAnimationsModule],
       providers: [
         { provide: PatientBookingApiService, useValue: api },
         { provide: PaymentRedirectService, useValue: redirect },
+        { provide: NzModalService, useValue: modal },
         { provide: Router, useValue: router },
         { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: { get: () => null } } } },
       ],
-    }).compileComponents();
+    }).overrideProvider(NzModalService, { useValue: modal }).compileComponents();
 
     fixture = TestBed.createComponent(BookingStepperPage);
     component = fixture.componentInstance;
@@ -189,185 +197,120 @@ describe('BookingStepperPage payment flow', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/patient/history']);
   });
 
-  it('respects newly selected payment provider when a pending payment context exists', () => {
-    const originalKey = '55555555-5555-4555-8555-555555555555';
-    sessionStorage.setItem('pendingPaymentContext', JSON.stringify({
-      appointmentId,
-      provider: PaymentMethod.MOMO,
-      idempotencyKey: originalKey,
-    }));
-
+  function reloadCheckout(): void {
+    sessionStorage.setItem('pendingPaymentContext', JSON.stringify({ appointmentId, provider: PaymentMethod.MOMO, idempotencyKey: 'untrusted-old-key' }));
     fixture.destroy();
     fixture = TestBed.createComponent(BookingStepperPage);
     component = fixture.componentInstance;
     fixture.detectChanges();
+  }
 
-    expect(component.paymentMethod()).toBe(PaymentMethod.MOMO);
+  function acceptModal(): void {
+    const config = modal.confirm.calls.mostRecent().args[0];
+    if (typeof config?.nzOnOk === 'function') (config.nzOnOk as () => void)();
+  }
 
-    // Patient clicks VNPay to switch
-    component.selectPayment(PaymentMethod.VNPAY);
-    expect(component.paymentMethod()).toBe(PaymentMethod.VNPAY);
-
+  it('stores only the appointment ID and never hijacks a new booking on reload', () => {
+    reloadCheckout();
+    expect(component.step()).toBe(1);
+    expect(component.recoveryActive()).toBeFalse();
+    expect(JSON.parse(sessionStorage.getItem('pendingPaymentContext')!)).toEqual({ appointmentId });
     component.submitBooking();
-
-    // Must call initiatePayment with VNPAY, a NEW idempotency key, and supersedeActive = true
-    expect(api.initiatePayment).toHaveBeenCalledWith(
-      appointmentId,
-      PaymentMethod.VNPAY,
-      jasmine.any(String),
-      true,
-    );
-    const newKey = api.initiatePayment.calls.mostRecent().args[2];
-    expect(newKey).not.toBe(originalKey);
-    expect(component.pendingPaymentContext()?.provider).toBe(PaymentMethod.VNPAY);
-  });
-
-  it('cancels pending payment and allows patient to reselect slot', () => {
-    sessionStorage.setItem('pendingPaymentContext', JSON.stringify({
-      appointmentId,
-      provider: PaymentMethod.VNPAY,
-      idempotencyKey: '55555555-5555-4555-8555-555555555555',
-    }));
-    sessionStorage.setItem('pendingPaymentAppointmentId', appointmentId);
-
-    fixture.destroy();
-    fixture = TestBed.createComponent(BookingStepperPage);
-    component = fixture.componentInstance;
-    fixture.detectChanges();
-
-    expect(component.pendingPaymentContext()).toBeTruthy();
-
-    component.cancelPendingPayment();
-
-    expect(api.cancelAppointment).toHaveBeenCalledWith(
-      appointmentId,
-      'Hủy giao dịch chờ thanh toán để đặt lại',
-    );
-    expect(component.pendingPaymentContext()).toBeNull();
-    expect(sessionStorage.getItem('pendingPaymentContext')).toBeNull();
-    expect(component.step()).toBe(2);
-  });
-
-  it('retries payment initiation without confirming the booking again', () => {
-    api.initiatePayment.and.returnValues(
-      throwError(() => new Error('network failure')),
-      of({
-        transactionId: 'payment-id',
-        appointmentId,
-        provider: PaymentMethod.MOMO,
-        merchantTransactionId: 'PAY01',
-        paymentUrl: 'https://test-payment.momo.vn/pay',
-        expiresAt: new Date().toISOString(),
-      }),
-    );
-    component.selectDoctorAndContinue(component.doctors()[0]);
-    component.chooseSlot(component.morningSlots[0]);
-    component.selectPayment(PaymentMethod.MOMO);
-    component.consentAccepted = true;
-    component.patientForm.setValue({
-      fullName: 'Nguyễn Văn A', phone: '0912345678', dob: '2000-01-01', gender: 'Nam', reason: 'Khám định kỳ',
-    });
-
-    component.submitBooking();
-    const firstKey = api.initiatePayment.calls.mostRecent().args[2];
-    component.submitBooking();
-
-    expect(api.confirmBooking).toHaveBeenCalledTimes(1);
-    expect(api.initiatePayment).toHaveBeenCalledTimes(2);
-    expect(api.initiatePayment.calls.mostRecent().args).toEqual([
-      appointmentId,
-      PaymentMethod.MOMO,
-      firstKey,
-    ]);
-    expect(redirect.redirect).toHaveBeenCalledWith('https://test-payment.momo.vn/pay');
-  });
-
-  it('recovers a pending payment context after the page reloads', () => {
-    const idempotencyKey = '55555555-5555-4555-8555-555555555555';
-    sessionStorage.setItem('pendingPaymentContext', JSON.stringify({
-      appointmentId,
-      provider: PaymentMethod.VNPAY,
-      idempotencyKey,
-    }));
-    fixture.destroy();
-    fixture = TestBed.createComponent(BookingStepperPage);
-    component = fixture.componentInstance;
-    fixture.detectChanges();
-
-    expect(component.step()).toBe(4);
-    expect(api.getPaymentStatus).toHaveBeenCalledWith(appointmentId);
-    component.retryPendingPayment();
-
     expect(api.confirmBooking).not.toHaveBeenCalled();
-    expect(api.initiatePayment).toHaveBeenCalledWith(
-      appointmentId,
-      PaymentMethod.VNPAY,
-      idempotencyKey,
-    );
+    expect(api.initiatePayment).not.toHaveBeenCalled();
+    expect(router.navigate).not.toHaveBeenCalled();
   });
 
-  [
-    PaymentTransactionStatus.SUCCESS,
-    PaymentTransactionStatus.RECONCILIATION_REQUIRED,
-    PaymentTransactionStatus.LATE_SUCCESS,
-  ].forEach((transactionStatus) => {
-    it(`routes a recovered ${transactionStatus} payment to its result`, () => {
-      sessionStorage.setItem('pendingPaymentContext', JSON.stringify({
-        appointmentId,
-        provider: PaymentMethod.VNPAY,
-        idempotencyKey: '55555555-5555-4555-8555-555555555555',
-      }));
-      api.getPaymentStatus.and.returnValue(of({
-        appointmentId,
-        appointmentStatus: AppointmentStatus.PENDING_PAYMENT,
-        paymentStatus: PaymentStatus.PENDING,
-        provider: PaymentMethod.VNPAY,
-        transactionStatus,
-        expiresAt: new Date().toISOString(),
-        paidAt: null,
-      }));
-
-      fixture.destroy();
-      fixture = TestBed.createComponent(BookingStepperPage);
-      component = fixture.componentInstance;
-      fixture.detectChanges();
-
-      expect(api.initiatePayment).not.toHaveBeenCalled();
-      expect(router.navigate).toHaveBeenCalledWith(['/patient/payment-result'], {
-        queryParams: { appointmentId },
-      });
-    });
+  it('restores provider and idempotency from backend only after explicit recovery', () => {
+    reloadCheckout();
+    component.retryPendingPayment();
+    expect(component.step()).toBe(4);
+    expect(component.paymentMethod()).toBe(PaymentMethod.VNPAY);
+    component.submitBooking();
+    expect(api.initiatePayment).toHaveBeenCalledWith(appointmentId, PaymentMethod.VNPAY, '55555555-5555-4555-8555-555555555555');
+    expect(api.confirmBooking).not.toHaveBeenCalled();
   });
 
-  it('clears a recovered terminal payment before routing to its result', () => {
-    sessionStorage.setItem('pendingPaymentContext', JSON.stringify({
-      appointmentId,
-      provider: PaymentMethod.VNPAY,
-      idempotencyKey: '55555555-5555-4555-8555-555555555555',
-    }));
-    sessionStorage.setItem('pendingPaymentAppointmentId', appointmentId);
-    api.getPaymentStatus.and.returnValue(of({
-      appointmentId,
-      appointmentStatus: AppointmentStatus.CANCELLED,
-      paymentStatus: PaymentStatus.FAILED,
-      provider: PaymentMethod.VNPAY,
-      transactionStatus: PaymentTransactionStatus.FAILED,
-      expiresAt: new Date().toISOString(),
-      paidAt: null,
-    }));
+  it('switches provider only after confirmation with a new key', () => {
+    reloadCheckout();
+    component.retryPendingPayment();
+    component.selectPayment(PaymentMethod.MOMO);
+    component.submitBooking();
+    expect(api.initiatePayment).not.toHaveBeenCalled();
+    expect(modal.confirm).toHaveBeenCalled();
+    acceptModal();
+    expect(api.initiatePayment).toHaveBeenCalledWith(appointmentId, PaymentMethod.MOMO, jasmine.any(String), true);
+    expect(api.initiatePayment.calls.mostRecent().args[2]).not.toBe('55555555-5555-4555-8555-555555555555');
+  });
 
-    fixture.destroy();
-    fixture = TestBed.createComponent(BookingStepperPage);
-    component = fixture.componentInstance;
-    fixture.detectChanges();
+  it('preserves context when cancellation fails and uses the payment-aware endpoint', () => {
+    reloadCheckout();
+    api.cancelPendingPayment.and.returnValue(throwError(() => new Error('offline')));
+    component.cancelPendingPayment();
+    expect(api.cancelPendingPayment).not.toHaveBeenCalled();
+    acceptModal();
+    expect(api.cancelAppointment).not.toHaveBeenCalled();
+    expect(component.pendingPaymentContext()?.appointmentId).toBe(appointmentId);
+    expect(sessionStorage.getItem('pendingPaymentContext')).not.toBeNull();
+    expect(component.errorMessage()).toBeTruthy();
+  });
 
+  it('starts a new booking only after confirmed cancellation', () => {
+    reloadCheckout();
+    component.startNewBooking();
+    expect(component.pendingPaymentContext()).not.toBeNull();
+    acceptModal();
+    expect(api.cancelPendingPayment).toHaveBeenCalledWith(appointmentId);
     expect(component.pendingPaymentContext()).toBeNull();
     expect(sessionStorage.getItem('pendingPaymentContext')).toBeNull();
-    expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBeNull();
+    expect(component.step()).toBe(1);
+  });
+
+  it('keeps a FAILED attempt recoverable and retries with a fresh key', () => {
+    reloadCheckout();
+    api.getPaymentStatus.and.returnValue(of({
+      appointmentId, appointmentStatus: AppointmentStatus.PENDING_PAYMENT, paymentStatus: PaymentStatus.FAILED,
+      provider: PaymentMethod.VNPAY, transactionStatus: PaymentTransactionStatus.FAILED,
+      idempotencyKey: 'failed-key', canRetry: true, canSwitchProvider: true, canFallbackToClinic: true, expiresAt: null, paidAt: null,
+    }));
+    component.retryPendingPayment();
+    expect(component.pendingPaymentContext()).not.toBeNull();
+    component.submitBooking();
+    expect(api.initiatePayment).toHaveBeenCalledWith(appointmentId, PaymentMethod.VNPAY, jasmine.any(String));
+    expect(api.initiatePayment.calls.mostRecent().args[2]).not.toBe('failed-key');
+  });
+
+  it('blocks repayment while reconciliation is required', () => {
+    reloadCheckout();
+    api.getPaymentStatus.and.returnValue(of({
+      appointmentId, appointmentStatus: AppointmentStatus.PENDING_PAYMENT, paymentStatus: PaymentStatus.PENDING,
+      provider: PaymentMethod.VNPAY, transactionStatus: PaymentTransactionStatus.RECONCILIATION_REQUIRED,
+      canRetry: false, canSwitchProvider: false, canFallbackToClinic: false, expiresAt: null, paidAt: null,
+    }));
+    component.retryPendingPayment();
+    component.selectPayment(PaymentMethod.MOMO);
+    component.submitBooking();
     expect(api.initiatePayment).not.toHaveBeenCalled();
-    expect(router.navigate).toHaveBeenCalledWith(['/patient/payment-result'], {
-      queryParams: { appointmentId },
-    });
+    expect(component.pendingPaymentContext()).not.toBeNull();
+  });
+
+  it('clears only backend-confirmed terminal context without navigating to an old result', () => {
+    api.getPaymentStatus.and.returnValue(of({
+      appointmentId, appointmentStatus: AppointmentStatus.CANCELLED, paymentStatus: PaymentStatus.FAILED,
+      provider: PaymentMethod.VNPAY, transactionStatus: PaymentTransactionStatus.FAILED, expiresAt: null, paidAt: null,
+    }));
+    reloadCheckout();
+    expect(component.pendingPaymentContext()).toBeNull();
+    expect(component.step()).toBe(1);
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the context after status API errors', () => {
+    api.getPaymentStatus.and.returnValue(throwError(() => new Error('offline')));
+    reloadCheckout();
+    expect(component.pendingPaymentContext()?.appointmentId).toBe(appointmentId);
+    expect(sessionStorage.getItem('pendingPaymentContext')).not.toBeNull();
+    expect(api.initiatePayment).not.toHaveBeenCalled();
   });
 
   it('requires consent before creating the appointment', () => {

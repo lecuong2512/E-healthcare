@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { PaymentMethod } from '@shared/enums';
 import {
   AppointmentResponse,
+  CancelPendingPaymentResponse,
   ConfirmBookingRequest,
   InitiatePaymentResponse,
   PaymentStatusResponse,
@@ -124,6 +125,14 @@ export class PatientBookingApiService {
     return this.http.get<PaymentStatusResponse>(
       `${this.api}/payments/${encodeURIComponent(appointmentId)}/status`,
     );
+  }
+
+  cancelPendingPayment(appointmentId: string): Observable<CancelPendingPaymentResponse> {
+    return this.http.post<CancelPendingPaymentResponse>(`${this.api}/payments/${encodeURIComponent(appointmentId)}/cancel-pending`, {});
+  }
+
+  fallbackToClinic(appointmentId: string): Observable<{ appointmentId: string }> {
+    return this.http.post<{ appointmentId: string }>(`${this.api}/payments/${encodeURIComponent(appointmentId)}/fallback-to-clinic`, {});
   }
 
   getVouchers(): Observable<PatientVoucher[]> {

@@ -4,9 +4,10 @@ import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppointmentStatus, PaymentMethod, PaymentStatus, PaymentTransactionStatus } from '@shared/enums';
-import { AppointmentResponse } from '@shared/interfaces';
+import { AppointmentResponse, PaymentStatusResponse } from '@shared/interfaces';
 import { NzAlertModule } from 'ng-zorro-antd/alert';
 import { NzMessageModule, NzMessageService } from 'ng-zorro-antd/message';
+import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
 import { catchError, finalize, of, switchMap } from 'rxjs';
 
 import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
@@ -18,8 +19,8 @@ const PENDING_PAYMENT_CONTEXT_KEY = 'pendingPaymentContext';
 
 interface PendingPaymentContext {
   appointmentId: string;
-  provider: PaymentMethod.VNPAY | PaymentMethod.MOMO;
-  idempotencyKey: string;
+  provider?: PaymentMethod.VNPAY | PaymentMethod.MOMO;
+  idempotencyKey?: string;
 }
 
 export interface Doctor {
@@ -56,6 +57,7 @@ export interface SlotItem {
     PatientConsentCheckboxComponent,
     NzAlertModule,
     NzMessageModule,
+    NzModalModule,
   ],
   templateUrl: './booking-stepper.page.html',
 })
@@ -66,6 +68,11 @@ export class BookingStepperPage implements OnDestroy {
   private readonly api = inject(PatientBookingApiService);
   private readonly paymentRedirect = inject(PaymentRedirectService);
   private readonly message = inject(NzMessageService);
+  private readonly modal = inject(NzModalService);
+  readonly recoveryActive = signal(false);
+  readonly checkoutStatus = signal<PaymentStatusResponse | null>(null);
+  readonly canPay = computed(() => this.checkoutStatus()?.canRetry === true);
+  readonly canFallback = computed(() => this.checkoutStatus()?.canFallbackToClinic === true);
 
   readonly step = signal(1);
   readonly payAtClinicReceipt = signal<AppointmentResponse | null>(null);
@@ -109,9 +116,9 @@ export class BookingStepperPage implements OnDestroy {
 
   readonly paymentMethod = signal<PaymentMethod>(PaymentMethod.VNPAY);
   readonly paymentMethods = [
-    { id: PaymentMethod.VNPAY, label: 'VNPay', icon: '💳', iconPath: 'assets/vnpay.webp' },
-    { id: PaymentMethod.MOMO, label: 'MoMo', icon: '👛', iconPath: 'assets/momo.png' },
-    { id: PaymentMethod.PAY_AT_CLINIC, label: 'Thanh toán tại viện', icon: '💵', iconPath: null },
+    { id: PaymentMethod.VNPAY, label: 'VNPay', iconPath: 'assets/vnpay.webp' },
+    { id: PaymentMethod.MOMO, label: 'MoMo', iconPath: 'assets/momo.png' },
+    { id: PaymentMethod.PAY_AT_CLINIC, label: 'Thanh toán tại viện', iconPath: null },
   ];
   readonly voucherCode = signal('');
   readonly appliedVoucher = signal<{ code: string; discount: number } | null>(null);
@@ -147,6 +154,13 @@ export class BookingStepperPage implements OnDestroy {
 
   constructor() {
     const doctorId = this.route.snapshot.queryParamMap.get('doctorId');
+    const requestedCheckout = this.route.snapshot.queryParamMap.get('appointmentId');
+    if (requestedCheckout) {
+      this.pendingPaymentContext.set({ appointmentId: requestedCheckout });
+      this.recoveryActive.set(true);
+      this.bookingCommitted = true;
+      this.step.set(4);
+    }
     this.api.searchDoctors().subscribe({
       next: (response) => this.doctors.set(response.data.map((doctor) => this.mapDoctor(doctor))),
       error: () => this.errorMessage.set('Không thể tải danh sách bác sĩ.'),
@@ -159,12 +173,9 @@ export class BookingStepperPage implements OnDestroy {
     });
     const pendingPayment = this.pendingPaymentContext();
     if (pendingPayment) {
-      this.paymentMethod.set(pendingPayment.provider);
-      this.bookingCommitted = true;
-      this.step.set(4);
       this.checkPendingPayment(pendingPayment, false);
     }
-    if (doctorId) this.loadDoctor(doctorId);
+    if (doctorId && !this.recoveryActive()) this.loadDoctor(doctorId);
   }
 
   startTimer(ttlSeconds = TOTAL_SECONDS): void {
@@ -182,6 +193,7 @@ export class BookingStepperPage implements OnDestroy {
   }
 
   handleTimeout(): void {
+    if (this.bookingCommitted) return;
     if (this.timerInterval) clearInterval(this.timerInterval);
     this.timerInterval = null;
     this.releaseReservation();
@@ -196,8 +208,8 @@ export class BookingStepperPage implements OnDestroy {
     if (!this.bookingCommitted) this.releaseReservation();
   }
 
-  selectDoctor(doctor: Doctor): void { this.selectedDoctorId.set(doctor.id); }
-  selectDoctorAndContinue(doctor: Doctor): void { this.selectDoctor(doctor); this.loadDoctor(doctor.id); }
+  selectDoctor(doctor: Doctor): void { if (!this.recoveryActive()) this.selectedDoctorId.set(doctor.id); }
+  selectDoctorAndContinue(doctor: Doctor): void { if (!this.recoveryActive()) { this.selectDoctor(doctor); this.loadDoctor(doctor.id); } }
   setSearchQuery(query: string): void { this.searchQuery.set(query); }
   selectSpecialty(specialty: string): void { this.selectedSpecialty.set(specialty); }
   confirmDoctor(): void { const id = this.selectedDoctorId(); if (id) this.loadDoctor(id); }
@@ -209,6 +221,7 @@ export class BookingStepperPage implements OnDestroy {
   }
 
   chooseSlot(slot: SlotItem): void {
+    if (this.pendingPaymentContext()) { this.errorMessage.set('Hãy hủy checkout cũ qua Bắt đầu đặt lịch mới trước khi giữ chỗ khác.'); return; }
     const doctorId = this.selectedDoctorId();
     if (slot.status !== 'available' || !doctorId || this.loading()) return;
     this.loading.set(true);
@@ -242,7 +255,10 @@ export class BookingStepperPage implements OnDestroy {
     this.selectedFileName.set(file.name);
   }
 
-  selectPayment(method: PaymentMethod): void { this.paymentMethod.set(method); }
+  selectPayment(method: PaymentMethod): void {
+    if (this.recoveryActive() && method === PaymentMethod.PAY_AT_CLINIC && !this.canFallback()) return;
+    this.paymentMethod.set(method);
+  }
 
   applyVoucher(code = this.voucherCode()): void {
     const normalizedCode = code.trim().toUpperCase();
@@ -271,10 +287,23 @@ export class BookingStepperPage implements OnDestroy {
   removeVoucher(): void { this.voucherCode.set(''); this.appliedVoucher.set(null); this.voucherMessage.set(null); }
 
   submitBooking(): void {
+    if (this.loading()) return;
     const pendingPayment = this.pendingPaymentContext();
     const currentMethod = this.paymentMethod();
 
     if (pendingPayment) {
+      if (!this.recoveryActive()) {
+        this.errorMessage.set('Bạn có checkout đang chờ. Hãy tiếp tục checkout hoặc chọn Bắt đầu đặt lịch mới để hủy checkout cũ trước.');
+        return;
+      }
+      if (currentMethod === PaymentMethod.PAY_AT_CLINIC) {
+        this.fallbackPendingToClinic();
+        return;
+      }
+      if (!this.canPay()) {
+        this.errorMessage.set('Checkout chưa thể thanh toán lại. Vui lòng kiểm tra trạng thái từ hệ thống.');
+        return;
+      }
       if (currentMethod === PaymentMethod.VNPAY || currentMethod === PaymentMethod.MOMO) {
         if (currentMethod !== pendingPayment.provider) {
           // Switch payment provider for the active pending appointment
@@ -283,21 +312,23 @@ export class BookingStepperPage implements OnDestroy {
             provider: currentMethod,
             idempotencyKey: crypto.randomUUID(),
           };
-          this.persistPendingPaymentContext(newContext);
-          this.initiateOnlinePayment(newContext, true);
+          this.modal.confirm({
+            nzTitle: 'Đổi cổng thanh toán?',
+            nzContent: 'Giao dịch trước sẽ bị thay thế. Nếu cổng cũ ghi nhận tiền đến muộn, hệ thống sẽ xử lý hoàn tiền.',
+            nzOkText: 'Xác nhận đổi cổng', nzCancelText: 'Giữ cổng hiện tại',
+            nzOnOk: () => { this.persistPendingPaymentContext(newContext); this.initiateOnlinePayment(newContext, true); },
+          });
           return;
         }
         // Same provider -> resume
-        this.initiateOnlinePayment(pendingPayment, false);
+        const resume = { ...pendingPayment, provider: currentMethod, idempotencyKey:
+          this.checkoutStatus()?.transactionStatus === PaymentTransactionStatus.PENDING ? pendingPayment.idempotencyKey : crypto.randomUUID() };
+        if (!resume.idempotencyKey) { this.checkPendingPayment(pendingPayment, false); return; }
+        this.persistPendingPaymentContext(resume);
+        this.initiateOnlinePayment(resume, false);
         return;
       }
 
-      if (currentMethod === PaymentMethod.PAY_AT_CLINIC) {
-        this.message.warning(
-          'Lịch hẹn hiện tại đang ở hình thức thanh toán trực tuyến. Vui lòng bấm "Hủy giao dịch chờ" nếu bạn muốn đổi sang thanh toán tại viện.',
-        );
-        return;
-      }
     }
 
     const doctorId = this.selectedDoctorId();
@@ -315,9 +346,11 @@ export class BookingStepperPage implements OnDestroy {
       reasonForVisit: this.patientForm.value.reason?.trim() || 'Khám theo lịch hẹn',
       paymentMethod: currentMethod,
       voucherCode: this.appliedVoucher()?.code,
-    }).pipe(finalize(() => this.loading.set(false))).subscribe({
+    }).pipe(finalize(() => { if (!this.pendingPaymentContext()) this.loading.set(false); })).subscribe({
       next: (appointment) => {
         this.bookingCommitted = true;
+        if (this.timerInterval) clearInterval(this.timerInterval);
+        this.timerInterval = null;
         if (currentMethod === PaymentMethod.PAY_AT_CLINIC) {
           this.clearPendingPaymentContext();
           this.payAtClinicReceipt.set(appointment);
@@ -334,6 +367,7 @@ export class BookingStepperPage implements OnDestroy {
           idempotencyKey: this.idempotencyKey,
         };
         this.persistPendingPaymentContext(context);
+        this.recoveryActive.set(true);
         this.loading.set(false);
         this.initiateOnlinePayment(context);
       },
@@ -343,38 +377,62 @@ export class BookingStepperPage implements OnDestroy {
 
   retryPendingPayment(): void {
     const context = this.pendingPaymentContext();
-    if (context) this.checkPendingPayment(context, true);
+    if (!context || this.loading()) return;
+    this.recoveryActive.set(true);
+    this.bookingCommitted = true;
+    this.step.set(4);
+    this.checkPendingPayment(context, false);
   }
 
-  cancelPendingPayment(): void {
+  startNewBooking(): void {
+    if (!this.pendingPaymentContext()) { this.resetBookingFlow(); return; }
+    this.cancelPendingPayment(true);
+  }
+
+  cancelPendingPayment(startNew = false): void {
     const context = this.pendingPaymentContext();
-    if (!context) {
-      this.clearPendingPaymentContext();
-      return;
-    }
-    if (this.loading()) return;
-    this.loading.set(true);
-    this.errorMessage.set(null);
-    this.api.cancelAppointment(context.appointmentId, 'Hủy giao dịch chờ thanh toán để đặt lại')
-      .pipe(finalize(() => this.loading.set(false)))
-      .subscribe({
-        next: () => {
-          this.clearPendingPaymentContext();
-          this.bookingCommitted = false;
-          this.reservationId = null;
-          this.selectedSlotId.set(null);
-          this.message.info('Đã hủy giao dịch chờ. Bạn có thể chọn lại lịch khám mới.');
-          this.step.set(2);
-        },
-        error: () => {
-          this.clearPendingPaymentContext();
-          this.bookingCommitted = false;
-          this.reservationId = null;
-          this.selectedSlotId.set(null);
-          this.message.info('Giao dịch chờ đã được hủy bỏ hoặc đã hết hạn.');
-          this.step.set(2);
-        },
-      });
+    if (!context || this.loading()) return;
+    this.modal.confirm({
+      nzTitle: startNew ? 'Hủy checkout cũ để đặt lịch mới?' : 'Hủy giao dịch đang chờ?',
+      nzContent: 'Chỉ khi hệ thống xác nhận hủy thành công, chỗ giữ và voucher mới được giải phóng. Khoản tiền đến muộn sẽ được xử lý hoàn tiền.',
+      nzOkText: 'Xác nhận hủy', nzCancelText: 'Tiếp tục giữ checkout', nzOkDanger: true,
+      nzOnOk: () => {
+        this.loading.set(true);
+        this.errorMessage.set(null);
+        this.api.cancelPendingPayment(context.appointmentId).pipe(finalize(() => this.loading.set(false))).subscribe({
+          next: (response) => {
+            if (response.appointmentStatus !== AppointmentStatus.CANCELLED) {
+              this.errorMessage.set('Hệ thống chưa xác nhận hủy checkout. Vui lòng kiểm tra lại.');
+              return;
+            }
+            this.clearPendingPaymentContext();
+            this.resetBookingFlow();
+            this.message.info('Đã hủy checkout. Bạn có thể đặt lịch mới.');
+          },
+          error: (error) => this.errorMessage.set(this.errorText(error)),
+        });
+      },
+    });
+  }
+
+  fallbackPendingToClinic(): void {
+    const context = this.pendingPaymentContext();
+    if (!context || this.loading() || !this.canFallback()) return;
+    this.modal.confirm({
+      nzTitle: 'Thanh toán tại viện cho lịch hẹn này?',
+      nzContent: 'Không tạo lịch hẹn mới. Hệ thống sẽ xác nhận lại chỗ giữ và trạng thái giao dịch trước khi chuyển.',
+      nzOkText: 'Xác nhận', nzCancelText: 'Quay lại',
+      nzOnOk: () => {
+        this.loading.set(true);
+        this.api.fallbackToClinic(context.appointmentId).pipe(finalize(() => this.loading.set(false))).subscribe({
+          next: () => {
+            this.clearPendingPaymentContext();
+            this.navigateToPaymentResult(context.appointmentId);
+          },
+          error: (error) => this.errorMessage.set(this.errorText(error)),
+        });
+      },
+    });
   }
 
   goToHistory(): void {
@@ -382,6 +440,12 @@ export class BookingStepperPage implements OnDestroy {
   }
 
   resetBookingFlow(): void {
+    if (this.pendingPaymentContext()) { this.startNewBooking(); return; }
+    this.releaseReservation();
+    if (this.timerInterval) clearInterval(this.timerInterval);
+    this.timerInterval = null;
+    this.recoveryActive.set(false);
+    this.checkoutStatus.set(null);
     this.payAtClinicReceipt.set(null);
     this.clearPendingPaymentContext();
     this.bookingCommitted = false;
@@ -393,7 +457,7 @@ export class BookingStepperPage implements OnDestroy {
     this.step.set(1);
   }
 
-  goToStep(step: number): void { this.step.set(step); }
+  goToStep(step: number): void { if (!this.recoveryActive() && !this.loading()) this.step.set(step); }
   starArray(rating: number): boolean[] { return Array.from({ length: 5 }, (_, index) => index < Math.round(rating)); }
   get formValue() { return this.patientForm.value; }
 
@@ -476,49 +540,33 @@ export class BookingStepperPage implements OnDestroy {
     this.api.releaseSlot({ doctorId, slotId, reservationId }).subscribe({ error: () => undefined });
   }
 
-  private checkPendingPayment(
-    context: PendingPaymentContext,
-    initiateWhenPending: boolean,
-  ): void {
+  private checkPendingPayment(context: PendingPaymentContext, _initiateWhenPending: boolean): void {
     if (this.loading()) return;
     this.loading.set(true);
-    this.api.getPaymentStatus(context.appointmentId)
-      .pipe(finalize(() => this.loading.set(false)))
-      .subscribe({
-        next: (status) => {
-          const needsResultPage =
-            status.transactionStatus === PaymentTransactionStatus.SUCCESS ||
-            status.transactionStatus === PaymentTransactionStatus.RECONCILIATION_REQUIRED ||
-            status.transactionStatus === PaymentTransactionStatus.LATE_SUCCESS ||
-            status.paymentStatus === PaymentStatus.REFUND_PENDING;
-          if (needsResultPage) {
-            this.navigateToPaymentResult(context.appointmentId);
-            return;
-          }
-          const terminalFailure =
-            [PaymentTransactionStatus.FAILED, PaymentTransactionStatus.TIMEOUT].includes(
-              status.transactionStatus as PaymentTransactionStatus,
-            ) ||
-            [AppointmentStatus.CANCELLED, AppointmentStatus.EXPIRED].includes(
-              status.appointmentStatus,
-            );
-          if (terminalFailure) {
-            this.clearPendingPaymentContext();
-            this.navigateToPaymentResult(context.appointmentId);
-            return;
-          }
-          if (
-            initiateWhenPending &&
-            status.appointmentStatus === AppointmentStatus.PENDING_PAYMENT &&
-            (status.transactionStatus === PaymentTransactionStatus.PENDING ||
-              status.transactionStatus === null)
-          ) {
-            this.loading.set(false);
-            this.initiateOnlinePayment(context);
-          }
-        },
-        error: (error) => this.errorMessage.set(this.errorText(error)),
-      });
+    this.api.getPaymentStatus(context.appointmentId).pipe(finalize(() => this.loading.set(false))).subscribe({
+      next: (status) => {
+        this.checkoutStatus.set(status);
+        const terminal = status.appointmentStatus !== AppointmentStatus.PENDING_PAYMENT;
+        if (terminal) {
+          this.clearPendingPaymentContext();
+          this.bookingCommitted = false;
+          this.recoveryActive.set(false);
+          this.step.set(1);
+          this.message.info('Checkout trước đã kết thúc. Bạn có thể đặt lịch mới hoặc xem lịch sử.');
+          return;
+        }
+        const selectedFollowedProvider = this.paymentMethod() === context.provider || !context.provider;
+        const provider = status.provider === PaymentMethod.MOMO ? PaymentMethod.MOMO : PaymentMethod.VNPAY;
+        const restored: PendingPaymentContext = { appointmentId: status.appointmentId, provider, idempotencyKey: status.idempotencyKey };
+        this.persistPendingPaymentContext(restored);
+        if (this.recoveryActive() && selectedFollowedProvider) this.paymentMethod.set(provider);
+        if (status.transactionStatus === PaymentTransactionStatus.RECONCILIATION_REQUIRED ||
+          status.paymentStatus === PaymentStatus.REFUND_PENDING) {
+          this.errorMessage.set('Giao dịch đang được đối soát. Không thanh toán lại; hãy kiểm tra trạng thái hoặc liên hệ hỗ trợ.');
+        }
+      },
+      error: (error) => this.errorMessage.set(this.errorText(error)),
+    });
   }
 
   private initiateOnlinePayment(
@@ -526,6 +574,10 @@ export class BookingStepperPage implements OnDestroy {
     supersedeActive = false,
   ): void {
     if (this.loading()) return;
+    if (!context.provider || !context.idempotencyKey) {
+      this.errorMessage.set('Chưa xác minh được giao dịch. Vui lòng kiểm tra lại trạng thái.');
+      return;
+    }
     this.loading.set(true);
     this.errorMessage.set(null);
     const payment$ = supersedeActive
@@ -551,23 +603,18 @@ export class BookingStepperPage implements OnDestroy {
 
   private persistPendingPaymentContext(context: PendingPaymentContext): void {
     this.pendingPaymentContext.set(context);
-    sessionStorage.setItem(PENDING_PAYMENT_CONTEXT_KEY, JSON.stringify(context));
+    sessionStorage.setItem(PENDING_PAYMENT_CONTEXT_KEY, JSON.stringify({ appointmentId: context.appointmentId }));
     sessionStorage.setItem('pendingPaymentAppointmentId', context.appointmentId);
   }
 
   private readPendingPaymentContext(): PendingPaymentContext | null {
     try {
       const raw = sessionStorage.getItem(PENDING_PAYMENT_CONTEXT_KEY);
-      if (!raw) return null;
-      const value = JSON.parse(raw) as Partial<PendingPaymentContext>;
-      if (
-        typeof value.appointmentId !== 'string' ||
-        typeof value.idempotencyKey !== 'string' ||
-        ![PaymentMethod.VNPAY, PaymentMethod.MOMO].includes(value.provider as PaymentMethod)
-      ) return null;
-      return value as PendingPaymentContext;
+      const legacy = sessionStorage.getItem('pendingPaymentAppointmentId');
+      const appointmentId: unknown = raw ? JSON.parse(raw).appointmentId : legacy;
+      if (typeof appointmentId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(appointmentId)) return null;
+      return { appointmentId };
     } catch {
-      sessionStorage.removeItem(PENDING_PAYMENT_CONTEXT_KEY);
       return null;
     }
   }
@@ -587,6 +634,13 @@ export class BookingStepperPage implements OnDestroy {
 
   private errorText(error: unknown): string {
     if (error instanceof HttpErrorResponse) {
+      const messages: Record<string, string> = {
+        PAYMENT_RECONCILIATION_REQUIRED: 'Giao dịch đang đối soát. Không thanh toán lại; hãy kiểm tra trạng thái.',
+        RESERVATION_EXPIRED: 'Chỗ giữ đã hết hạn. Hãy kiểm tra checkout trước khi đặt lịch mới.',
+        PROVIDER_REJECTED: 'Cổng thanh toán đã từ chối lần thử này. Hãy kiểm tra checkout để chọn cách khôi phục.',
+      };
+      if (messages[error.error?.code]) return messages[error.error.code];
+      if (error.status === 0) return 'Mất kết nối. Checkout vẫn được giữ; hãy thử kiểm tra trạng thái khi có mạng.';
       const message = error.error?.message;
       return Array.isArray(message) ? message.join(' ') : message || 'Không thể xử lý yêu cầu.';
     }

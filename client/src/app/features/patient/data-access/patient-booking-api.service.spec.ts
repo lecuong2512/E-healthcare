@@ -54,4 +54,17 @@ describe('PatientBookingApiService', () => {
     expect(validationRequest.request.method).toBe('GET');
     validationRequest.flush({});
   });
+
+  it('uses payment-aware cancellation and clinic fallback APIs', () => {
+    service.cancelPendingPayment('appointment-id').subscribe();
+    const cancel = http.expectOne('/api/v1/payments/appointment-id/cancel-pending');
+    expect(cancel.request.method).toBe('POST');
+    expect(cancel.request.body).toEqual({});
+    cancel.flush({});
+    service.fallbackToClinic('appointment-id').subscribe();
+    const fallback = http.expectOne('/api/v1/payments/appointment-id/fallback-to-clinic');
+    expect(fallback.request.method).toBe('POST');
+    expect(fallback.request.body).toEqual({});
+    fallback.flush({});
+  });
 });
