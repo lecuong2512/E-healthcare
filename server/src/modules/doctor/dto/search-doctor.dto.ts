@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsDateString,
   IsInt,
@@ -45,15 +45,15 @@ export class SearchDoctorDto {
   minRating?: number;
 
   @IsOptional()
-  @Type(() => Number)
+  @Transform(({ value }) => Math.max(1, Number(value) || 1))
   @IsInt()
   @Min(1)
   page = 1;
 
   @IsOptional()
-  @Type(() => Number)
+  @Transform(({ value }) => Math.min(100, Math.max(1, Number(value) || 20)))
   @IsInt()
   @Min(1)
-  @Max(50)
-  limit = 10;
+  @Max(100)
+  limit = 20;
 }

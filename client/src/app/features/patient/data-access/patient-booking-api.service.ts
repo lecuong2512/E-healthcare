@@ -65,7 +65,7 @@ export class PatientBookingApiService {
 
   searchDoctors(): Observable<PatientDoctorSearchResponse> {
     return this.http.get<PatientDoctorSearchResponse>(`${this.api}/doctors/search`, {
-      params: { page: 1, limit: 100 },
+      params: { page: 1, limit: 50 },
     });
   }
 

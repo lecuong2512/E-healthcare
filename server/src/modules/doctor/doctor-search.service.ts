@@ -57,8 +57,8 @@ export class DoctorSearchService {
       minPrice: dto.minPrice,
       maxPrice: dto.maxPrice,
       minRating: dto.minRating,
-      page: dto.page,
-      limit: dto.limit,
+      page: Math.max(1, Number(dto.page) || 1),
+      limit: Math.min(100, Math.max(1, Number(dto.limit) || 20)),
     };
     const cacheKey = this.cache.key("list", normalized);
     const cached = await this.cache.getJson<SearchDoctorResult>(cacheKey);
