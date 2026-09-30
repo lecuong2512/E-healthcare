@@ -3,12 +3,16 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, ParamMap, Router, RouterModule } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { AppointmentStatus, PaymentStatus, PaymentTransactionStatus } from '@shared/enums';
+import { PaymentStatusResponse } from '@shared/interfaces';
 import { toDataURL } from 'qrcode';
+import { EMPTY, Subscription, catchError, expand, switchMap, timer } from 'rxjs';
 import { environment } from '../../../../../environments/environment';
+import { PatientBookingApiService } from '../../data-access/patient-booking-api.service';
 import { CurrencyVndPipe } from '../../../../shared/pipes/currency-vnd.pipe';
 
 type PaymentProvider = 'VNPAY' | 'MOMO';
-type CallbackState = 'loading' | 'invalid' | 'pending' | 'failed' | 'cancelled' | 'error' | 'success';
+type CallbackState = 'loading' | 'invalid' | 'pending' | 'warning' | 'failed' | 'cancelled' | 'error' | 'success';
 
 interface PatientAppointment {
   id: string;
@@ -56,6 +60,7 @@ interface CheckInQrResponse {
 })
 export class PaymentCallbackPage {
   private readonly http = inject(HttpClient);
+  private readonly paymentApi = inject(PatientBookingApiService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -67,6 +72,8 @@ export class PaymentCallbackPage {
   readonly showDemoControls = !environment.production;
   readonly verifiedPayment = signal<PaymentReceipt | null>(null);
   readonly qrDataUrl = signal('');
+  private latestParams: ParamMap | null = null;
+  private verificationSubscription?: Subscription;
 
   constructor() {
     this.route.queryParamMap
@@ -129,7 +136,13 @@ export class PaymentCallbackPage {
     void this.router.navigate(['/patient/booking']);
   }
 
+  retryStatusCheck(): void {
+    if (this.latestParams) this.readCallback(this.latestParams);
+  }
+
   private readCallback(params: ParamMap): void {
+    this.verificationSubscription?.unsubscribe();
+    this.latestParams = params;
     const requestId = ++this.verificationSequence;
     this.verifiedPayment.set(null);
     this.qrDataUrl.set('');
@@ -147,42 +160,61 @@ export class PaymentCallbackPage {
       return;
     }
 
-    let reference: string | null = null;
-    if (hasVnpayFields && isVnpayComplete) {
+    if (hasVnpayFields) {
+      if (!isVnpayComplete) {
+        this.provider.set(null);
+        this.message.set('Callback VNPAY thiếu tham số bắt buộc.');
+        this.state.set('invalid');
+        return;
+      }
       this.provider.set('VNPAY');
-      reference = params.get('vnp_TxnRef');
-    } else if (hasMomoFields && isMomoComplete) {
+    } else if (hasMomoFields) {
+      if (!isMomoComplete) {
+        this.provider.set(null);
+        this.message.set('Callback MoMo thiếu tham số bắt buộc.');
+        this.state.set('invalid');
+        return;
+      }
       this.provider.set('MOMO');
-      reference = params.get('orderId');
     } else {
       this.provider.set(null);
-      this.message.set('Callback thiếu tham số bắt buộc hoặc không được hỗ trợ.');
-      this.state.set('invalid');
-      return;
     }
 
-    if (!reference) {
-      this.state.set('invalid');
+    const appointmentId = params.get('appointmentId')?.trim()
+      || sessionStorage.getItem('pendingPaymentAppointmentId');
+    if (!appointmentId) {
+      this.message.set('Không tìm thấy lịch hẹn cần kiểm tra. Phiên thanh toán có thể đã hết hạn.');
+      this.state.set('error');
       return;
     }
 
     this.state.set('loading');
-    this.http.get<PatientAppointment[]>(`${environment.apiBaseUrl}/appointments/me`)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (appointments) => {
+    this.verificationSubscription = this.paymentApi.getPaymentStatus(appointmentId).pipe(
+      expand((status) => this.stateFor(status) === 'pending'
+        ? timer(2_000).pipe(switchMap(() => this.paymentApi.getPaymentStatus(appointmentId)))
+        : EMPTY),
+      catchError((error: unknown) => {
+        if (requestId === this.verificationSequence) {
+          this.message.set(this.apiError(error, 'Không thể kiểm tra trạng thái thanh toán với Backend.'));
+          this.state.set('error');
+        }
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe({
+        next: (status) => {
           if (requestId !== this.verificationSequence) return;
-          const matches = (appointments ?? []).filter((appointment) =>
-            appointment.id === reference || appointment.appointmentCode === reference,
-          );
-          if (matches.length !== 1) {
-            this.message.set(matches.length
-              ? 'Mã callback khớp với nhiều lịch hẹn; không thể xác định giao dịch.'
-              : 'Backend không tìm thấy lịch hẹn khớp với mã callback.');
-            this.state.set('error');
+          const state = this.stateFor(status);
+          if (state !== 'success') {
+            this.state.set(state);
+            this.message.set(this.statusMessage(status, state));
+            if (['failed', 'cancelled'].includes(state)) {
+              sessionStorage.removeItem('pendingPaymentAppointmentId');
+              sessionStorage.removeItem('pendingPaymentContext');
+            }
             return;
           }
-          this.resolveAppointment(matches[0], params, requestId);
+          this.loadVerifiedAppointment(status, requestId);
         },
         error: (error: unknown) => {
           if (requestId !== this.verificationSequence) return;
@@ -192,31 +224,29 @@ export class PaymentCallbackPage {
       });
   }
 
-  private resolveAppointment(appointment: PatientAppointment, params: ParamMap, requestId: number): void {
-    const appointmentStatus = appointment.status.toUpperCase();
-    const paymentStatus = appointment.paymentStatus.toUpperCase();
+  private loadVerifiedAppointment(status: PaymentStatusResponse, requestId: number): void {
+    this.http.get<PatientAppointment[]>(`${environment.apiBaseUrl}/appointments/me`)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (appointments) => {
+          if (requestId !== this.verificationSequence) return;
+          const appointment = (appointments ?? []).find((item) => item.id === status.appointmentId);
+          if (!appointment) {
+            this.message.set('Không tìm thấy thông tin lịch hẹn đã thanh toán trong hồ sơ của bạn.');
+            this.state.set('error');
+            return;
+          }
+          this.loadCheckInQr(appointment, requestId);
+        },
+        error: (error: unknown) => {
+          if (requestId !== this.verificationSequence) return;
+          this.message.set(this.apiError(error, 'Không thể tải thông tin lịch hẹn đã thanh toán.'));
+          this.state.set('error');
+        },
+      });
+  }
 
-    if (['EXPIRED', 'CANCELLED', 'CANCELLED_BY_PATIENT', 'CANCELLED_BY_CLINIC'].includes(appointmentStatus)) {
-      this.message.set(appointment.cancellationReason || 'Lịch hẹn đã hết hạn hoặc bị hủy theo trạng thái Backend.');
-      this.state.set('cancelled');
-      return;
-    }
-    if (paymentStatus === 'FAILED') {
-      this.message.set(appointment.paymentFailureReason || 'Backend ghi nhận giao dịch thanh toán thất bại.');
-      this.state.set('failed');
-      return;
-    }
-    if (paymentStatus !== 'PAID') {
-      this.message.set('Backend chưa ghi nhận thanh toán thành công. Vui lòng kiểm tra lại sau.');
-      this.state.set('pending');
-      return;
-    }
-    if (appointmentStatus !== 'CONFIRMED') {
-      this.message.set('Backend đã ghi nhận thanh toán nhưng lịch hẹn chưa ở trạng thái xác nhận.');
-      this.state.set('error');
-      return;
-    }
-
+  private loadCheckInQr(appointment: PatientAppointment, requestId: number): void {
     this.http.get<CheckInQrResponse>(
       `${environment.apiBaseUrl}/appointments/${encodeURIComponent(appointment.id)}/check-in-qr`,
     ).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
@@ -230,6 +260,49 @@ export class PaymentCallbackPage {
         this.state.set('error');
       },
     });
+  }
+
+  private stateFor(status: PaymentStatusResponse): CallbackState {
+    if (
+      status.transactionStatus === PaymentTransactionStatus.SUCCESS &&
+      status.paymentStatus === PaymentStatus.PAID &&
+      status.appointmentStatus === AppointmentStatus.CONFIRMED
+    ) return 'success';
+    if (
+      status.transactionStatus === PaymentTransactionStatus.RECONCILIATION_REQUIRED ||
+      status.transactionStatus === PaymentTransactionStatus.LATE_SUCCESS ||
+      status.paymentStatus === PaymentStatus.REFUND_PENDING
+    ) return 'warning';
+    if ([AppointmentStatus.CANCELLED, AppointmentStatus.CANCELLED_BY_PATIENT,
+      AppointmentStatus.CANCELLED_BY_CLINIC, AppointmentStatus.EXPIRED].includes(status.appointmentStatus)) {
+      return 'cancelled';
+    }
+    if (
+      [PaymentTransactionStatus.FAILED, PaymentTransactionStatus.TIMEOUT].includes(
+        status.transactionStatus as PaymentTransactionStatus,
+      ) || status.paymentStatus === PaymentStatus.FAILED
+    ) return 'failed';
+    if (
+      status.appointmentStatus === AppointmentStatus.PENDING_PAYMENT &&
+      (status.transactionStatus === PaymentTransactionStatus.PENDING || status.transactionStatus === null)
+    ) return 'pending';
+    return 'error';
+  }
+
+  private statusMessage(status: PaymentStatusResponse, state: CallbackState): string {
+    if (state === 'pending') {
+      return 'Backend chưa xác nhận giao dịch. Kiểm tra lại sau ít phút; không dựa vào mã thành công trên URL.';
+    }
+    if (state === 'warning') {
+      return 'Giao dịch đang được Backend đối soát. Vui lòng không thanh toán lại.';
+    }
+    if (state === 'failed') {
+      return 'Backend xác nhận giao dịch thất bại hoặc đã hết thời gian thanh toán.';
+    }
+    if (state === 'cancelled') {
+      return `Lịch hẹn đã ${status.appointmentStatus === AppointmentStatus.EXPIRED ? 'hết hạn' : 'bị hủy'} theo trạng thái Backend.`;
+    }
+    return 'Không thể xác định trạng thái thanh toán.';
   }
 
   private async createVerifiedReceipt(

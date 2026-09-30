@@ -22,6 +22,10 @@
         <h1 class="mt-2 text-2xl font-bold text-slate-900">Callback không hợp lệ</h1>
       } @else if (state() === 'pending') {
         <h1 class="mt-2 text-2xl font-bold text-slate-900">Đang chờ xác nhận thanh toán</h1>
+      } @else if (state() === 'warning') {
+        <h1 class="mt-2 text-2xl font-bold text-slate-900">Giao dịch đang được đối soát</h1>
+      } @else if (state() === 'pending') {
+        <h1 class="mt-2 text-2xl font-bold text-slate-900">Đang chờ xác nhận thanh toán</h1>
       } @else if (state() === 'failed') {
         <h1 class="mt-2 text-2xl font-bold text-slate-900">Thanh toán thất bại</h1>
       } @else if (state() === 'cancelled') {
@@ -94,13 +98,19 @@
           <p>{{ message() }}</p>
         </div>
 
-        @if (state() === 'pending' && provider()) {
+        @if (provider()) {
           <p class="text-center text-xs text-slate-500">Nhà cung cấp: {{ provider() }}. Kết quả callback không thay thế trạng thái do Backend xác nhận.</p>
         }
 
         @if (state() === 'failed' || state() === 'cancelled') {
           <button type="button" (click)="choosePaymentAgain()" class="min-h-11 w-full rounded-lg bg-sky-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-600 focus:ring-offset-2">
             Chọn lại phương thức thanh toán
+          </button>
+        }
+
+        @if (state() === 'pending' || state() === 'warning' || state() === 'error') {
+          <button type="button" (click)="retryStatusCheck()" class="min-h-11 w-full rounded-lg border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-600 focus:ring-offset-2">
+            Kiểm tra lại trạng thái
           </button>
         }
 
