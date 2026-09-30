@@ -2,7 +2,9 @@ import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
+  IsISO8601,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Matches,
   MaxLength,
@@ -53,4 +55,9 @@ export class UpdatePhrProfileDto {
 
   @IsString()
   surgeryHistory!: string;
+
+  /** Timestamp ghi nhận bệnh nhân đồng ý xử lý dữ liệu sức khỏe theo NĐ 13/2023/NĐ-CP */
+  @IsOptional()
+  @IsISO8601()
+  consent_nd13_accepted_at?: string;
 }
