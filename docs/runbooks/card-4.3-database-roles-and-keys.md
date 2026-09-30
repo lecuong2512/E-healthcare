@@ -32,10 +32,24 @@ API staging/production tự kiểm tra role khi khởi động. `DATABASE_MIGRAT
 ## Khóa mã hóa y tế
 
 - Local/test: khóa 64 ký tự hex có thể nằm trong `.env` không Git track.
+- `MEDICAL_DATA_ENCRYPTION_KEY` là bắt buộc; API fail-fast khi biến thiếu hoặc không đúng 64 ký tự hex. Sau khi cập nhật nhánh, mỗi thành viên phải tự thêm key vào `.env` trước khi chạy server.
+- Tạo key local bằng PowerShell: `[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()`; hoặc OpenSSL: `openssl rand -hex 32`.
+- Không đổi key của database đang có ciphertext. Thành viên dùng chung database dump phải nhận đúng development key qua secret manager/kênh bảo mật, không qua Git hoặc chat.
 - Staging/production: secret manager inject `MEDICAL_DATA_ENCRYPTION_KEY`, version và keyring lúc runtime; không ghi vào image, Git, migration log hay DB dump.
 - Mỗi ciphertext lưu `encryption_key_version`. Khi rotate, keyring phải giữ các phiên bản còn cần đọc/restore; không thu hồi key cũ trước khi re-encrypt và hết retention backup liên quan.
 - Khóa pgBackRest phải khác khóa dữ liệu y tế và được recovery tách biệt.
 - Admin hệ thống không có endpoint giải mã EMR. Break-glass lâm sàng là workflow riêng cần owner, lý do, thời hạn và audit; không suy quyền đọc bệnh án từ `ROLE_ADMIN`.
+
+## Contract tích hợp xuất PDF đơn thuốc
+
+Sau migration Card 4.3, các cột plaintext của `prescription_items` không còn tồn tại. Mọi consumer, bao gồm `PrescriptionPdfService`, phải:
+
+1. Xác thực bệnh nhân/appointment trước khi giải mã.
+2. Đọc medical record bằng `ClinicalEncryptedStore.findMedicalRecordForPatientByAppointment(...)`.
+3. Đọc đơn thuốc bằng `ClinicalEncryptedStore.findPrescription(...)`.
+4. Không query relation `PrescriptionEntity.items` trực tiếp và không tham chiếu các cột thuốc plaintext cũ.
+
+`verify()` chỉ dùng mã đơn, doctor ID và timestamp để kiểm tra hash nên không cần giải mã nội dung thuốc. Không đưa nội dung đơn thuốc vào response verification công khai.
 
 ## Xoay khóa dữ liệu y tế
 

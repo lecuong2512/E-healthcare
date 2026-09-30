@@ -178,10 +178,23 @@ describe('Card 4.3 encryption and append-only audit on PostgreSQL', () => {
     expect(raw.addendum).not.toContain(Buffer.from(addendumReason).toString('hex'));
 
     const hydratedRecord = await store.findMedicalRecord(database.manager, recordId);
+    const patientScopedRecord = await store.findMedicalRecordForPatientByAppointment(
+      database.manager,
+      appointmentId,
+      patientId,
+    );
+    const unauthorizedRecord = await store.findMedicalRecordForPatientByAppointment(
+      database.manager,
+      appointmentId,
+      adminId,
+    );
     const hydratedPrescription = await store.findPrescription(database.manager, recordId);
     const hydratedAddendums = await store.findAddendums(database.manager, recordId);
     expect(hydratedRecord.clinicalNotes).toBe(clinicalNotes);
     expect(hydratedRecord.vitalSigns).toMatchObject({ bloodPressure: '120/80', pulse: 72 });
+    expect(patientScopedRecord?.clinicalNotes).toBe(clinicalNotes);
+    expect(patientScopedRecord?.appointment.patientId).toBe(patientId);
+    expect(unauthorizedRecord).toBeNull();
     expect(hydratedPrescription?.items[0].medicineName).toBe(medicineName);
     expect(hydratedAddendums[0].reason).toBe(addendumReason);
   });

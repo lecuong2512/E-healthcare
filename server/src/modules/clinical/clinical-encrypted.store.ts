@@ -132,6 +132,26 @@ export class ClinicalEncryptedStore {
     return record ? this.hydrateMedicalRecord(manager, record) : null;
   }
 
+  /**
+   * Patient-scoped read contract for consumers such as prescription PDF export.
+   * The ownership predicate is evaluated by PostgreSQL before any PHI is decrypted.
+   */
+  async findMedicalRecordForPatientByAppointment(
+    manager: EntityManager,
+    appointmentId: string,
+    patientId: string,
+  ): Promise<MedicalRecordEntity | null> {
+    const record = await manager.getRepository(MedicalRecordEntity).findOne({
+      where: { appointmentId, patientId },
+      relations: {
+        patient: true,
+        doctor: { user: true },
+        appointment: true,
+      },
+    });
+    return record ? this.hydrateMedicalRecord(manager, record) : null;
+  }
+
   async saveMedicalRecord(
     manager: EntityManager,
     record: MedicalRecordEntity,
