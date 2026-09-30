@@ -104,8 +104,8 @@ export class PhrProfilePage implements OnInit {
     if (!input.files || input.files.length === 0) return;
 
     const file = input.files[0];
-    if (file.size > 2 * 1024 * 1024) {
-      this.avatarUploadError = 'Kích thước ảnh không được vượt quá 2MB.';
+    if (file.size > 10 * 1024 * 1024) {
+      this.avatarUploadError = 'Kích thước ảnh không được vượt quá 10MB.';
       return;
     }
 
@@ -126,6 +126,17 @@ export class PhrProfilePage implements OnInit {
     reader.readAsDataURL(file);
   }
 
+  /** Chuyển relative URL từ backend sang absolute URL để <img> có thể load được */
+  protected resolveAvatarUrl(url: string | null | undefined): string | null {
+    if (!url) return null;
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+      return url;
+    }
+    // relative path như /uploads/avatars/...
+    const base = environment.apiBaseUrl.replace(/\/api\/v1$/, '').replace(/\/api$/, '');
+    return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+  }
+
   protected uploadAvatar(): void {
     if (!this.selectedAvatarFile || !this.http) return;
 
@@ -140,7 +151,8 @@ export class PhrProfilePage implements OnInit {
       next: (res) => {
         this.form.avatarUrl = res.avatarUrl;
         this.savedForm.avatarUrl = res.avatarUrl;
-        this.avatarPreview = res.avatarUrl;
+        // Dùng resolveAvatarUrl để hiển thị đúng ảnh sau khi upload
+        this.avatarPreview = this.resolveAvatarUrl(res.avatarUrl);
         this.selectedAvatarFile = null;
         this.isUploadingAvatar = false;
         this.avatarUploadSuccess = true;
@@ -160,7 +172,7 @@ export class PhrProfilePage implements OnInit {
       next: (profile) => {
         this.form = { ...profile };
         this.savedForm = { ...profile };
-        this.avatarPreview = profile.avatarUrl || null;
+        this.avatarPreview = this.resolveAvatarUrl(profile.avatarUrl);
 
         this.isLoading = false;
       },

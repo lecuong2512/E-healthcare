@@ -11,7 +11,7 @@ import { UserEntity } from '../../database/entities/user.entity';
 import { DoctorEntity } from '../../database/entities/doctor.entity';
 import { Role } from '@shared/enums';
 
-const MAX_AVATAR_SIZE = 2 * 1024 * 1024; // 2MB
+const MAX_AVATAR_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_MIME_TYPES = new Set([
   'image/png',
   'image/jpeg',
@@ -46,7 +46,7 @@ export class UserService {
     }
 
     if (file.size > MAX_AVATAR_SIZE) {
-      throw new BadRequestException('Kích thước ảnh không được vượt quá 2MB.');
+      throw new BadRequestException('Kích thước ảnh không được vượt quá 10MB.');
     }
 
     if (!ALLOWED_MIME_TYPES.has(file.mimetype.toLowerCase())) {
