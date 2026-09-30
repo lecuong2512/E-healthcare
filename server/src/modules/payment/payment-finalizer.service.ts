@@ -97,7 +97,8 @@ export class PaymentFinalizerService {
           .createQueryBuilder('schedule').setLock('pessimistic_write')
           .where('schedule.id = :id', { id: appointment.scheduleId }).getOneOrFail();
         for (const payment of payments) {
-          if ([PaymentTransactionStatus.PENDING, PaymentTransactionStatus.RECONCILIATION_REQUIRED].includes(payment.status)) {
+          // Cancelling the appointment must not erase an uncertain financial outcome.
+          if (payment.status === PaymentTransactionStatus.PENDING) {
             const previousStatus = payment.status;
             payment.status = PaymentTransactionStatus.SUPERSEDED;
             payment.nextReconcileAt = null;

@@ -349,9 +349,11 @@ describe('PaymentFinalizerService', () => {
 
   it('allows cancelling reconciliation checkout and replaying an acknowledged cancellation', async () => {
     payment.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
+    payment.nextReconcileAt = new Date('2030-01-01T00:00:00Z');
     await service.cancelPending(appointment.id, 'patient-id');
     await expect(service.cancelPending(appointment.id, 'patient-id')).resolves.toMatchObject({ appointmentStatus: AppointmentStatus.CANCELLED });
-    expect(payment.status).toBe(PaymentTransactionStatus.SUPERSEDED);
+    expect(payment.status).toBe(PaymentTransactionStatus.RECONCILIATION_REQUIRED);
+    expect(payment.nextReconcileAt).toEqual(new Date('2030-01-01T00:00:00Z'));
   });
 
   it('rejects cancelling another patient checkout without touching payment or reservation', async () => {

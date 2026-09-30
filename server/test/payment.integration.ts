@@ -206,6 +206,28 @@ describe('Payment invariants on PostgreSQL and Redis', () => {
     await expect(service.fallbackToClinic(appointmentId, patientId)).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('continues provider reconciliation after cancelling an uncertain checkout and refunds success once', async () => {
+    const appointmentId = await appointment();
+    await service.initiate(appointmentId, patientId, randomUUID(), { provider: PaymentMethod.VNPAY }, '127.0.0.1');
+    const repository = database.getRepository(PaymentTransactionEntity);
+    const transaction = await repository.findOneByOrFail({ appointmentId });
+    const dueAt = new Date(Date.now() - 1000);
+    await repository.update(transaction.id, { status: PaymentTransactionStatus.RECONCILIATION_REQUIRED, nextReconcileAt: dueAt });
+    await service.cancelPending(appointmentId, patientId);
+    const cancelled = await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId });
+    expect(cancelled.status).toBe(AppointmentStatus.CANCELLED);
+    expect((await database.getRepository(DoctorScheduleEntity).findOneByOrFail({ id: cancelled.scheduleId })).status).toBe(SlotStatus.AVAILABLE);
+    const uncertain = await repository.findOneByOrFail({ id: transaction.id });
+    expect(uncertain.status).toBe(PaymentTransactionStatus.RECONCILIATION_REQUIRED);
+    expect(uncertain.nextReconcileAt).toEqual(dueAt);
+    provider.queryStatus.mockResolvedValue(verified(uncertain, 'SUCCESS'));
+    await createReconciliationService().reconcileExpired();
+    await finalizer.finalize(verified(uncertain, 'SUCCESS'));
+    expect((await repository.findOneByOrFail({ id: transaction.id })).status).toBe(PaymentTransactionStatus.LATE_SUCCESS);
+    expect((await database.getRepository(AppointmentEntity).findOneByOrFail({ id: appointmentId })).paymentStatus).toBe(PaymentStatus.REFUND_PENDING);
+    expect(await database.getRepository(RefundRequestEntity).countBy({ paymentTransactionId: transaction.id })).toBe(1);
+  });
+
   it('excludes elapsed same-day slots in the real PostgreSQL doctor detail query', async () => {
     await database.query(`INSERT INTO doctor_schedules (doctor_id, date, start_time, end_time, status) VALUES
       ($1, (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, '00:00:00', '00:30:00', 'AVAILABLE'),
