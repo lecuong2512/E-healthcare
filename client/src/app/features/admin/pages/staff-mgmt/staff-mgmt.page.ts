@@ -152,6 +152,10 @@ export class StaffMgmtPage {
       return;
     }
     const value = this.staffForm.getRawValue();
+    if (value.phoneNumber?.trim() && !/^0[35789]\d{8}$/.test(value.phoneNumber.trim())) {
+      this.errorMessage.set('Số điện thoại phải đúng định dạng 10 số di động Việt Nam (bắt đầu bằng 03, 05, 07, 08, 09).');
+      return;
+    }
     const typedIds = value.specialtyId.split(',').map(item => item.trim()).filter(Boolean);
     const specialtyIds = this.selectedCreateSpecialtyIds().length ? this.selectedCreateSpecialtyIds() : typedIds;
     if (value.role === Role.DOCTOR && (!specialtyIds.length || !value.licenseNumber || !value.roomNumber || value.yearsExperience == null)) {
@@ -226,6 +230,11 @@ export class StaffMgmtPage {
       if (this.detailForm.controls.licenseNumber.invalid) {
         this.errorMessage.set('Số CCHN không đúng định dạng (tối thiểu 5 ký tự).');
       }
+      return;
+    }
+    const rawDetails = this.detailForm.getRawValue();
+    if (rawDetails.phoneNumber?.trim() && !/^0[35789]\d{8}$/.test(rawDetails.phoneNumber.trim())) {
+      this.errorMessage.set('Số điện thoại phải đúng định dạng 10 số di động Việt Nam (bắt đầu bằng 03, 05, 07, 08, 09).');
       return;
     }
     const specialtyIds = this.selectedDetailSpecialtyIds();

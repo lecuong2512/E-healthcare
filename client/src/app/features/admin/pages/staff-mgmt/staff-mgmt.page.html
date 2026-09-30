@@ -103,7 +103,6 @@
           <fieldset class="specialties"><legend>Chuyên khoa (chọn một hoặc nhiều)</legend>@for (specialty of specialties(); track specialty.id) { <label><input type="checkbox" data-testid="create-specialty-option" [checked]="selectedCreateSpecialtyIds().includes(specialty.id)" (change)="toggleCreateSpecialty(specialty.id, $any($event.target).checked)" />{{ specialty.name }}</label> }</fieldset>
         }
       </div>
-      @if (errorMessage()) { <p class="form-error">{{ errorMessage() }}</p> }
       <footer><button type="button" (click)="showForm.set(false)">Hủy</button><button class="primary" [disabled]="submitting()" type="submit">{{ submitting() ? 'Đang tạo...' : 'Tạo tài khoản' }}</button></footer>
     </form></div>
   }
