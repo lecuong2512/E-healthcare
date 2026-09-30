@@ -20,10 +20,16 @@
         <h1 class="mt-2 text-2xl font-bold text-slate-900">Đang kiểm tra giao dịch</h1>
       } @else if (state() === 'invalid') {
         <h1 class="mt-2 text-2xl font-bold text-slate-900">Callback không hợp lệ</h1>
+      } @else if (state() === 'pending') {
+        <h1 class="mt-2 text-2xl font-bold text-slate-900">Đang chờ xác nhận thanh toán</h1>
+      } @else if (state() === 'failed') {
+        <h1 class="mt-2 text-2xl font-bold text-slate-900">Thanh toán thất bại</h1>
+      } @else if (state() === 'cancelled') {
+        <h1 class="mt-2 text-2xl font-bold text-slate-900">Lịch hẹn đã hủy</h1>
       } @else if (state() === 'success') {
         <h1 class="mt-2 text-2xl font-bold text-slate-900">Thanh toán &amp; Đặt khám thành công!</h1>
       } @else {
-        <h1 class="mt-2 text-2xl font-bold text-slate-900">Chưa thể xác minh thanh toán</h1>
+        <h1 class="mt-2 text-2xl font-bold text-slate-900">Không thể xử lý kết quả thanh toán</h1>
       }
     </div>
 
@@ -35,7 +41,7 @@
         </div>
       } @else if (state() === 'success') {
         @if (verifiedPayment(); as payment) {
-        @if (showDemoControls) {
+        @if (payment.payment.isDemo) {
           <div class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-sky-900" role="status">
             Mô phỏng kết quả Backend - không phải giao dịch thật
           </div>
@@ -61,12 +67,12 @@
             </div>
             <div class="flex flex-col gap-1 py-3 sm:flex-row sm:justify-between sm:gap-4">
               <dt class="text-sm text-slate-500">Mã giao dịch ngân hàng</dt>
-              <dd class="break-all text-sm font-semibold text-slate-900 sm:text-right">{{ payment.payment.bankTransactionId }}</dd>
+              <dd class="break-all text-sm font-semibold text-slate-900 sm:text-right">{{ payment.payment.bankTransactionId || 'Backend chưa cung cấp' }}</dd>
             </div>
           </dl>
 
           <div class="flex flex-col items-center gap-3">
-            <img [src]="qrDataUrl()" alt="Mã QR lịch hẹn mô phỏng" class="h-[220px] w-[220px] max-w-full rounded-lg border border-slate-200 bg-white p-2" />
+            <img [src]="qrDataUrl()" alt="Mã QR check-in lịch hẹn" class="h-[220px] w-[220px] max-w-full rounded-lg border border-slate-200 bg-white p-2" />
             <span class="text-xs text-slate-500">Mã QR lịch hẹn</span>
           </div>
         </div>
@@ -85,17 +91,22 @@
         }
       } @else {
         <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="alert">
-          @if (state() === 'invalid') {
-            <p>{{ message() }}</p>
-          } @else {
-            <p>Đã nhận callback{{ provider() ? ' từ ' + provider() : '' }}, nhưng frontend chưa có API Backend để xác minh giao dịch.</p>
-            <p class="mt-2">Không thể xác nhận thanh toán từ tham số trên URL. Trạng thái giao dịch và lịch hẹn chưa được thay đổi.</p>
-          }
+          <p>{{ message() }}</p>
         </div>
 
-        @if (state() === 'verification-unavailable' && showDemoControls) {
+        @if (state() === 'pending' && provider()) {
+          <p class="text-center text-xs text-slate-500">Nhà cung cấp: {{ provider() }}. Kết quả callback không thay thế trạng thái do Backend xác nhận.</p>
+        }
+
+        @if (state() === 'failed' || state() === 'cancelled') {
+          <button type="button" (click)="choosePaymentAgain()" class="min-h-11 w-full rounded-lg bg-sky-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-600 focus:ring-offset-2">
+            Chọn lại phương thức thanh toán
+          </button>
+        }
+
+        @if (state() === 'pending' && showDemoControls) {
           <div class="space-y-2 rounded-lg border border-sky-200 bg-sky-50 p-4">
-            <p class="text-sm font-semibold text-slate-800">Xem thử giao diện khi Backend trả trạng thái thành công</p>
+            <p class="text-sm font-semibold text-slate-800">Xem thử giao diện thành công</p>
             <button type="button" (click)="simulateBackendSuccess()" class="min-h-11 w-full rounded-lg bg-sky-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-600 focus:ring-offset-2">
               Mô phỏng kết quả Backend thành công
             </button>
