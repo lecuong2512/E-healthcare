@@ -45,7 +45,7 @@ describe('BookingStepperPage payment flow', () => {
   beforeEach(async () => {
     api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', [
       'searchDoctors', 'getDoctor', 'reserveSlot', 'releaseSlot', 'confirmBooking', 'initiatePayment',
-      'getPaymentStatus', 'getVouchers', 'validateVoucher',
+      'getPaymentStatus', 'getVouchers', 'validateVoucher', 'cancelAppointment',
     ]);
     api.searchDoctors.and.returnValue(of({
       data: [doctor],
@@ -53,6 +53,7 @@ describe('BookingStepperPage payment flow', () => {
     }));
     api.getDoctor.and.returnValue(of(doctor));
     api.getVouchers.and.returnValue(of([]));
+    api.cancelAppointment.and.returnValue(of({ success: true, message: 'ok' }));
     api.reserveSlot.and.returnValue(of({
       success: true,
       message: 'ok',
@@ -168,7 +169,7 @@ describe('BookingStepperPage payment flow', () => {
     expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBe(appointmentId);
   });
 
-  it('does not call payment initiation for pay-at-clinic', () => {
+  it('confirms booking for pay-at-clinic and displays confirmation receipt instead of navigating away immediately', () => {
     component.selectDoctorAndContinue(component.doctors()[0]);
     component.chooseSlot(component.morningSlots[0]);
     component.selectPayment(PaymentMethod.PAY_AT_CLINIC);
@@ -180,7 +181,71 @@ describe('BookingStepperPage payment flow', () => {
     component.submitBooking();
 
     expect(api.initiatePayment).not.toHaveBeenCalled();
+    expect(component.payAtClinicReceipt()).toBeTruthy();
+    expect(component.payAtClinicReceipt()?.appointmentCode).toBe('APT-01');
+    expect(router.navigate).not.toHaveBeenCalled();
+
+    component.goToHistory();
     expect(router.navigate).toHaveBeenCalledWith(['/patient/history']);
+  });
+
+  it('respects newly selected payment provider when a pending payment context exists', () => {
+    const originalKey = '55555555-5555-4555-8555-555555555555';
+    sessionStorage.setItem('pendingPaymentContext', JSON.stringify({
+      appointmentId,
+      provider: PaymentMethod.MOMO,
+      idempotencyKey: originalKey,
+    }));
+
+    fixture.destroy();
+    fixture = TestBed.createComponent(BookingStepperPage);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    expect(component.paymentMethod()).toBe(PaymentMethod.MOMO);
+
+    // Patient clicks VNPay to switch
+    component.selectPayment(PaymentMethod.VNPAY);
+    expect(component.paymentMethod()).toBe(PaymentMethod.VNPAY);
+
+    component.submitBooking();
+
+    // Must call initiatePayment with VNPAY, a NEW idempotency key, and supersedeActive = true
+    expect(api.initiatePayment).toHaveBeenCalledWith(
+      appointmentId,
+      PaymentMethod.VNPAY,
+      jasmine.any(String),
+      true,
+    );
+    const newKey = api.initiatePayment.calls.mostRecent().args[2];
+    expect(newKey).not.toBe(originalKey);
+    expect(component.pendingPaymentContext()?.provider).toBe(PaymentMethod.VNPAY);
+  });
+
+  it('cancels pending payment and allows patient to reselect slot', () => {
+    sessionStorage.setItem('pendingPaymentContext', JSON.stringify({
+      appointmentId,
+      provider: PaymentMethod.VNPAY,
+      idempotencyKey: '55555555-5555-4555-8555-555555555555',
+    }));
+    sessionStorage.setItem('pendingPaymentAppointmentId', appointmentId);
+
+    fixture.destroy();
+    fixture = TestBed.createComponent(BookingStepperPage);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    expect(component.pendingPaymentContext()).toBeTruthy();
+
+    component.cancelPendingPayment();
+
+    expect(api.cancelAppointment).toHaveBeenCalledWith(
+      appointmentId,
+      'Hủy giao dịch chờ thanh toán để đặt lại',
+    );
+    expect(component.pendingPaymentContext()).toBeNull();
+    expect(sessionStorage.getItem('pendingPaymentContext')).toBeNull();
+    expect(component.step()).toBe(2);
   });
 
   it('retries payment initiation without confirming the booking again', () => {

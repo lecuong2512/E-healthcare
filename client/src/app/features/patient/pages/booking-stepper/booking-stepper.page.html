@@ -79,14 +79,19 @@
       <!-- Bước 4 -->
       <div class="flex items-center gap-2">
         <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all"
-             [class.bg-sky-600]="step() >= 4" [class.text-white]="step() >= 4"
+             [class.bg-emerald-600]="!!payAtClinicReceipt()"
+             [class.bg-sky-600]="step() >= 4 && !payAtClinicReceipt()"
+             [class.text-white]="step() >= 4"
              [class.bg-white]="step() < 4" [class.border-2]="step() < 4" [class.border-slate-200]="step() < 4"
              [class.text-slate-400]="step() < 4">
-          4
+          @if (payAtClinicReceipt()) { ✓ } @else { 4 }
         </div>
         <span class="text-xs font-medium hidden sm:inline"
-              [class.text-sky-600]="step() === 4"
-              [class.text-slate-400]="step() < 4">Xác nhận &amp; Thanh toán</span>
+              [class.text-emerald-600]="!!payAtClinicReceipt()"
+              [class.text-sky-600]="step() === 4 && !payAtClinicReceipt()"
+              [class.text-slate-400]="step() < 4">
+          @if (payAtClinicReceipt()) { Hoàn thành } @else { Xác nhận &amp; Thanh toán }
+        </span>
       </div>
 
     </div>
@@ -498,202 +503,322 @@
          BƯỚC 4: XÁC NHẬN & THANH TOÁN
     ══════════════════════════════════════════════════════════ -->
     @if (step() === 4) {
-      <div class="max-w-[620px] mx-auto space-y-5">
+      @if (payAtClinicReceipt(); as receipt) {
+        <!-- Dedicated Confirmation / Receipt Screen for PAY_AT_CLINIC -->
+        <div class="max-w-[620px] mx-auto space-y-5">
+          <!-- Success Header Card -->
+          <div class="bg-white rounded-2xl border border-emerald-200 shadow-sm overflow-hidden">
+            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-6 text-center text-white">
+              <div class="mx-auto w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mb-3">
+                <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 class="text-xl font-bold text-white mb-1">Đặt lịch khám thành công!</h2>
+              <p class="text-xs text-emerald-100">Lịch hẹn của bạn đã được ghi nhận trên hệ thống</p>
+            </div>
 
-        <div>
-          <h2 class="text-base font-bold text-slate-900">Bước 4: Xác nhận &amp; Thanh toán</h2>
-          <p class="text-xs text-slate-500 mt-0.5">Kiểm tra lại thông tin và chọn phương thức thanh toán</p>
-        </div>
+            <!-- Important Instruction Banner -->
+            <div class="p-4 bg-amber-50 border-b border-amber-100 flex items-start gap-3">
+              <svg class="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <p class="text-xs font-bold text-amber-900">Vui lòng có mặt tại quầy tiếp đón trước giờ khám để nộp viện phí</p>
+                <p class="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                  Quý khách vui lòng đến trước giờ hẹn tối thiểu 15 phút, xuất trình mã lịch hẹn hoặc CCCD tại quầy lễ tân để nhân viên tiếp đón hoàn tất thủ tục nộp viện phí và cấp số thứ tự vào phòng khám.
+                </p>
+              </div>
+            </div>
 
-        <!-- Booking summary card -->
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="bg-gradient-to-r from-sky-600 to-indigo-600 px-5 py-3">
-            <p class="text-xs font-bold text-white/80">Tóm tắt lịch khám</p>
-          </div>
-          <div class="p-5 space-y-3 text-sm">
-            @if (selectedDoctor(); as doc) {
-              <div class="flex justify-between items-start">
-                <span class="text-slate-500 text-xs">Bác sĩ</span>
-                <div class="text-right">
-                  <p class="font-bold text-slate-900 text-xs">{{ doc.title }} {{ doc.name }}</p>
-                  <p class="text-slate-400 text-[11px]">{{ doc.specialty }} · {{ doc.hospital }}</p>
-                </div>
+            <!-- Receipt Details -->
+            <div class="p-6 space-y-4 text-sm">
+              <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                <span class="text-xs text-slate-500 font-medium">Mã lịch hẹn</span>
+                <span class="text-sm font-mono font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-lg border border-sky-100">{{ receipt.appointmentCode }}</span>
               </div>
-            }
-            <div class="h-px bg-slate-100"></div>
-            <div class="flex justify-between items-center">
-              <span class="text-slate-500 text-xs">Ngày khám</span>
-              <span class="font-semibold text-xs text-slate-900">{{ selectedDayLabel() }}</span>
-            </div>
-            <div class="flex justify-between items-center">
-              <span class="text-slate-500 text-xs">Khung giờ</span>
-              <span class="font-semibold text-xs text-slate-900">{{ selectedSlotLabel() }}</span>
-            </div>
-            <div class="h-px bg-slate-100"></div>
-            <div class="flex justify-between items-center">
-              <span class="text-slate-500 text-xs">Bệnh nhân</span>
-              <span class="font-semibold text-xs text-slate-900">{{ formValue.fullName || '—' }}</span>
-            </div>
-            <div class="flex justify-between items-center">
-              <span class="text-slate-500 text-xs">SĐT</span>
-              <span class="font-semibold text-xs text-slate-900">{{ formValue.phone || '—' }}</span>
-            </div>
-            @if (formValue.reason) {
-              <div class="flex justify-between items-start gap-4">
-                <span class="text-slate-500 text-xs shrink-0">Lý do khám</span>
-                <span class="text-xs text-slate-700 text-right">{{ formValue.reason }}</span>
-              </div>
-            }
-            <div class="h-px bg-slate-100"></div>
-            @if (selectedDoctor(); as doc) {
-              <div class="flex justify-between items-center">
-                <span class="font-bold text-slate-800 text-sm">Tổng thanh toán</span>
-                <span class="font-bold text-sky-700 text-base">{{ payableAmount() | number:'1.0-0' }} đ</span>
-              </div>
-              @if (discountAmount() > 0) {
-                <div class="flex justify-between items-center text-xs">
-                  <span class="text-emerald-600">Đã giảm từ voucher</span>
-                  <span class="font-semibold text-emerald-600">-{{ discountAmount() | number:'1.0-0' }} đ</span>
+
+              @if (selectedDoctor(); as doc) {
+                <div class="flex justify-between items-start py-2 border-b border-slate-100">
+                  <span class="text-xs text-slate-500 font-medium">Bác sĩ khám</span>
+                  <div class="text-right">
+                    <p class="text-xs font-bold text-slate-900">{{ doc.title }} {{ doc.name }}</p>
+                    <p class="text-[11px] text-slate-500">{{ doc.specialty }} · {{ doc.hospital }}</p>
+                  </div>
                 </div>
               }
-            }
-          </div>
-        </div>
 
-        @if (pendingPaymentContext(); as pendingPayment) {
-          <nz-alert
-            nzType="warning"
-            nzShowIcon
-            nzMessage="Lịch hẹn đã được tạo và đang chờ thanh toán"
-            [nzDescription]="'Tiếp tục giao dịch ' + pendingPayment.provider + '. Hệ thống sẽ không tạo lại lịch hẹn.'"
-          ></nz-alert>
-          <button
-            type="button"
-            (click)="retryPendingPayment()"
-            [disabled]="loading()"
-            class="min-h-[44px] w-full rounded-xl bg-sky-600 px-5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Tiếp tục thanh toán
-          </button>
-        }
+              <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                <span class="text-xs text-slate-500 font-medium">Thời gian khám</span>
+                <span class="text-xs font-semibold text-slate-900">{{ selectedDayLabel() }} &bull; {{ selectedSlotLabel() }}</span>
+              </div>
 
-        <!-- Payment method selection -->
-        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
-          <p class="text-xs font-bold text-slate-800">Chọn phương thức thanh toán</p>
-          <div class="grid grid-cols-2 gap-3">
-            @for (pm of paymentMethods; track pm.id) {
+              <div class="flex justify-between items-start py-2 border-b border-slate-100">
+                <span class="text-xs text-slate-500 font-medium">Lý do khám</span>
+                <span class="text-xs text-slate-700 max-w-[280px] text-right">{{ receipt.reasonForVisit || formValue.reason || 'Khám theo lịch hẹn' }}</span>
+              </div>
+
+              <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                <span class="text-xs text-slate-500 font-medium">Hình thức thanh toán</span>
+                <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                  <span>💵</span> Thanh toán tại viện (Quầy tiếp đón)
+                </span>
+              </div>
+
+              <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                <span class="text-xs text-slate-500 font-medium">Trạng thái viện phí</span>
+                <span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
+                  Chờ nộp tại quầy
+                </span>
+              </div>
+
+              <div class="flex justify-between items-center pt-2">
+                <span class="text-sm font-bold text-slate-800">Tổng chi phí dự kiến</span>
+                <span class="text-base font-bold text-emerald-700">{{ (receipt.totalAmount || payableAmount()) | number:'1.0-0' }} đ</span>
+              </div>
+            </div>
+
+            <!-- Receipt Actions -->
+            <div class="p-6 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
-                (click)="selectPayment(pm.id)"
-                class="py-3 px-4 rounded-xl border flex items-center gap-2.5 transition-all text-left"
-                [class.border-sky-500]="paymentMethod() === pm.id"
-                [class.bg-sky-50]="paymentMethod() === pm.id"
-                [class.ring-1]="paymentMethod() === pm.id"
-                [class.ring-sky-300]="paymentMethod() === pm.id"
-                [class.border-slate-200]="paymentMethod() !== pm.id"
-                [class.bg-white]="paymentMethod() !== pm.id"
+                (click)="goToHistory()"
+                class="min-h-[44px] flex-1 rounded-xl bg-sky-600 px-5 text-xs font-bold text-white transition hover:bg-sky-700 shadow-sm"
               >
-                <span class="text-xl leading-none">
-                  @if (pm.iconPath) {
-                  <img [src]="pm.iconPath" [alt]="pm.label" class="w-6 h-6">
-                    } @else {
-                  <span class="text-xl leading-none">{{ pm.icon }}</span>
-                }
-                </span>
-                <span class="text-xs font-semibold"
-                      [class.text-sky-700]="paymentMethod() === pm.id"
-                      [class.text-slate-700]="paymentMethod() !== pm.id">
-                  {{ pm.label }}
-                </span>
-                @if (paymentMethod() === pm.id) {
-                  <div class="ml-auto w-4 h-4 rounded-full bg-sky-600 flex items-center justify-center">
-                    <svg class="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                  </div>
-                }
+                Xem lịch khám của tôi
               </button>
-            }
+              <button
+                type="button"
+                (click)="resetBookingFlow()"
+                class="min-h-[44px] sm:w-auto rounded-xl border border-slate-200 bg-white px-5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                Đặt lịch khám mới
+              </button>
+            </div>
           </div>
         </div>
+      } @else {
+        <div class="max-w-[620px] mx-auto space-y-5">
 
-        <!-- Voucher -->
-        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <p class="text-xs font-bold text-slate-800">Voucher ưu đãi</p>
-              <p class="text-[11px] text-slate-400 mt-0.5">Nhập mã hoặc chọn một ưu đãi có sẵn</p>
+          <div>
+            <h2 class="text-base font-bold text-slate-900">Bước 4: Xác nhận &amp; Thanh toán</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Kiểm tra lại thông tin và chọn phương thức thanh toán</p>
+          </div>
+
+          <!-- Booking summary card -->
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="bg-gradient-to-r from-sky-600 to-indigo-600 px-5 py-3">
+              <p class="text-xs font-bold text-white/80">Tóm tắt lịch khám</p>
             </div>
-            @if (appliedVoucher(); as voucher) {
-              <button type="button" (click)="removeVoucher()" class="text-xs font-semibold text-rose-600 hover:text-rose-700">Bỏ mã</button>
+            <div class="p-5 space-y-3 text-sm">
+              @if (selectedDoctor(); as doc) {
+                <div class="flex justify-between items-start">
+                  <span class="text-slate-500 text-xs">Bác sĩ</span>
+                  <div class="text-right">
+                    <p class="font-bold text-slate-900 text-xs">{{ doc.title }} {{ doc.name }}</p>
+                    <p class="text-slate-400 text-[11px]">{{ doc.specialty }} · {{ doc.hospital }}</p>
+                  </div>
+                </div>
+              }
+              <div class="h-px bg-slate-100"></div>
+              <div class="flex justify-between items-center">
+                <span class="text-slate-500 text-xs">Ngày khám</span>
+                <span class="font-semibold text-xs text-slate-900">{{ selectedDayLabel() }}</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-slate-500 text-xs">Khung giờ</span>
+                <span class="font-semibold text-xs text-slate-900">{{ selectedSlotLabel() }}</span>
+              </div>
+              <div class="h-px bg-slate-100"></div>
+              <div class="flex justify-between items-center">
+                <span class="text-slate-500 text-xs">Bệnh nhân</span>
+                <span class="font-semibold text-xs text-slate-900">{{ formValue.fullName || '—' }}</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-slate-500 text-xs">SĐT</span>
+                <span class="font-semibold text-xs text-slate-900">{{ formValue.phone || '—' }}</span>
+              </div>
+              @if (formValue.reason) {
+                <div class="flex justify-between items-start gap-4">
+                  <span class="text-slate-500 text-xs shrink-0">Lý do khám</span>
+                  <span class="text-xs text-slate-700 text-right">{{ formValue.reason }}</span>
+                </div>
+              }
+              <div class="h-px bg-slate-100"></div>
+              @if (selectedDoctor(); as doc) {
+                <div class="flex justify-between items-center">
+                  <span class="font-bold text-slate-800 text-sm">Tổng thanh toán</span>
+                  <span class="font-bold text-sky-700 text-base">{{ payableAmount() | number:'1.0-0' }} đ</span>
+                </div>
+                @if (discountAmount() > 0) {
+                  <div class="flex justify-between items-center text-xs">
+                    <span class="text-emerald-600">Đã giảm từ voucher</span>
+                    <span class="font-semibold text-emerald-600">-{{ discountAmount() | number:'1.0-0' }} đ</span>
+                  </div>
+                }
+              }
+            </div>
+          </div>
+
+          @if (pendingPaymentContext(); as pendingPayment) {
+            <div class="space-y-3">
+              <nz-alert
+                nzType="warning"
+                nzShowIcon
+                [nzMessage]="pendingAlertTitle"
+                [nzDescription]="pendingAlertDesc"
+                class="rounded-xl border border-amber-200"
+              ></nz-alert>
+              <ng-template #pendingAlertTitle>
+                <div class="font-bold text-amber-900 text-sm leading-snug">
+                  Lịch hẹn đã được tạo và đang chờ thanh toán.
+                </div>
+              </ng-template>
+              <ng-template #pendingAlertDesc>
+                <div class="text-xs text-amber-800 mt-1 leading-relaxed">
+                  Tiếp tục giao dịch <span class="font-semibold">{{ pendingPayment.provider }}</span>. Hệ thống sẽ không tạo lại lịch hẹn mới khi giao dịch này chưa hoàn tất.
+                </div>
+              </ng-template>
+
+              <div class="flex flex-col sm:flex-row gap-2.5">
+                <button
+                  type="button"
+                  (click)="retryPendingPayment()"
+                  [disabled]="loading()"
+                  class="min-h-[44px] flex-1 rounded-xl bg-sky-600 px-5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60 shadow-sm"
+                >
+                  Tiếp tục thanh toán
+                </button>
+                <button
+                  type="button"
+                  (click)="cancelPendingPayment()"
+                  [disabled]="loading()"
+                  class="min-h-[44px] sm:w-auto rounded-xl border border-rose-300 bg-rose-50 px-5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Hủy giao dịch chờ này để đặt lại
+                </button>
+              </div>
+            </div>
+          }
+
+          <!-- Payment method selection -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+            <p class="text-xs font-bold text-slate-800">Chọn phương thức thanh toán</p>
+            <div class="grid grid-cols-2 gap-3">
+              @for (pm of paymentMethods; track pm.id) {
+                <button
+                  type="button"
+                  (click)="selectPayment(pm.id)"
+                  class="py-3 px-4 rounded-xl border flex items-center gap-2.5 transition-all text-left"
+                  [class.border-sky-500]="paymentMethod() === pm.id"
+                  [class.bg-sky-50]="paymentMethod() === pm.id"
+                  [class.ring-1]="paymentMethod() === pm.id"
+                  [class.ring-sky-300]="paymentMethod() === pm.id"
+                  [class.border-slate-200]="paymentMethod() !== pm.id"
+                  [class.bg-white]="paymentMethod() !== pm.id"
+                >
+                  <span class="text-xl leading-none">
+                    @if (pm.iconPath) {
+                    <img [src]="pm.iconPath" [alt]="pm.label" class="w-6 h-6">
+                      } @else {
+                    <span class="text-xl leading-none">{{ pm.icon }}</span>
+                  }
+                  </span>
+                  <span class="text-xs font-semibold"
+                        [class.text-sky-700]="paymentMethod() === pm.id"
+                        [class.text-slate-700]="paymentMethod() !== pm.id">
+                    {{ pm.label }}
+                  </span>
+                  @if (paymentMethod() === pm.id) {
+                    <div class="ml-auto w-4 h-4 rounded-full bg-sky-600 flex items-center justify-center">
+                      <svg class="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    </div>
+                  }
+                </button>
+              }
+            </div>
+          </div>
+
+          <!-- Voucher -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-bold text-slate-800">Voucher ưu đãi</p>
+                <p class="text-[11px] text-slate-400 mt-0.5">Nhập mã hoặc chọn một ưu đãi có sẵn</p>
+              </div>
+              @if (appliedVoucher(); as voucher) {
+                <button type="button" (click)="removeVoucher()" class="text-xs font-semibold text-rose-600 hover:text-rose-700">Bỏ mã</button>
+              }
+            </div>
+
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <input
+                #voucherInput
+                [value]="voucherCode()"
+                (input)="voucherCode.set(voucherInput.value)"
+                (keyup.enter)="applyVoucher()"
+                type="text"
+                placeholder="Nhập mã voucher"
+                class="min-h-[44px] flex-1 rounded-xl border border-slate-200 px-3 text-sm uppercase outline-none transition placeholder:normal-case focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              />
+              <button type="button" (click)="applyVoucher()" class="min-h-[44px] rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-700">
+                Áp dụng
+              </button>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              @for (voucher of vouchers(); track voucher.code) {
+                <button
+                  type="button"
+                  (click)="selectVoucher(voucher.code)"
+                  class="rounded-full border px-3 py-2 text-left text-[11px] transition"
+                  [class.border-emerald-400]="appliedVoucher()?.code === voucher.code"
+                  [class.bg-emerald-50]="appliedVoucher()?.code === voucher.code"
+                  [class.text-emerald-700]="appliedVoucher()?.code === voucher.code"
+                  [class.border-slate-200]="appliedVoucher()?.code !== voucher.code"
+                  [class.text-slate-600]="appliedVoucher()?.code !== voucher.code"
+                >
+                  <span class="font-bold">{{ voucher.code }}</span>
+                  <span class="ml-1">· Giảm {{ voucher.discountPercent }}%</span>
+                </button>
+              }
+            </div>
+
+            @if (voucherMessage(); as message) {
+              <p class="text-xs" [class.text-emerald-600]="appliedVoucher()" [class.text-rose-600]="!appliedVoucher()">{{ message }}</p>
             }
           </div>
 
-          <div class="flex flex-col gap-2 sm:flex-row">
-            <input
-              #voucherInput
-              [value]="voucherCode()"
-              (input)="voucherCode.set(voucherInput.value)"
-              (keyup.enter)="applyVoucher()"
-              type="text"
-              placeholder="Nhập mã voucher"
-              class="min-h-[44px] flex-1 rounded-xl border border-slate-200 px-3 text-sm uppercase outline-none transition placeholder:normal-case focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-            />
-            <button type="button" (click)="applyVoucher()" class="min-h-[44px] rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-700">
-              Áp dụng
+          <app-patient-consent-checkbox
+            [(ngModel)]="consentAccepted"
+            [ngModelOptions]="{ standalone: true }"
+            [showError]="consentError"
+            (ngModelChange)="consentError = false"
+          ></app-patient-consent-checkbox>
+
+          <!-- Terms note -->
+          <p class="text-[11px] text-slate-400 text-center leading-relaxed">
+            Bằng cách xác nhận, bạn đồng ý với
+            <span class="text-sky-600 font-medium">Điều khoản dịch vụ</span> và
+            <span class="text-sky-600 font-medium">Chính sách hoàn tiền</span> của E-Healthcare.
+          </p>
+
+          <!-- Footer nav -->
+          <div class="flex justify-between items-center pt-2">
+            <button type="button" (click)="goToStep(3)"
+                    class="min-h-[44px] px-5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
+              ← Sửa hồ sơ
+            </button>
+            <button type="button" (click)="submitBooking()" [disabled]="loading()"
+                    class="min-h-[44px] px-8 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-xs font-bold text-white shadow-md transition">
+              @if (loading()) { Đang xử lý... } @else { Xác nhận đặt khám }
             </button>
           </div>
 
-          <div class="flex flex-wrap gap-2">
-            @for (voucher of vouchers(); track voucher.code) {
-              <button
-                type="button"
-                (click)="selectVoucher(voucher.code)"
-                class="rounded-full border px-3 py-2 text-left text-[11px] transition"
-                [class.border-emerald-400]="appliedVoucher()?.code === voucher.code"
-                [class.bg-emerald-50]="appliedVoucher()?.code === voucher.code"
-                [class.text-emerald-700]="appliedVoucher()?.code === voucher.code"
-                [class.border-slate-200]="appliedVoucher()?.code !== voucher.code"
-                [class.text-slate-600]="appliedVoucher()?.code !== voucher.code"
-              >
-                <span class="font-bold">{{ voucher.code }}</span>
-                <span class="ml-1">· Giảm {{ voucher.discountPercent }}%</span>
-              </button>
-            }
-          </div>
-
-          @if (voucherMessage(); as message) {
-            <p class="text-xs" [class.text-emerald-600]="appliedVoucher()" [class.text-rose-600]="!appliedVoucher()">{{ message }}</p>
-          }
         </div>
-
-        <app-patient-consent-checkbox
-          [(ngModel)]="consentAccepted"
-          [ngModelOptions]="{ standalone: true }"
-          [showError]="consentError"
-          (ngModelChange)="consentError = false"
-        ></app-patient-consent-checkbox>
-
-        <!-- Terms note -->
-        <p class="text-[11px] text-slate-400 text-center leading-relaxed">
-          Bằng cách xác nhận, bạn đồng ý với
-          <span class="text-sky-600 font-medium">Điều khoản dịch vụ</span> và
-          <span class="text-sky-600 font-medium">Chính sách hoàn tiền</span> của E-Healthcare.
-        </p>
-
-        <!-- Footer nav -->
-        <div class="flex justify-between items-center pt-2">
-          <button type="button" (click)="goToStep(3)"
-                  class="min-h-[44px] px-5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
-            ← Sửa hồ sơ
-          </button>
-          <button type="button" (click)="submitBooking()" [disabled]="loading()"
-                  class="min-h-[44px] px-8 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-xs font-bold text-white shadow-md transition">
-            @if (loading()) { Đang xử lý... } @else { Xác nhận đặt khám }
-          </button>
-        </div>
-
-      </div>
+      }
     }
 
   </div>

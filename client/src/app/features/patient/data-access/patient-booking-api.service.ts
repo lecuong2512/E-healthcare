@@ -94,11 +94,29 @@ export class PatientBookingApiService {
     appointmentId: string,
     provider: PaymentMethod.VNPAY | PaymentMethod.MOMO,
     idempotencyKey: string,
+    supersedeActive?: boolean,
   ): Observable<InitiatePaymentResponse> {
+    const body: { provider: PaymentMethod.VNPAY | PaymentMethod.MOMO; supersedeActive?: boolean } = { provider };
+    if (supersedeActive) {
+      body.supersedeActive = true;
+    }
     return this.http.post<InitiatePaymentResponse>(
       `${this.api}/payments/${encodeURIComponent(appointmentId)}/initiate`,
-      { provider },
+      body,
       { headers: new HttpHeaders({ 'Idempotency-Key': idempotencyKey }) },
+    );
+  }
+
+  cancelAppointment(
+    appointmentId: string,
+    reason?: string,
+  ): Observable<{ success: boolean; message?: string }> {
+    return this.http.post<{ success: boolean; message?: string }>(
+      `${this.api}/appointments/${encodeURIComponent(appointmentId)}/cancel`,
+      {
+        reason: reason || 'Hủy giao dịch chờ thanh toán để đặt lại',
+        consentAccepted: true,
+      },
     );
   }
 

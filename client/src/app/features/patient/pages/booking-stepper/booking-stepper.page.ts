@@ -4,7 +4,9 @@ import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppointmentStatus, PaymentMethod, PaymentStatus, PaymentTransactionStatus } from '@shared/enums';
+import { AppointmentResponse } from '@shared/interfaces';
 import { NzAlertModule } from 'ng-zorro-antd/alert';
+import { NzMessageModule, NzMessageService } from 'ng-zorro-antd/message';
 import { catchError, finalize, of, switchMap } from 'rxjs';
 
 import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
@@ -47,7 +49,14 @@ export interface SlotItem {
 @Component({
   selector: 'app-booking-stepper-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, FormsModule, PatientConsentCheckboxComponent, NzAlertModule],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    FormsModule,
+    PatientConsentCheckboxComponent,
+    NzAlertModule,
+    NzMessageModule,
+  ],
   templateUrl: './booking-stepper.page.html',
 })
 export class BookingStepperPage implements OnDestroy {
@@ -56,8 +65,10 @@ export class BookingStepperPage implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(PatientBookingApiService);
   private readonly paymentRedirect = inject(PaymentRedirectService);
+  private readonly message = inject(NzMessageService);
 
   readonly step = signal(1);
+  readonly payAtClinicReceipt = signal<AppointmentResponse | null>(null);
   readonly specialties = ['Tất cả', 'Tim mạch', 'Nội tổng quát', 'Ngoại khoa', 'Nhi khoa', 'Da liễu', 'Tai Mũi Họng'];
   readonly selectedSpecialty = signal('Tất cả');
   readonly searchQuery = signal('');
@@ -148,6 +159,7 @@ export class BookingStepperPage implements OnDestroy {
     });
     const pendingPayment = this.pendingPaymentContext();
     if (pendingPayment) {
+      this.paymentMethod.set(pendingPayment.provider);
       this.bookingCommitted = true;
       this.step.set(4);
       this.checkPendingPayment(pendingPayment, false);
@@ -260,17 +272,40 @@ export class BookingStepperPage implements OnDestroy {
 
   submitBooking(): void {
     const pendingPayment = this.pendingPaymentContext();
+    const currentMethod = this.paymentMethod();
+
     if (pendingPayment) {
-      this.initiateOnlinePayment(pendingPayment);
-      return;
+      if (currentMethod === PaymentMethod.VNPAY || currentMethod === PaymentMethod.MOMO) {
+        if (currentMethod !== pendingPayment.provider) {
+          // Switch payment provider for the active pending appointment
+          const newContext: PendingPaymentContext = {
+            appointmentId: pendingPayment.appointmentId,
+            provider: currentMethod,
+            idempotencyKey: crypto.randomUUID(),
+          };
+          this.persistPendingPaymentContext(newContext);
+          this.initiateOnlinePayment(newContext, true);
+          return;
+        }
+        // Same provider -> resume
+        this.initiateOnlinePayment(pendingPayment, false);
+        return;
+      }
+
+      if (currentMethod === PaymentMethod.PAY_AT_CLINIC) {
+        this.message.warning(
+          'Lịch hẹn hiện tại đang ở hình thức thanh toán trực tuyến. Vui lòng bấm "Hủy giao dịch chờ" nếu bạn muốn đổi sang thanh toán tại viện.',
+        );
+        return;
+      }
     }
+
     const doctorId = this.selectedDoctorId();
     const slotId = this.selectedSlotId();
     if (!doctorId || !slotId || !this.reservationId || this.patientForm.invalid) return;
     if (!this.consentAccepted) { this.consentError = true; return; }
     if (this.loading()) return;
 
-    const method = this.paymentMethod();
     this.loading.set(true);
     this.errorMessage.set(null);
     this.api.confirmBooking({
@@ -278,19 +313,24 @@ export class BookingStepperPage implements OnDestroy {
       slotId,
       reservationId: this.reservationId,
       reasonForVisit: this.patientForm.value.reason?.trim() || 'Khám theo lịch hẹn',
-      paymentMethod: method,
+      paymentMethod: currentMethod,
       voucherCode: this.appliedVoucher()?.code,
     }).pipe(finalize(() => this.loading.set(false))).subscribe({
       next: (appointment) => {
         this.bookingCommitted = true;
-        if (method === PaymentMethod.PAY_AT_CLINIC) {
-          void this.router.navigate(['/patient/history']);
+        if (currentMethod === PaymentMethod.PAY_AT_CLINIC) {
+          this.clearPendingPaymentContext();
+          this.payAtClinicReceipt.set(appointment);
+          this.message.success(
+            'Đặt lịch thành công! Vui lòng có mặt tại quầy tiếp đón trước giờ khám để nộp viện phí.',
+            { nzDuration: 6000 },
+          );
           return;
         }
         this.idempotencyKey ||= crypto.randomUUID();
         const context: PendingPaymentContext = {
           appointmentId: appointment.id,
-          provider: method,
+          provider: currentMethod,
           idempotencyKey: this.idempotencyKey,
         };
         this.persistPendingPaymentContext(context);
@@ -304,6 +344,53 @@ export class BookingStepperPage implements OnDestroy {
   retryPendingPayment(): void {
     const context = this.pendingPaymentContext();
     if (context) this.checkPendingPayment(context, true);
+  }
+
+  cancelPendingPayment(): void {
+    const context = this.pendingPaymentContext();
+    if (!context) {
+      this.clearPendingPaymentContext();
+      return;
+    }
+    if (this.loading()) return;
+    this.loading.set(true);
+    this.errorMessage.set(null);
+    this.api.cancelAppointment(context.appointmentId, 'Hủy giao dịch chờ thanh toán để đặt lại')
+      .pipe(finalize(() => this.loading.set(false)))
+      .subscribe({
+        next: () => {
+          this.clearPendingPaymentContext();
+          this.bookingCommitted = false;
+          this.reservationId = null;
+          this.selectedSlotId.set(null);
+          this.message.info('Đã hủy giao dịch chờ. Bạn có thể chọn lại lịch khám mới.');
+          this.step.set(2);
+        },
+        error: () => {
+          this.clearPendingPaymentContext();
+          this.bookingCommitted = false;
+          this.reservationId = null;
+          this.selectedSlotId.set(null);
+          this.message.info('Giao dịch chờ đã được hủy bỏ hoặc đã hết hạn.');
+          this.step.set(2);
+        },
+      });
+  }
+
+  goToHistory(): void {
+    void this.router.navigate(['/patient/history']);
+  }
+
+  resetBookingFlow(): void {
+    this.payAtClinicReceipt.set(null);
+    this.clearPendingPaymentContext();
+    this.bookingCommitted = false;
+    this.reservationId = null;
+    this.selectedSlotId.set(null);
+    this.patientForm.reset();
+    this.consentAccepted = false;
+    this.consentError = false;
+    this.step.set(1);
   }
 
   goToStep(step: number): void { this.step.set(step); }
@@ -434,15 +521,18 @@ export class BookingStepperPage implements OnDestroy {
       });
   }
 
-  private initiateOnlinePayment(context: PendingPaymentContext): void {
+  private initiateOnlinePayment(
+    context: PendingPaymentContext,
+    supersedeActive = false,
+  ): void {
     if (this.loading()) return;
     this.loading.set(true);
     this.errorMessage.set(null);
-    this.api.initiatePayment(
-      context.appointmentId,
-      context.provider,
-      context.idempotencyKey,
-    ).pipe(finalize(() => this.loading.set(false))).subscribe({
+    const payment$ = supersedeActive
+      ? this.api.initiatePayment(context.appointmentId, context.provider, context.idempotencyKey, true)
+      : this.api.initiatePayment(context.appointmentId, context.provider, context.idempotencyKey);
+
+    payment$.pipe(finalize(() => this.loading.set(false))).subscribe({
       next: (payment) => {
         sessionStorage.setItem('pendingPaymentAppointmentId', context.appointmentId);
         try {
