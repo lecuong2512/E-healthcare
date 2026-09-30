@@ -4,12 +4,15 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { AuditAction } from '@shared/enums';
 import { PrescriptionPdfPayload } from '@shared/interfaces';
-import { MedicalRecordEntity } from '../../database/entities/medical-record.entity';
-import { PrescriptionEntity } from '../../database/entities/prescription.entity';
+import { DataSource } from 'typeorm';
 import { environment } from '../../config/environment';
+import { PrescriptionEntity } from '../../database/entities/prescription.entity';
+import { AuditContext } from '../audit/audit-context';
+import { AuditService } from '../audit/audit.service';
 import { PdfGeneratorService } from '../notification/services/pdf-generator.service';
+import { ClinicalEncryptedStore } from './clinical-encrypted.store';
 
 export function canonicalPrescriptionPayload(
   prescriptionCode: string,
@@ -29,7 +32,10 @@ export function createPrescriptionHash(
   createdAt: Date | string,
 ): string {
   return createHash('sha256')
-    .update(canonicalPrescriptionPayload(prescriptionCode, doctorId, createdAt), 'utf8')
+    .update(
+      canonicalPrescriptionPayload(prescriptionCode, doctorId, createdAt),
+      'utf8',
+    )
     .digest('hex');
 }
 
@@ -38,36 +44,40 @@ export class PrescriptionPdfService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly pdfGenerator: PdfGeneratorService,
+    private readonly encryptedStore: ClinicalEncryptedStore,
+    private readonly auditService: AuditService,
   ) {}
 
   async generateForPatient(
     appointmentId: string,
     patientId: string,
+    auditContext: AuditContext,
   ): Promise<{ prescriptionCode: string; buffer: Buffer }> {
-    const record = await this.dataSource.getRepository(MedicalRecordEntity).findOne({
-      where: { appointmentId, patientId },
-      relations: {
-        patient: true,
-        doctor: { user: true },
-        appointment: true,
-      },
-    });
+    const manager = this.dataSource.manager;
+    const record =
+      await this.encryptedStore.findMedicalRecordForPatientByAppointment(
+        manager,
+        appointmentId,
+        patientId,
+      );
     if (
       !record ||
       record.appointment?.patientId !== patientId ||
       record.appointment.doctorId !== record.doctorId
     ) {
-      throw new NotFoundException('Không tìm thấy đơn thuốc cho lịch hẹn này.');
+      throw new NotFoundException(
+        'Không tìm thấy đơn thuốc cho lịch hẹn này.',
+      );
     }
 
-    const prescription = await this.dataSource
-      .getRepository(PrescriptionEntity)
-      .findOne({
-        where: { medicalRecordId: record.id },
-        relations: { items: true },
-      });
+    const prescription = await this.encryptedStore.findPrescription(
+      manager,
+      record.id,
+    );
     if (!prescription) {
-      throw new NotFoundException('Không tìm thấy đơn thuốc cho lịch hẹn này.');
+      throw new NotFoundException(
+        'Không tìm thấy đơn thuốc cho lịch hẹn này.',
+      );
     }
 
     const hash = createPrescriptionHash(
@@ -75,7 +85,6 @@ export class PrescriptionPdfService {
       record.doctorId,
       prescription.createdAt,
     );
-    const verificationUrl = this.verificationUrl(prescription.prescriptionCode, hash);
     const payload: PrescriptionPdfPayload = {
       prescriptionCode: prescription.prescriptionCode,
       appointmentCode: record.appointment.appointmentCode,
@@ -94,19 +103,34 @@ export class PrescriptionPdfService {
         dosageNoon: item.dosageNoon ?? undefined,
         dosageAfternoon: item.dosageAfternoon ?? undefined,
         dosageNight: item.dosageNight ?? undefined,
-        usageInstruction: item.usageInstructions ?? 'Chưa có hướng dẫn sử dụng.',
+        usageInstruction:
+          item.usageInstructions ?? 'Chưa có hướng dẫn sử dụng.',
       })),
       doctorAdvice: record.doctorAdvice ?? undefined,
       followUpDate: record.followUpDate,
       createdAt: prescription.createdAt.toISOString(),
       verificationHash: hash,
-      verificationUrl,
+      verificationUrl: this.verificationUrl(
+        prescription.prescriptionCode,
+        hash,
+      ),
     };
 
-    return {
+    const result = {
       prescriptionCode: prescription.prescriptionCode,
       buffer: await this.pdfGenerator.generatePrescriptionPdf(payload),
     };
+
+    // Fail closed: a sensitive export is not returned unless its audit event
+    // is durably appended. No decrypted clinical payload is stored in metadata.
+    await this.dataSource.transaction((manager) =>
+      this.auditService.record(manager, auditContext, {
+        action: AuditAction.EXPORT_RX,
+        resourceType: 'PRESCRIPTION',
+        resourceId: prescription.id,
+      }),
+    );
+    return result;
   }
 
   async verify(
@@ -117,6 +141,8 @@ export class PrescriptionPdfService {
       return { valid: false };
     }
 
+    // Verification reads identifiers only. It intentionally does not decrypt
+    // clinical notes, vital signs or prescription items.
     const prescription = await this.dataSource
       .getRepository(PrescriptionEntity)
       .findOne({
@@ -140,12 +166,16 @@ export class PrescriptionPdfService {
       prescription.createdAt,
     );
     return {
-      valid: timingSafeEqual(Buffer.from(expectedHash, 'hex'), Buffer.from(suppliedHash, 'hex')),
+      valid: timingSafeEqual(
+        Buffer.from(expectedHash, 'hex'),
+        Buffer.from(suppliedHash, 'hex'),
+      ),
     };
   }
 
   private verificationUrl(prescriptionCode: string, hash: string): string {
-    const configuredBaseUrl = environment.PRESCRIPTION_VERIFICATION_BASE_URL?.trim();
+    const configuredBaseUrl =
+      environment.PRESCRIPTION_VERIFICATION_BASE_URL?.trim();
     if (!configuredBaseUrl) {
       throw new ServiceUnavailableException(
         'Prescription verification URL is not configured.',

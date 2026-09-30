@@ -7,6 +7,9 @@ describe('Medical encryption configuration', () => {
     '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
   const previousKey =
     'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+  const originalCurrentKey = environment.MEDICAL_DATA_ENCRYPTION_KEY;
+  const originalCurrentVersion =
+    environment.MEDICAL_DATA_ENCRYPTION_KEY_VERSION;
   const originalPreviousKeys = environment.MEDICAL_DATA_ENCRYPTION_KEYS_JSON;
 
   beforeEach(() => {
@@ -16,6 +19,17 @@ describe('Medical encryption configuration', () => {
   });
 
   afterAll(() => {
+    if (originalCurrentKey === undefined) {
+      delete environment.MEDICAL_DATA_ENCRYPTION_KEY;
+    } else {
+      environment.MEDICAL_DATA_ENCRYPTION_KEY = originalCurrentKey;
+    }
+    if (originalCurrentVersion === undefined) {
+      delete environment.MEDICAL_DATA_ENCRYPTION_KEY_VERSION;
+    } else {
+      environment.MEDICAL_DATA_ENCRYPTION_KEY_VERSION =
+        originalCurrentVersion;
+    }
     if (originalPreviousKeys === undefined) {
       delete environment.MEDICAL_DATA_ENCRYPTION_KEYS_JSON;
     } else {
@@ -33,6 +47,30 @@ describe('Medical encryption configuration', () => {
     expect(config.currentVersion).toBe(2);
     expect(config.keys.get(1)).toBe(previousKey);
     expect(config.keys.get(2)).toBe(currentKey);
+  });
+
+  it('fails fast when the current encryption key is missing', () => {
+    delete environment.MEDICAL_DATA_ENCRYPTION_KEY;
+
+    expect(() => loadMedicalEncryptionConfig()).toThrow(
+      'MEDICAL_DATA_ENCRYPTION_KEY must contain exactly 64 hexadecimal characters.',
+    );
+  });
+
+  it('fails fast when the current encryption key is not 64 hexadecimal characters', () => {
+    environment.MEDICAL_DATA_ENCRYPTION_KEY = 'not-a-valid-key';
+
+    expect(() => loadMedicalEncryptionConfig()).toThrow(
+      'MEDICAL_DATA_ENCRYPTION_KEY must contain exactly 64 hexadecimal characters.',
+    );
+  });
+
+  it('rejects an invalid encryption key version', () => {
+    environment.MEDICAL_DATA_ENCRYPTION_KEY_VERSION = '0';
+
+    expect(() => loadMedicalEncryptionConfig()).toThrow(
+      'MEDICAL_DATA_ENCRYPTION_KEY_VERSION must be an integer from 1 to 32767.',
+    );
   });
 
   it('rejects a keyring that redefines the current key version', () => {

@@ -44,10 +44,12 @@ export class ClinicalController {
     const result = await this.prescriptionPdf.generateForPatient(
       appointmentId,
       req.auth!.userId,
+      auditContextFromRequest(req),
     );
+    const safeCode = result.prescriptionCode.replace(/[^a-zA-Z0-9_-]/g, '_');
     return new StreamableFile(result.buffer, {
       type: 'application/pdf',
-      disposition: `attachment; filename="${result.prescriptionCode.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf"`,
+      disposition: `attachment; filename="${safeCode}.pdf"`,
     });
   }
 
