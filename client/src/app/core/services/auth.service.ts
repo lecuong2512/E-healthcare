@@ -39,7 +39,10 @@ export class AuthService {
         { withCredentials: true }, // để backend set HttpOnly refresh-token cookie
       )
       .pipe(
-        tap((res) => this.tokenStore.setSession(res.accessToken, res.role, res.user)),
+        tap((res) => {
+          this.tokenStore.setSession(res.accessToken, res.role, res.user);
+          this.fetchProfile().subscribe({ error: () => {} });
+        }),
       );
   }
 
@@ -125,7 +128,10 @@ export class AuthService {
         { withCredentials: true },
       )
       .pipe(
-        tap((res) => this.tokenStore.setSession(res.accessToken, res.role, res.user)),
+        tap((res) => {
+          this.tokenStore.setSession(res.accessToken, res.role, res.user);
+          this.fetchProfile().subscribe({ error: () => {} });
+        }),
       );
   }
 
