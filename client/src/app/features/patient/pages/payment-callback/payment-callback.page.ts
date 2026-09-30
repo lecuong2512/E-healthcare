@@ -1,63 +1,31 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, ParamMap, Router, RouterModule } from '@angular/router';
+import { toDataURL } from 'qrcode';
+import { environment } from '../../../../../environments/environment';
+import { CurrencyVndPipe } from '../../../../shared/pipes/currency-vnd.pipe';
 
 type PaymentProvider = 'VNPAY' | 'MOMO';
-type CallbackState = 'loading' | 'invalid' | 'verification-unavailable';
+type CallbackState = 'loading' | 'invalid' | 'verification-unavailable' | 'success';
+
+interface VerifiedPaymentResult {
+  appointment: {
+    appointmentCode: string;
+    doctorName: string;
+    scheduleLabel: string;
+    qrPayload: string;
+  };
+  payment: {
+    paidAmount: number;
+    bankTransactionId: string;
+  };
+}
 
 @Component({
   selector: 'app-payment-callback-page',
   standalone: true,
-  imports: [CommonModule, RouterModule],
-  template: `
-    <main class="min-h-screen bg-slate-50 px-4 py-10 sm:px-6">
-      <section class="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div class="border-b border-slate-200 px-6 py-7 text-center sm:px-9">
-          <div class="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-amber-50 text-amber-700" aria-hidden="true">
-            <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7v5m0 4h.01" stroke-linecap="round" />
-            </svg>
-          </div>
-          <p class="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">Kết quả thanh toán</p>
-          @if (state() === 'loading') {
-            <h1 class="mt-2 text-2xl font-bold text-slate-900">Đang kiểm tra giao dịch</h1>
-          } @else if (state() === 'invalid') {
-            <h1 class="mt-2 text-2xl font-bold text-slate-900">Callback không hợp lệ</h1>
-          } @else {
-            <h1 class="mt-2 text-2xl font-bold text-slate-900">Chưa thể xác minh thanh toán</h1>
-          }
-        </div>
-
-        <div class="space-y-6 p-6 sm:p-9">
-          @if (state() === 'loading') {
-            <div class="flex items-center justify-center gap-3 py-4 text-sm text-slate-600" role="status" aria-live="polite">
-              <span class="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-sky-700"></span>
-              Đang xác minh với hệ thống thanh toán...
-            </div>
-          } @else {
-            <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="alert">
-              @if (state() === 'invalid') {
-                <p>{{ message() }}</p>
-              } @else {
-                <p>Đã nhận callback{{ provider() ? ' từ ' + provider() : '' }}, nhưng frontend chưa có API Backend để xác minh giao dịch.</p>
-                <p class="mt-2">Không thể xác nhận thanh toán từ tham số trên URL. Trạng thái giao dịch và lịch hẹn chưa được thay đổi.</p>
-              }
-            </div>
-          }
-
-          <div class="grid gap-3 sm:grid-cols-2">
-            <button type="button" (click)="goToHistory()" class="min-h-11 rounded-lg border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-600 focus:ring-offset-2">
-              Xem lịch sử khám
-            </button>
-            <button type="button" (click)="goHome()" class="min-h-11 rounded-lg bg-sky-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-600 focus:ring-offset-2">
-              Quay lại trang chủ
-            </button>
-          </div>
-        </div>
-      </section>
-    </main>
-  `,
+  imports: [CommonModule, RouterModule, CurrencyVndPipe],
+  templateUrl: './payment-callback.page.html',
 })
 export class PaymentCallbackPage {
   private readonly route = inject(ActivatedRoute);
@@ -66,9 +34,55 @@ export class PaymentCallbackPage {
   readonly state = signal<CallbackState>('loading');
   readonly provider = signal<PaymentProvider | null>(null);
   readonly message = signal('Callback thiếu hoặc không có tham số thanh toán hợp lệ.');
+  readonly showDemoControls = !environment.production;
+  readonly verifiedPayment = signal<VerifiedPaymentResult | null>(null);
+  readonly qrDataUrl = signal('');
 
   constructor() {
     this.route.queryParamMap.subscribe((params) => this.readCallback(params));
+  }
+
+  async simulateBackendSuccess(): Promise<void> {
+    if (!this.showDemoControls) return;
+
+    const response: VerifiedPaymentResult = {
+      appointment: {
+        appointmentCode: 'DEMO-APT-20261002-001',
+        doctorName: 'BS. Nguyễn Minh Anh',
+        scheduleLabel: '09:30 - 10:00, 02/10/2026',
+        qrPayload: 'DEMO-CHECK-IN:DEMO-APT-20261002-001',
+      },
+      payment: {
+        paidAmount: 350000,
+        bankTransactionId: 'DEMO-BANK-TXN-000001',
+      },
+    };
+
+    this.state.set('loading');
+    try {
+      const qrDataUrl = await toDataURL(response.appointment.qrPayload, {
+        width: 220,
+        margin: 1,
+        errorCorrectionLevel: 'M',
+      });
+      this.verifiedPayment.set(response);
+      this.qrDataUrl.set(qrDataUrl);
+      this.state.set('success');
+    } catch {
+      this.message.set('Không thể tạo ảnh QR mô phỏng. Vui lòng thử lại.');
+      this.state.set('verification-unavailable');
+    }
+  }
+
+  saveQr(): void {
+    const result = this.verifiedPayment();
+    const qrDataUrl = this.qrDataUrl();
+    if (!result || !qrDataUrl) return;
+
+    const link = document.createElement('a');
+    link.href = qrDataUrl;
+    link.download = `${result.appointment.appointmentCode}-qr.png`;
+    link.click();
   }
 
   goToHistory(): void {
@@ -80,6 +94,8 @@ export class PaymentCallbackPage {
   }
 
   private readCallback(params: ParamMap): void {
+    this.verifiedPayment.set(null);
+    this.qrDataUrl.set('');
     const hasVnpayFields = ['vnp_ResponseCode', 'vnp_TxnRef', 'vnp_SecureHash']
       .some((key) => params.has(key));
     const hasMomoFields = ['resultCode', 'orderId'].some((key) => params.has(key));

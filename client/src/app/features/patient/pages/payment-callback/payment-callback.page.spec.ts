@@ -39,6 +39,24 @@ describe('PaymentCallbackPage', () => {
     expect(fixture.nativeElement.textContent).toContain('chưa có API Backend');
   });
 
+  it('renders a clearly labeled success receipt from the development Backend simulation', async () => {
+    await createPage({ resultCode: '0', orderId: 'order-1' });
+
+    await fixture.componentInstance.simulateBackendSuccess();
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(fixture.componentInstance.state()).toBe('success');
+    expect(text).toContain('Thanh toán & Đặt khám thành công!');
+    expect(text).toContain('Mô phỏng kết quả Backend - không phải giao dịch thật');
+    expect(text).toContain('BS. Nguyễn Minh Anh');
+    expect(text).toContain('350.000');
+    expect(text).toContain('DEMO-BANK-TXN-000001');
+    expect(fixture.nativeElement.querySelector('img[alt="Mã QR lịch hẹn mô phỏng"]')).toBeTruthy();
+    expect(text).toContain('Lưu mã QR vào máy');
+    expect(text).toContain('Xem trong lịch sử khám');
+  });
+
   it('shows an invalid callback state when required provider parameters are missing', async () => {
     await createPage({ vnp_ResponseCode: '00', vnp_TxnRef: 'txn-1' });
 

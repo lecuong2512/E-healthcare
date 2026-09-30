@@ -98,6 +98,9 @@ import { environment } from 'src/environments/environment';
               <a routerLink="/patient/profile" class="text-sky-700 underline"
                 >profile</a
               >
+              <a routerLink="/patient/booking/payment-callback" class="text-sky-700 underline"
+                >payment-callback</a
+              >
             </div>
 
             <div class="flex flex-wrap gap-3">
