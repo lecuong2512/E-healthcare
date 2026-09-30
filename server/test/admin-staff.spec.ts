@@ -160,4 +160,47 @@ describe('StaffAdminService', () => {
     expect(specialtyRepo.save).toHaveBeenCalledWith(expect.objectContaining({ doctorId: 'd1', specialtyId: 'sp-1', isPrimary: true }));
     expect(specialtyRepo.save).toHaveBeenCalledWith(expect.objectContaining({ doctorId: 'd1', specialtyId: 'sp-2', isPrimary: false }));
   });
+
+  it('rejects creating staff when email is already registered', async () => {
+    const existing = { id: 'u0', fullName: 'Trần Bình', email: 'binh@example.com' };
+    const userRepo = { findOneBy: jest.fn().mockResolvedValue(existing) };
+    const dataSource = {
+      getRepository: jest.fn((entity) => entity === UserEntity ? userRepo : null),
+    } as unknown as DataSource;
+    const service = new StaffAdminService(dataSource);
+
+    await expect(service.create({
+      fullName: 'Bác sĩ Mới',
+      email: 'binh@example.com',
+      password: 'Password123!',
+      role: Role.RECEPTIONIST,
+      gender: Gender.MALE,
+      dateOfBirth: '1990-01-01',
+    })).rejects.toThrow('Email "binh@example.com" đã được sử dụng cho tài khoản khác (Trần Bình).');
+  });
+
+  it('rejects creating staff when phone number is already registered', async () => {
+    const existing = { id: 'u0', fullName: 'Trần Bình', phoneNumber: '0987654321' };
+    const userRepo = {
+      findOneBy: jest.fn().mockImplementation(async (criteria: any) => {
+        if (criteria.email) return null;
+        if (criteria.phoneNumber === '0987654321') return existing;
+        return null;
+      }),
+    };
+    const dataSource = {
+      getRepository: jest.fn((entity) => entity === UserEntity ? userRepo : null),
+    } as unknown as DataSource;
+    const service = new StaffAdminService(dataSource);
+
+    await expect(service.create({
+      fullName: 'Bác sĩ Mới',
+      email: 'new@example.com',
+      phoneNumber: '0987654321',
+      password: 'Password123!',
+      role: Role.RECEPTIONIST,
+      gender: Gender.MALE,
+      dateOfBirth: '1990-01-01',
+    })).rejects.toThrow('Số điện thoại "0987654321" đã được sử dụng cho tài khoản khác (Trần Bình).');
+  });
 });

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
 import { DateOfBirthPrecision, Gender, Role, UserStatus } from '@shared/enums';
 import { UserEntity } from '../../database/entities/user.entity';
@@ -118,54 +118,66 @@ export class StaffAdminService {
     const specialtyIds = [...new Set(input.specialtyIds?.filter(Boolean) ?? (input.specialtyId ? [input.specialtyId] : []))];
     if (input.role === Role.DOCTOR && (!specialtyIds.length || !input.licenseNumber || !input.roomNumber || input.yearsExperience == null || input.yearsExperience < 0)) throw new BadRequestException('Bác sĩ cần CCHN, chuyên khoa, phòng khám và số năm kinh nghiệm.');
     if (input.role === Role.DOCTOR) await this.validateLicenseNumber(input.licenseNumber!);
-    return this.dataSource.transaction(async manager => {
-      const user = await manager.save(manager.create(UserEntity, { fullName: input.fullName.trim(), email: input.email.trim().toLowerCase(), phoneNumber: input.phoneNumber?.trim() || null, passwordHash: await hashPassword(input.password), gender: input.gender, dateOfBirth: input.dateOfBirth, status: UserStatus.ACTIVE, dateOfBirthPrecision: DateOfBirthPrecision.FULL_DATE, failedLoginAttempts: 0, loginLockedUntil: null, googleSubject: null }));
-      await manager.save(manager.create(UserRoleEntity, { userId: user.id, role: input.role }));
-      if (input.role === Role.DOCTOR) {
-        const normRoom = input.roomNumber!.trim().toUpperCase();
-        const doctor = await manager.save(manager.create(DoctorEntity, { userId: user.id, specialtyId: specialtyIds[0], licenseNumber: input.licenseNumber!, academicTitle: input.academicTitle ?? null, yearsExperience: input.yearsExperience!, consultationFee: 0, bioDescription: null, roomNumber: normRoom, ratingAverage: 5 }));
-        for (const [index, specialtyId] of specialtyIds.entries()) await manager.save(manager.create(DoctorSpecialtyEntity, { doctorId: doctor.id, specialtyId, isPrimary: index === 0 }));
 
-        // Đồng bộ phòng khám: đảm bảo phòng tồn tại trong danh mục clinic_rooms
-        const roomRepo = manager.getRepository?.(ClinicRoomEntity);
-        if (roomRepo?.findOneBy) {
-          const clinicRoom = await roomRepo.findOneBy({ roomNumber: normRoom });
-          if (!clinicRoom) {
-            await roomRepo.save(roomRepo.create({
-              roomNumber: normRoom,
-              roomName: `Phòng ${normRoom}`,
-              specialtyId: specialtyIds[0] || null,
-              isActive: true,
-            }));
-          } else if (!clinicRoom.specialtyId && specialtyIds[0]) {
-            clinicRoom.specialtyId = specialtyIds[0];
-            await roomRepo.save(clinicRoom);
-          }
+    const normEmail = input.email?.trim().toLowerCase();
+    if (!normEmail) {
+      throw new BadRequestException('Email không được để trống.');
+    }
+    const userRepo = this.dataSource.getRepository ? this.dataSource.getRepository(UserEntity) : null;
+    if (userRepo?.findOneBy) {
+      const existingUserByEmail = await userRepo.findOneBy({ email: normEmail });
+      if (existingUserByEmail) {
+        throw new BadRequestException(`Email "${normEmail}" đã được sử dụng cho tài khoản khác (${existingUserByEmail.fullName}).`);
+      }
+    }
+
+    const normPhone = input.phoneNumber?.trim() ? input.phoneNumber.trim().replace(/\s+/g, '') : null;
+    if (normPhone) {
+      if (!/^0[35789]\d{8}$/.test(normPhone)) {
+        throw new BadRequestException('Số điện thoại phải đúng định dạng 10 số di động Việt Nam (bắt đầu bằng 03, 05, 07, 08, 09).');
+      }
+      if (userRepo?.findOneBy) {
+        const existingUserByPhone = await userRepo.findOneBy({ phoneNumber: normPhone });
+        if (existingUserByPhone) {
+          throw new BadRequestException(`Số điện thoại "${normPhone}" đã được sử dụng cho tài khoản khác (${existingUserByPhone.fullName}). Vui lòng nhập số điện thoại khác.`);
         }
       }
-      return user;
-    });
-  }
+    }
 
-  async updateProfile(userId: string, input: UpdateStaffProfileInput) {
-    return this.dataSource.transaction(async manager => {
-      const userRepository = manager.getRepository(UserEntity);
-      const user = await userRepository.findOneBy({ id: userId });
-      if (!user) throw new NotFoundException('Không tìm thấy nhân sự.');
-      if (input.fullName?.trim()) user.fullName = input.fullName.trim();
-      if (input.phoneNumber !== undefined) user.phoneNumber = input.phoneNumber?.trim() || null;
-      if (input.gender !== undefined) user.gender = input.gender;
-      if (input.dateOfBirth !== undefined) user.dateOfBirth = input.dateOfBirth;
-      if (input.avatarUrl !== undefined) user.avatarUrl = input.avatarUrl;
-      await userRepository.save(user);
-      const doctorRepository = manager.getRepository(DoctorEntity);
-      const doctor = await doctorRepository.findOneBy({ userId });
-      if (doctor) {
-        if (input.avatarUrl !== undefined) doctor.avatarUrl = input.avatarUrl;
-        if (input.licenseNumber?.trim()) { await this.validateLicenseNumber(input.licenseNumber, doctor.id); doctor.licenseNumber = input.licenseNumber.trim().toUpperCase(); }
-        if (input.roomNumber?.trim()) {
-          const normRoom = input.roomNumber.trim().toUpperCase();
-          doctor.roomNumber = normRoom;
+    try {
+      return await this.dataSource.transaction(async manager => {
+        const user = await manager.save(manager.create(UserEntity, {
+          fullName: input.fullName.trim(),
+          email: normEmail,
+          phoneNumber: normPhone,
+          passwordHash: await hashPassword(input.password),
+          gender: input.gender,
+          dateOfBirth: input.dateOfBirth,
+          status: UserStatus.ACTIVE,
+          dateOfBirthPrecision: DateOfBirthPrecision.FULL_DATE,
+          failedLoginAttempts: 0,
+          loginLockedUntil: null,
+          googleSubject: null,
+        }));
+        await manager.save(manager.create(UserRoleEntity, { userId: user.id, role: input.role }));
+        if (input.role === Role.DOCTOR) {
+          const normRoom = input.roomNumber!.trim().toUpperCase();
+          const doctor = await manager.save(manager.create(DoctorEntity, {
+            userId: user.id,
+            specialtyId: specialtyIds[0],
+            licenseNumber: input.licenseNumber!.trim().toUpperCase(),
+            academicTitle: input.academicTitle ?? null,
+            yearsExperience: input.yearsExperience!,
+            consultationFee: 0,
+            bioDescription: null,
+            roomNumber: normRoom,
+            ratingAverage: 5,
+          }));
+          for (const [index, specialtyId] of specialtyIds.entries()) {
+            await manager.save(manager.create(DoctorSpecialtyEntity, { doctorId: doctor.id, specialtyId, isPrimary: index === 0 }));
+          }
+
+          // Đồng bộ phòng khám: đảm bảo phòng tồn tại trong danh mục clinic_rooms
           const roomRepo = manager.getRepository?.(ClinicRoomEntity);
           if (roomRepo?.findOneBy) {
             const clinicRoom = await roomRepo.findOneBy({ roomNumber: normRoom });
@@ -173,29 +185,120 @@ export class StaffAdminService {
               await roomRepo.save(roomRepo.create({
                 roomNumber: normRoom,
                 roomName: `Phòng ${normRoom}`,
-                specialtyId: doctor.specialtyId || null,
+                specialtyId: specialtyIds[0] || null,
                 isActive: true,
               }));
+            } else if (!clinicRoom.specialtyId && specialtyIds[0]) {
+              clinicRoom.specialtyId = specialtyIds[0];
+              await roomRepo.save(clinicRoom);
             }
           }
         }
-        if (input.academicTitle !== undefined) doctor.academicTitle = input.academicTitle?.trim() || null;
-        if (input.yearsExperience !== undefined) {
-          if (input.yearsExperience < 0) throw new BadRequestException('Số năm kinh nghiệm không hợp lệ.');
-          doctor.yearsExperience = input.yearsExperience;
-        }
-        if (input.specialtyIds !== undefined) {
-          const specialtyIds = [...new Set(input.specialtyIds.filter(Boolean))];
-          if (!specialtyIds.length) throw new BadRequestException('Bác sĩ phải thuộc ít nhất một chuyên khoa.');
-          doctor.specialtyId = specialtyIds[0];
-          const specialtyRepository = manager.getRepository(DoctorSpecialtyEntity);
-          await specialtyRepository.delete({ doctorId: doctor.id });
-          for (const [index, specialtyId] of specialtyIds.entries()) await specialtyRepository.save(specialtyRepository.create({ doctorId: doctor.id, specialtyId, isPrimary: index === 0 }));
-        }
-        await doctorRepository.save(doctor);
+        return user;
+      });
+    } catch (error: any) {
+      if (error instanceof HttpException) {
+        throw error;
       }
-      return user;
-    });
+      const code = error?.code || error?.driverError?.code;
+      if (code === '23505') {
+        const detail = String(error?.detail || error?.driverError?.detail || '');
+        const constraint = String(error?.constraint || error?.driverError?.constraint || '');
+        if (detail.includes('phone_number') || constraint.includes('phone_number')) {
+          throw new BadRequestException(`Số điện thoại "${normPhone || input.phoneNumber}" đã được sử dụng cho một tài khoản khác.`);
+        }
+        if (detail.includes('email') || constraint.includes('email')) {
+          throw new BadRequestException(`Email "${normEmail}" đã tồn tại trong hệ thống.`);
+        }
+        if (detail.includes('license_number') || constraint.includes('license_number')) {
+          throw new BadRequestException(`Số CCHN "${input.licenseNumber}" đã được đăng ký cho bác sĩ khác.`);
+        }
+        throw new BadRequestException('Thông tin nhân sự bị trùng lặp với tài khoản đã có trong hệ thống.');
+      }
+      throw error;
+    }
+  }
+
+  async updateProfile(userId: string, input: UpdateStaffProfileInput) {
+    try {
+      return await this.dataSource.transaction(async manager => {
+        const userRepository = manager.getRepository(UserEntity);
+        const user = await userRepository.findOneBy({ id: userId });
+        if (!user) throw new NotFoundException('Không tìm thấy nhân sự.');
+        if (input.fullName?.trim()) user.fullName = input.fullName.trim();
+        if (input.phoneNumber !== undefined) {
+          const normPhone = input.phoneNumber?.trim() ? input.phoneNumber.trim().replace(/\s+/g, '') : null;
+          if (normPhone && normPhone !== user.phoneNumber) {
+            if (!/^0[35789]\d{8}$/.test(normPhone)) {
+              throw new BadRequestException('Số điện thoại phải đúng định dạng 10 số di động Việt Nam (bắt đầu bằng 03, 05, 07, 08, 09).');
+            }
+            const existingPhone = await userRepository.findOneBy({ phoneNumber: normPhone });
+            if (existingPhone && existingPhone.id !== userId) {
+              throw new BadRequestException(`Số điện thoại "${normPhone}" đã được sử dụng cho tài khoản khác (${existingPhone.fullName}).`);
+            }
+          }
+          user.phoneNumber = normPhone;
+        }
+        if (input.gender !== undefined) user.gender = input.gender;
+        if (input.dateOfBirth !== undefined) user.dateOfBirth = input.dateOfBirth;
+        if (input.avatarUrl !== undefined) user.avatarUrl = input.avatarUrl;
+        await userRepository.save(user);
+        const doctorRepository = manager.getRepository(DoctorEntity);
+        const doctor = await doctorRepository.findOneBy({ userId });
+        if (doctor) {
+          if (input.avatarUrl !== undefined) doctor.avatarUrl = input.avatarUrl;
+          if (input.licenseNumber?.trim()) { await this.validateLicenseNumber(input.licenseNumber, doctor.id); doctor.licenseNumber = input.licenseNumber.trim().toUpperCase(); }
+          if (input.roomNumber?.trim()) {
+            const normRoom = input.roomNumber.trim().toUpperCase();
+            doctor.roomNumber = normRoom;
+            const roomRepo = manager.getRepository?.(ClinicRoomEntity);
+            if (roomRepo?.findOneBy) {
+              const clinicRoom = await roomRepo.findOneBy({ roomNumber: normRoom });
+              if (!clinicRoom) {
+                await roomRepo.save(roomRepo.create({
+                  roomNumber: normRoom,
+                  roomName: `Phòng ${normRoom}`,
+                  specialtyId: doctor.specialtyId || null,
+                  isActive: true,
+                }));
+              }
+            }
+          }
+          if (input.academicTitle !== undefined) doctor.academicTitle = input.academicTitle?.trim() || null;
+          if (input.yearsExperience !== undefined) {
+            if (input.yearsExperience < 0) throw new BadRequestException('Số năm kinh nghiệm không hợp lệ.');
+            doctor.yearsExperience = input.yearsExperience;
+          }
+          if (input.specialtyIds !== undefined) {
+            const specialtyIds = [...new Set(input.specialtyIds.filter(Boolean))];
+            if (!specialtyIds.length) throw new BadRequestException('Bác sĩ phải thuộc ít nhất một chuyên khoa.');
+            doctor.specialtyId = specialtyIds[0];
+            const specialtyRepository = manager.getRepository(DoctorSpecialtyEntity);
+            await specialtyRepository.delete({ doctorId: doctor.id });
+            for (const [index, specialtyId] of specialtyIds.entries()) await specialtyRepository.save(specialtyRepository.create({ doctorId: doctor.id, specialtyId, isPrimary: index === 0 }));
+          }
+          await doctorRepository.save(doctor);
+        }
+        return user;
+      });
+    } catch (error: any) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      const code = error?.code || error?.driverError?.code;
+      if (code === '23505') {
+        const detail = String(error?.detail || error?.driverError?.detail || '');
+        const constraint = String(error?.constraint || error?.driverError?.constraint || '');
+        if (detail.includes('phone_number') || constraint.includes('phone_number')) {
+          throw new BadRequestException('Số điện thoại này đã được sử dụng cho một tài khoản khác.');
+        }
+        if (detail.includes('license_number') || constraint.includes('license_number')) {
+          throw new BadRequestException('Số CCHN này đã được đăng ký cho bác sĩ khác.');
+        }
+        throw new BadRequestException('Thông tin nhân sự bị trùng lặp với tài khoản khác trong hệ thống.');
+      }
+      throw error;
+    }
   }
 
   async listRecurringShifts() {
