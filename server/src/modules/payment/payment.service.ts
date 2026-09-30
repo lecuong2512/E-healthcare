@@ -99,7 +99,7 @@ export class PaymentService {
         !appointment.reservationExpiresAt ||
         appointment.reservationExpiresAt.getTime() <= Date.now()
       ) {
-        throw new ConflictException('Reservation đã hết hạn thanh toán.');
+        throw new ConflictException({ code: 'RESERVATION_EXPIRED', message: 'Ca khám đã hết hạn thanh toán.' });
       }
       const amountVnd = Number(appointment.totalAmount);
       if (!Number.isSafeInteger(amountVnd) || amountVnd <= 0) {
@@ -119,7 +119,7 @@ export class PaymentService {
         .getOne();
       if (active) {
         if (active.status === PaymentTransactionStatus.RECONCILIATION_REQUIRED) {
-          throw new ConflictException('Payment is being reconciled. Do not pay again.');
+          throw new ConflictException({ code: 'PAYMENT_RECONCILIATION_REQUIRED', message: 'Payment is being reconciled. Do not pay again.' });
         }
         if (active.provider === dto.provider) {
           throw new ConflictException(
