@@ -14,6 +14,8 @@ import { PdfProcessor } from './processors/pdf.processor';
 import { NotificationProducerService } from './producers/notification-producer.service';
 import { AppointmentCronService } from './schedulers/appointment-cron.service';
 import { AppointmentReminderDeliveryService } from './services/appointment-reminder-delivery.service';
+import { WebPushService } from './services/web-push.service';
+import { PushNotificationController } from './push-notification.controller';
 import { environment } from '../../config/environment';
 
 export class MockBullQueue {
@@ -68,6 +70,7 @@ export class NotificationModule implements OnModuleInit {
       NotificationProducerService,
       AppointmentCronService,
       AppointmentReminderDeliveryService,
+      WebPushService,
     ];
 
     if (isMock) {
@@ -78,6 +81,7 @@ export class NotificationModule implements OnModuleInit {
       return {
         module: NotificationModule,
         imports: [DatabaseModule, RedisModule, PdfGeneratorModule],
+        controllers: [PushNotificationController],
         providers: [
           ...commonProviders,
           { provide: getQueueToken(QueueName.EMAIL), useValue: mockEmail },
@@ -90,6 +94,7 @@ export class NotificationModule implements OnModuleInit {
           EmailSenderService,
           SmsSenderService,
           PdfGeneratorModule,
+          WebPushService,
         ],
       };
     }
@@ -106,6 +111,7 @@ export class NotificationModule implements OnModuleInit {
           { name: QueueName.PDF },
         ),
       ],
+      controllers: [PushNotificationController],
       providers: commonProviders,
       exports: [
         NotificationProducerService,
@@ -113,6 +119,7 @@ export class NotificationModule implements OnModuleInit {
         EmailSenderService,
         SmsSenderService,
         PdfGeneratorModule,
+        WebPushService,
         BullModule,
       ],
     };

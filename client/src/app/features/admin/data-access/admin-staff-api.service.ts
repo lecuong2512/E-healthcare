@@ -7,6 +7,7 @@ export interface StaffRow {
   phoneNumber?: string | null; gender?: string; dateOfBirth?: string;
   licenseNumber?: string | null; academicTitle?: string | null;
   yearsExperience?: number | null; roomNumber?: string | null; specialtyIds?: string[];
+  avatarUrl?: string | null;
 }
 export interface SpecialtyOption { id: string; name: string; }
 export interface RecurringShiftRow { id: string; staffName: string; shiftDate: string; startTime: string; endTime: string; roomNumber: string; approvalStatus: 'PENDING' | 'APPROVED' | 'LOCKED'; approvedAt: string | null; notes: string | null; }
@@ -25,6 +26,11 @@ export class AdminStaffApiService {
   create(body: Record<string, unknown>) { return this.http.post<StaffRow>('/api/v1/admin/staff', body); }
   changeStatus(userId: string, status: string) { return this.http.patch<StaffRow>(`/api/v1/admin/staff/${userId}/status`, { status }); }
   updateProfile(userId: string, body: Record<string, unknown>) { return this.http.patch<StaffRow>(`/api/v1/admin/staff/${userId}`, body); }
+  uploadAvatar(userId: string, file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<{ avatarUrl: string }>(`/api/v1/users/avatar?userId=${userId}`, formData);
+  }
   listRecurringShifts() { return this.http.get<RecurringShiftRow[]>('/api/v1/admin/staff/recurring-shifts'); }
   createShiftAssignment(body: { userId: string; roomId: string; shiftDate: string; startTime: string; endTime: string; notes?: string }) { return this.http.post('/api/v1/admin/staff/shift-assignments', body); }
   updateShiftAssignment(shiftId: string, body: Partial<{ roomId: string; shiftDate: string; startTime: string; endTime: string; notes: string; approvalStatus: 'PENDING' | 'APPROVED' | 'LOCKED' }>) { return this.http.patch(`/api/v1/admin/staff/shift-assignments/${shiftId}`, body); }

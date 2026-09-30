@@ -13,6 +13,7 @@ export interface PhrProfile {
   allergies: string | null;
   chronicDiseases: string | null;
   surgeryHistory: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface UpdatePhrProfileRequest {

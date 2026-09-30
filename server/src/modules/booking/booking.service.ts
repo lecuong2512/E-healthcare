@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
@@ -23,10 +24,13 @@ import {
 import { RedisService } from '../../common/redis/redis.service';
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
 import { DoctorEntity } from '../../database/entities/doctor.entity';
+import { UserEntity } from '../../database/entities/user.entity';
 import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
 import { VoucherEntity } from '../../database/entities/voucher.entity';
 import { ConfirmBookingDto, ReleaseSlotDto, ReserveSlotDto } from './dto';
 import { paymentTimeoutSeconds } from '../payment/payment-timeout';
+
+import { WebPushService } from '../notification/services/web-push.service';
 
 interface ReservationMetadata {
   reservationId: string;
@@ -42,6 +46,7 @@ export class BookingService {
   constructor(
     private readonly redisService: RedisService,
     private readonly dataSource: DataSource,
+    @Optional() private readonly webPushService?: WebPushService,
   ) {}
 
   static formatSlotLockKey(doctorId: string, slotId: string): string {
@@ -280,6 +285,17 @@ export class BookingService {
           BookingService.formatReservationKey(dto.reservationId),
           dto.reservationId,
         );
+        if (this.webPushService) {
+          const doctorUser = await this.dataSource.getRepository(UserEntity).findOneBy({ id: doctor.userId });
+          const doctorName = doctorUser?.fullName || doctor.academicTitle || 'Bác sĩ';
+          this.webPushService.sendAppointmentConfirmed(
+            patientId,
+            saved.appointmentCode,
+            doctorName,
+            slot.date,
+            slot.startTime,
+          ).catch((err) => this.logger.warn(`Push notification failed: ${err?.message || err}`));
+        }
       }
       return {
         id: saved.id,

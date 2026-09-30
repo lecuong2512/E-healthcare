@@ -21,6 +21,7 @@ export interface UpdateStaffProfileInput {
   fullName?: string; phoneNumber?: string | null; gender?: Gender; dateOfBirth?: string;
   licenseNumber?: string; roomNumber?: string;
   academicTitle?: string | null; yearsExperience?: number; specialtyIds?: string[];
+  avatarUrl?: string | null;
 }
 
 @Injectable()
@@ -66,6 +67,7 @@ export class StaffAdminService {
         academicTitle: doctor?.academicTitle ?? null, yearsExperience: doctor?.yearsExperience ?? null,
         roomNumber: doctor?.roomNumber ?? null,
         specialtyIds: doctor ? (specialtyIdsByDoctorId.get(doctor.id) ?? [doctor.specialtyId]) : [],
+        avatarUrl: doctor?.avatarUrl ?? user.avatarUrl ?? null,
       };
     });
     return { data, summary: {
@@ -136,10 +138,12 @@ export class StaffAdminService {
       if (input.phoneNumber !== undefined) user.phoneNumber = input.phoneNumber?.trim() || null;
       if (input.gender !== undefined) user.gender = input.gender;
       if (input.dateOfBirth !== undefined) user.dateOfBirth = input.dateOfBirth;
+      if (input.avatarUrl !== undefined) user.avatarUrl = input.avatarUrl;
       await userRepository.save(user);
       const doctorRepository = manager.getRepository(DoctorEntity);
       const doctor = await doctorRepository.findOneBy({ userId });
       if (doctor) {
+        if (input.avatarUrl !== undefined) doctor.avatarUrl = input.avatarUrl;
         if (input.licenseNumber?.trim()) { await this.validateLicenseNumber(input.licenseNumber, doctor.id); doctor.licenseNumber = input.licenseNumber.trim().toUpperCase(); }
         if (input.roomNumber?.trim()) doctor.roomNumber = input.roomNumber.trim();
         if (input.academicTitle !== undefined) doctor.academicTitle = input.academicTitle?.trim() || null;

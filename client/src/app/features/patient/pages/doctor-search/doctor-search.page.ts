@@ -18,6 +18,7 @@ export interface Doctor {
   price: number;
   rating: number;
   reviewCount: number;
+  avatarUrl?: string | null;
 }
 
 @Component({
@@ -84,6 +85,7 @@ export class DoctorSearchPage {
           price: Number(doctor.consultationFee),
           rating: Number(doctor.ratingAverage),
           reviewCount: 0,
+          avatarUrl: doctor.avatarUrl ?? null,
         })));
         this.loading.set(false);
       },

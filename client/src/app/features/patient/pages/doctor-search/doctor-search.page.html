@@ -149,7 +149,7 @@
                     <!-- Khung Avatar + Tag Hôm nay -->
                     <div class="flex flex-col items-center gap-1 flex-shrink-0">
                       <div class="w-14 h-14 rounded-2xl bg-sky-50 border border-sky-100 flex items-center justify-center overflow-hidden">
-                        <img src="assets/doctor.png" alt="Avatar bác sĩ" class="w-15 h-15 object-cover" />
+                        <img [src]="doc.avatarUrl || 'assets/doctor.png'" (error)="$any($event.target).src = 'assets/doctor.png'" alt="Avatar bác sĩ" class="w-14 h-14 object-cover" />
                       </div>
                       @if (doc.availableToday) {
                         <span class="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">

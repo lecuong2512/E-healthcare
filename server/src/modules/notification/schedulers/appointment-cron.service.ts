@@ -9,6 +9,8 @@ import { NotificationProducerService } from '../producers/notification-producer.
 import { AppointmentNotificationEntity, AppointmentReminderType } from '../../../database/entities/appointment-notification.entity';
 import { environment } from '../../../config/environment';
 
+import { WebPushService } from '../services/web-push.service';
+
 export const NO_SHOW_GRACE_MINUTES = 30;
 export const REMINDER_TIMEZONE = environment.APPOINTMENT_REMINDER_TIMEZONE?.trim() || 'Asia/Ho_Chi_Minh';
 export const REMINDERS_ENABLED = environment.APPOINTMENT_REMINDERS_ENABLED?.trim().toLowerCase() !== 'false';
@@ -95,6 +97,7 @@ export class AppointmentCronService {
     @Optional() private readonly dataSource?: DataSource,
     @Optional() private readonly redisService?: RedisService,
     @Optional() private readonly notificationProducerService?: NotificationProducerService,
+    @Optional() private readonly webPushService?: WebPushService,
   ) {
     if (this.dataSource && typeof this.dataSource.getRepository === 'function') {
       this.appointmentRepo = this.dataSource.getRepository(AppointmentEntity);
@@ -263,6 +266,16 @@ export class AppointmentCronService {
             roomNumber: appt.doctor!.roomNumber,
             notes: 'Vui lòng mang theo CCCD, mã QR lịch hẹn và hồ sơ khám cũ. Chỉ nhịn ăn khi có chỉ định xét nghiệm hoặc nội soi.',
           });
+          if (this.webPushService) {
+            await this.webPushService.sendAppointmentReminder(
+              appt.patientId,
+              appt.appointmentCode,
+              appt.doctor!.user.fullName,
+              scheduleDate,
+              startTime,
+              '24H',
+            ).catch(err => this.logger.warn(`Web push reminder 24h failed: ${err?.message || err}`));
+          }
         });
         if (didSchedule) scheduled24h++;
       }
@@ -282,6 +295,16 @@ export class AppointmentCronService {
             time: startTime,
             roomNumber: appt.doctor!.roomNumber,
           });
+          if (this.webPushService) {
+            await this.webPushService.sendAppointmentReminder(
+              appt.patientId,
+              appt.appointmentCode,
+              appt.doctor!.user.fullName,
+              scheduleDate,
+              startTime,
+              '2H',
+            ).catch(err => this.logger.warn(`Web push reminder 2h failed: ${err?.message || err}`));
+          }
         });
         if (didSchedule) scheduled2h++;
       }
