@@ -29,6 +29,11 @@ import { RouterLink } from '@angular/router';
         Medical
       </span>
     </a>
+
+    <span
+      aria-label="Tài khoản TN"
+      class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-600 text-sm font-semibold text-white"
+    >TN</span>
   </div>
 </header>`,
 //   styleUrl: './navbar.component.scss',

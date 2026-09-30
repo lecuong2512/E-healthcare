@@ -14,7 +14,8 @@
     "build:shared": "npm run build --workspace=@ehealth/shared",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "seed:admin-catalog-demo": "docker exec -i ehealth-postgres psql -v ON_ERROR_STOP=1 -U postgres -d ehealth_db < scripts/seed-admin-catalog-demo.sql"
+    "seed:admin-catalog-demo": "docker exec -i ehealth-postgres psql -v ON_ERROR_STOP=1 -U postgres -d ehealth_db < scripts/seed-admin-catalog-demo.sql",
+    "seed:admin-demo": "docker exec -i ehealth-postgres psql -v ON_ERROR_STOP=1 -U postgres -d ehealth_db < scripts/seed-admin-dashboard-demo.sql"
   },
   "overrides": {
     "@nestjs/platform-express": {

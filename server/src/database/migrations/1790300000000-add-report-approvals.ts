@@ -1,0 +1,2 @@
+import { MigrationInterface, QueryRunner } from 'typeorm';
+export class AddReportApprovals1790300000000 implements MigrationInterface { async up(queryRunner: QueryRunner): Promise<void> { await queryRunner.query(`CREATE TABLE report_approvals (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), approved_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT, days INT NOT NULL CHECK (days IN (1,7,30)), approved_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)`); } async down(queryRunner: QueryRunner): Promise<void> { await queryRunner.query('DROP TABLE report_approvals'); } }
