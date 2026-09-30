@@ -59,14 +59,14 @@ describe('ConsultationPage (SRS-DOC-03, SRS-DOC-04 & Section 5.4)', () => {
   } as unknown as EmrHistoryResponse;
 
   beforeEach(async () => {
-    phrService = jasmine.createSpyObj<PhrService>('PhrService', ['getMyPhr']);
     clinicalService = jasmine.createSpyObj<ClinicalService>('ClinicalService', [
       'getMedicalRecordByAppointment',
       'getEmrHistory',
       'createEmrAddendum',
+      'getPatientPhrByAppointment',
     ]);
 
-    phrService.getMyPhr.and.returnValue(of(mockPhr));
+    clinicalService.getPatientPhrByAppointment.and.returnValue(of(mockPhr));
     clinicalService.getMedicalRecordByAppointment.and.returnValue(of(mockRecord));
     clinicalService.getEmrHistory.and.returnValue(of(mockHistory));
 
@@ -74,7 +74,6 @@ describe('ConsultationPage (SRS-DOC-03, SRS-DOC-04 & Section 5.4)', () => {
       imports: [ConsultationPage],
       providers: [
         provideRouter([]),
-        { provide: PhrService, useValue: phrService },
         { provide: ClinicalService, useValue: clinicalService },
         {
           provide: ActivatedRoute,
@@ -91,13 +90,31 @@ describe('ConsultationPage (SRS-DOC-03, SRS-DOC-04 & Section 5.4)', () => {
     fixture.detectChanges();
   });
 
-  it('TC-UI-CONSULT-01: should create component and load patient PHR profile', () => {
+  it('TC-UI-CONSULT-01: should create component and load patient PHR profile via appointment context', () => {
     expect(component).toBeTruthy();
-    expect(phrService.getMyPhr).toHaveBeenCalled();
+    expect(clinicalService.getPatientPhrByAppointment).toHaveBeenCalledWith('app-123');
     expect(component.allergies).toBe('Penicillin, Aspirin');
     expect(component.chronicDiseases).toBe('Hen phế quản');
     expect(component.bloodType).toBe('A+');
+    expect(component.surgeryHistory).toBe('Chưa phẫu thuật');
     expect(component.patientName).toBe('Nguyễn Văn Bệnh Nhân');
+  });
+
+  it('TC-PHR-005-UI: should correctly display patient demographics and full PHR in doctor consultation view', () => {
+    expect(component.bloodType).toBe('A+');
+    expect(component.allergies).toBe('Penicillin, Aspirin');
+    expect(component.chronicDiseases).toBe('Hen phế quản');
+    expect(component.surgeryHistory).toBe('Chưa phẫu thuật');
+    expect(component.patientName).toBe('Nguyễn Văn Bệnh Nhân');
+    expect(component.patientGender).toBe('Nam');
+    expect(component.patientYear).toBe(1990);
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('Nguyễn Văn Bệnh Nhân');
+    expect(el.textContent).toContain('A+');
+    expect(el.textContent).toContain('Penicillin, Aspirin');
+    expect(el.textContent).toContain('Hen phế quản');
+    expect(el.textContent).toContain('Chưa phẫu thuật');
   });
 
   it('TC-UI-CONSULT-02: should calculate BMI correctly and update color indicator', () => {

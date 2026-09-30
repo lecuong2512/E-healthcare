@@ -12,6 +12,7 @@ import {
   StreamableFile,
 } from '@nestjs/common';
 import { Role } from '@shared/enums';
+import { PhrProfile } from '@shared/interfaces';
 import { Public, Roles } from '../../common/decorators/auth.decorators';
 import { AuthenticatedRequest } from '../../common/guards/authenticated-request';
 import { auditContextFromRequest } from '../audit/audit-context';
@@ -84,6 +85,22 @@ export class ClinicalController {
     return this.clinicalService.checkPrescriptionSafetyEndpoint(
       req.auth!.userId,
       dto,
+    );
+  }
+
+  /**
+   * Get patient's PHR for assigned Doctor during consultation of a specific appointment.
+   */
+  @Get('appointments/:appointmentId/patient-phr')
+  @Roles(Role.DOCTOR)
+  async getPatientPhrByAppointment(
+    @Req() req: AuthenticatedRequest,
+    @Param('appointmentId', ParseUUIDPipe) appointmentId: string,
+  ): Promise<PhrProfile> {
+    return this.clinicalService.getPatientPhrByAppointment(
+      req.auth!.userId,
+      appointmentId,
+      auditContextFromRequest(req),
     );
   }
 

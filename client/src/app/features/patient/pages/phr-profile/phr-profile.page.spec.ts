@@ -177,4 +177,24 @@ describe('PhrProfilePage', () => {
     expect(component['isSaved']).toBeFalse();
     expect(component['errorMessage']).toBe('');
   });
+
+  it('[Security XSS] renders potentially dangerous HTML/JS payloads as safe text without executing scripts', () => {
+    const dangerousProfile: PhrProfile = {
+      ...mockProfile,
+      fullName: '<script>alert("XSS")</script>',
+      allergies: '<img src=x onerror=alert("XSS")>',
+      chronicDiseases: '<b onmouseover=alert("XSS")>Dị ứng</b>',
+    };
+
+    phrService.getMyPhr.and.returnValue(of(dangerousProfile));
+    component.ngOnInit();
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    // Verify no script element is injected into DOM
+    expect(element.querySelectorAll('script').length).toBe(0);
+    // Verify HTML tags are escaped or rendered safely as text
+    const textContent = element.textContent || '';
+    expect(element.innerHTML).not.toContain('<script>alert("XSS")</script>');
+  });
 });

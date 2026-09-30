@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
-import { PhrService } from '../../../../core/services/phr.service';
 import { ClinicalService } from '../../../../core/services/clinical.service';
 import { AllergyAlertModalComponent } from '../../../../shared/components/allergy-alert-modal/allergy-alert-modal.component';
 import { EmrHistoryResponse } from '@shared/interfaces';
@@ -18,7 +17,7 @@ const ICD: Icd[] = [{code:'I10',name:'Tăng huyết áp vô căn'},{code:'I20.9'
 
 @Component({ selector: 'app-consultation-page', standalone: true, imports: [CommonModule, FormsModule, RouterModule, AllergyAlertModalComponent], templateUrl: './consultation.page.html' })
 export class ConsultationPage {
-  private router = inject(Router); private route = inject(ActivatedRoute); private phr = inject(PhrService); private sanitizer = inject(DomSanitizer);
+  private router = inject(Router); private route = inject(ActivatedRoute); private sanitizer = inject(DomSanitizer);
   private clinical = inject(ClinicalService);
   recordId = ''; isLocked = false; lockedAt: string | null = null; completedAt: string | null = null; doctorAdvice = ''; followUpDate = '';
   showAddendumModal = false; addendumReason = ''; addendumClinicalNotes = ''; addendumDoctorAdvice = ''; addendumIcd10Secondary = ''; addendumFollowUpDate = ''; addendumError = ''; isSubmittingAddendum = false; emrHistory: EmrHistoryResponse | null = null;
@@ -29,10 +28,10 @@ export class ConsultationPage {
   icdSearch=''; icdTags:Icd[]=[{code:'I20.9',name:'Đau thắt ngực, không đặc hiệu'}]; readonly icdCatalog=ICD;
   readonly drugCatalog=DRUGS; drugSearch=''; selectedCatalogDrug:Drug|null=null; rxList:Rx[]=[];
   showAllergyModal=false; pendingDrug:Drug|null=null; attachments:{name:string;type:string;url:string}[]=[]; preview:{name:string;type:string;url:string}|null=null; activeTab:'record'|'attachments'|'history'='record'; saveMessage='';
-  constructor(){ this.route.paramMap.subscribe(p=>{const id=p.get('appointmentId');if(id){this.recordCode=id;this.loadRecord(id);}}); this.route.queryParams.subscribe(p=>{if(p['name'])this.patientName=p['name'];if(p['gender'])this.patientGender=p['gender'];if(p['year'])this.patientYear=Number(p['year']);}); this.loadPhr(); }
+  constructor(){ this.route.paramMap.subscribe(p=>{const id=p.get('appointmentId');if(id){this.recordCode=id;this.loadRecord(id);this.loadPatientPhr(id);}}); this.route.queryParams.subscribe(p=>{if(p['name'])this.patientName=p['name'];if(p['gender'])this.patientGender=p['gender'];if(p['year'])this.patientYear=Number(p['year']);}); }
   get filteredDrugs(){const q=this.drugSearch.toLocaleLowerCase();return this.drugCatalog.filter(d=>!q||`${d.name} ${d.ingredient}`.toLocaleLowerCase().includes(q));}
   get filteredIcd(){const q=this.icdSearch.toLocaleLowerCase();return q?this.icdCatalog.filter(d=>`${d.code} ${d.name}`.toLocaleLowerCase().includes(q)&&!this.icdTags.some(t=>t.code===d.code)):[];}
-  loadPhr(){ this.phr.getMyPhr().subscribe({next:p=>{this.bloodType=p.bloodType||'Chưa có';this.allergies=p.allergies||'Chưa ghi nhận';this.chronicDiseases=p.chronicDiseases||'Chưa ghi nhận';this.surgeryHistory=p.surgeryHistory||'Chưa ghi nhận';if(p.fullName)this.patientName=p.fullName;if(p.dateOfBirth)this.patientYear=new Date(p.dateOfBirth).getFullYear();},error:()=>{}}); }
+  loadPatientPhr(appointmentId: string){ this.clinical.getPatientPhrByAppointment(appointmentId).subscribe({next:p=>{this.bloodType=p.bloodType||'Chưa có';this.allergies=p.allergies||'Chưa ghi nhận';this.chronicDiseases=p.chronicDiseases||'Chưa ghi nhận';this.surgeryHistory=p.surgeryHistory||'Chưa ghi nhận';if(p.fullName)this.patientName=p.fullName;if(p.gender)this.patientGender=p.gender==='FEMALE'?'Nữ':p.gender==='MALE'?'Nam':p.gender;if(p.dateOfBirth)this.patientYear=new Date(p.dateOfBirth).getFullYear();},error:()=>{}}); }
   loadRecord(id: string) {
     this.clinical.getMedicalRecordByAppointment(id).subscribe({
       next: (r) => { this.recordId = r.id; this.isLocked = r.isLocked; this.lockedAt = r.lockedAt; this.completedAt = r.completedAt; if (r.clinicalNotes) this.clinicalNotes = r.clinicalNotes; if (r.doctorAdvice) this.doctorAdvice = r.doctorAdvice; if (r.followUpDate) this.followUpDate = r.followUpDate; this.loadHistory(r.id); },

@@ -6,6 +6,7 @@ import {
   EmrAddendumData,
   EmrHistoryResponse,
   MedicalRecordDetailResponse,
+  PhrProfile,
 } from '@shared/interfaces';
 import { TokenStoreService } from './token-store.service';
 
@@ -15,6 +16,15 @@ const API_BASE = '/api/v1/clinical';
 export class ClinicalService {
   private readonly http = inject(HttpClient);
   private readonly tokenStore = inject(TokenStoreService);
+
+  getPatientPhrByAppointment(
+    appointmentId: string,
+  ): Observable<PhrProfile> {
+    return this.http.get<PhrProfile>(
+      `${API_BASE}/appointments/${encodeURIComponent(appointmentId)}/patient-phr`,
+      { headers: this.authHeaders() },
+    );
+  }
 
   getMedicalRecord(recordId: string): Observable<MedicalRecordDetailResponse> {
     return this.http.get<MedicalRecordDetailResponse>(
