@@ -281,6 +281,12 @@ describe('BookingStepperPage payment flow', () => {
     expect(api.initiatePayment.calls.mostRecent().args[2]).not.toBe('failed-key');
   });
 
+  it('clears the previous error when changing booking step', () => {
+    component.errorMessage.set('Lỗi ở bước trước');
+    component.goToStep(2);
+    expect(component.errorMessage()).toBeNull();
+  });
+
   it('shows a configuration message and keeps clinic recovery after MoMo code 13', () => {
     api.getPaymentStatus.and.returnValue(of({
       appointmentId, appointmentStatus: AppointmentStatus.PENDING_PAYMENT, paymentStatus: PaymentStatus.FAILED,

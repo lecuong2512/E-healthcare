@@ -1,4 +1,6 @@
-import { Injectable, signal } from '@angular/core';
+import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationStart, Router } from '@angular/router';
 
 export type NotificationLevel = 'success' | 'error' | 'warning' | 'info';
 
@@ -19,6 +21,21 @@ export class NotificationService {
   private nextId = 0;
   private readonly _messages = signal<NotificationMessage[]>([]);
   readonly messages = this._messages.asReadonly();
+  private readonly timers = new Map<number, ReturnType<typeof setTimeout>>();
+
+  constructor() {
+    const destroyRef = inject(DestroyRef);
+    inject(Router).events.pipe(takeUntilDestroyed(destroyRef)).subscribe(event => {
+      if (event instanceof NavigationStart) this.clear();
+    });
+    destroyRef.onDestroy(() => this.clear());
+  }
+
+  clear(): void {
+    this.timers.forEach(timer => clearTimeout(timer));
+    this.timers.clear();
+    this._messages.set([]);
+  }
 
   success(text: string): void {
     this.push('success', text);
@@ -34,12 +51,14 @@ export class NotificationService {
   }
 
   dismiss(id: number): void {
+    clearTimeout(this.timers.get(id));
+    this.timers.delete(id);
     this._messages.update((list) => list.filter((m) => m.id !== id));
   }
 
   private push(level: NotificationLevel, text: string): void {
     const id = this.nextId++;
     this._messages.update((list) => [...list, { id, level, text }]);
-    setTimeout(() => this.dismiss(id), 5000);
+    this.timers.set(id, setTimeout(() => this.dismiss(id), 5000));
   }
 }

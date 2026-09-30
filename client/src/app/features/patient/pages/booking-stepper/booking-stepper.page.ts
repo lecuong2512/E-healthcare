@@ -1,13 +1,14 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnDestroy, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppointmentStatus, PaymentMethod, PaymentStatus, PaymentTransactionStatus } from '@shared/enums';
 import { AppointmentResponse, PaymentStatusResponse } from '@shared/interfaces';
 import { NzAlertModule } from 'ng-zorro-antd/alert';
 import { NzMessageModule, NzMessageService } from 'ng-zorro-antd/message';
-import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
+import { ModalOptions, NzModalModule, NzModalRef, NzModalService } from 'ng-zorro-antd/modal';
 import { catchError, finalize, of, switchMap } from 'rxjs';
 
 import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
@@ -69,6 +70,9 @@ export class BookingStepperPage implements OnDestroy {
   private readonly paymentRedirect = inject(PaymentRedirectService);
   private readonly message = inject(NzMessageService);
   private readonly modal = inject(NzModalService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly modals = new Set<NzModalRef>();
+  private readonly messageIds = new Set<string>();
   readonly recoveryActive = signal(false);
   readonly checkoutStatus = signal<PaymentStatusResponse | null>(null);
   readonly canPay = computed(() => this.checkoutStatus()?.canRetry === true);
@@ -161,11 +165,11 @@ export class BookingStepperPage implements OnDestroy {
       this.bookingCommitted = true;
       this.step.set(4);
     }
-    this.api.searchDoctors().subscribe({
+    this.api.searchDoctors().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (response) => this.doctors.set(response.data.map((doctor) => this.mapDoctor(doctor))),
       error: () => this.errorMessage.set('Không thể tải danh sách bác sĩ.'),
     });
-    this.api.getVouchers().subscribe({
+    this.api.getVouchers().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (vouchers) => this.vouchers.set(vouchers.filter((voucher) =>
         !voucher.isUsed && new Date(voucher.expiresAt).getTime() > Date.now(),
       )),
@@ -204,6 +208,8 @@ export class BookingStepperPage implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.modals.forEach(modal => modal.destroy());
+    this.messageIds.forEach(id => this.message.remove(id));
     if (this.timerInterval) clearInterval(this.timerInterval);
     if (!this.bookingCommitted) this.releaseReservation();
   }
@@ -233,6 +239,7 @@ export class BookingStepperPage implements OnDestroy {
     release$.pipe(
       switchMap(() => this.api.reserveSlot({ doctorId, slotId: slot.id })),
       finalize(() => this.loading.set(false)),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe({
       next: (response) => {
         this.reservationId = response.data.reservationId;
@@ -271,7 +278,7 @@ export class BookingStepperPage implements OnDestroy {
     this.voucherCode.set(normalizedCode);
     this.appliedVoucher.set(null);
     this.voucherMessage.set(null);
-    this.api.validateVoucher(normalizedCode, fee).subscribe({
+    this.api.validateVoucher(normalizedCode, fee).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (voucher) => {
         this.appliedVoucher.set({
           code: voucher.code,
@@ -312,7 +319,7 @@ export class BookingStepperPage implements OnDestroy {
             provider: currentMethod,
             idempotencyKey: crypto.randomUUID(),
           };
-          this.modal.confirm({
+          this.confirm({
             nzTitle: 'Đổi cổng thanh toán?',
             nzContent: 'Giao dịch trước sẽ bị thay thế. Nếu cổng cũ ghi nhận tiền đến muộn, hệ thống sẽ xử lý hoàn tiền.',
             nzOkText: 'Xác nhận đổi cổng', nzCancelText: 'Giữ cổng hiện tại',
@@ -346,7 +353,7 @@ export class BookingStepperPage implements OnDestroy {
       reasonForVisit: this.patientForm.value.reason?.trim() || 'Khám theo lịch hẹn',
       paymentMethod: currentMethod,
       voucherCode: this.appliedVoucher()?.code,
-    }).pipe(finalize(() => { if (!this.pendingPaymentContext()) this.loading.set(false); })).subscribe({
+    }).pipe(finalize(() => { if (!this.pendingPaymentContext()) this.loading.set(false); }), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (appointment) => {
         this.bookingCommitted = true;
         if (this.timerInterval) clearInterval(this.timerInterval);
@@ -354,10 +361,10 @@ export class BookingStepperPage implements OnDestroy {
         if (currentMethod === PaymentMethod.PAY_AT_CLINIC) {
           this.clearPendingPaymentContext();
           this.payAtClinicReceipt.set(appointment);
-          this.message.success(
+          this.messageIds.add(this.message.success(
             'Đặt lịch thành công! Vui lòng có mặt tại quầy tiếp đón trước giờ khám để nộp viện phí.',
             { nzDuration: 6000 },
-          );
+          ).messageId);
           return;
         }
         this.idempotencyKey ||= crypto.randomUUID();
@@ -393,14 +400,14 @@ export class BookingStepperPage implements OnDestroy {
   cancelPendingPayment(startNew = false): void {
     const context = this.pendingPaymentContext();
     if (!context || this.loading()) return;
-    this.modal.confirm({
+    this.confirm({
       nzTitle: startNew ? 'Hủy checkout cũ để đặt lịch mới?' : 'Hủy giao dịch đang chờ?',
       nzContent: 'Chỉ khi hệ thống xác nhận hủy thành công, chỗ giữ và voucher mới được giải phóng. Khoản tiền đến muộn sẽ được xử lý hoàn tiền.',
       nzOkText: 'Xác nhận hủy', nzCancelText: 'Tiếp tục giữ checkout', nzOkDanger: true,
       nzOnOk: () => {
         this.loading.set(true);
         this.errorMessage.set(null);
-        this.api.cancelPendingPayment(context.appointmentId).pipe(finalize(() => this.loading.set(false))).subscribe({
+        this.api.cancelPendingPayment(context.appointmentId).pipe(finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
           next: (response) => {
             if (response.appointmentStatus !== AppointmentStatus.CANCELLED) {
               this.errorMessage.set('Hệ thống chưa xác nhận hủy checkout. Vui lòng kiểm tra lại.');
@@ -408,7 +415,7 @@ export class BookingStepperPage implements OnDestroy {
             }
             this.clearPendingPaymentContext();
             this.resetBookingFlow();
-            this.message.info('Đã hủy checkout. Bạn có thể đặt lịch mới.');
+            this.messageIds.add(this.message.info('Đã hủy checkout. Bạn có thể đặt lịch mới.').messageId);
           },
           error: (error) => this.errorMessage.set(this.errorText(error)),
         });
@@ -419,13 +426,13 @@ export class BookingStepperPage implements OnDestroy {
   fallbackPendingToClinic(): void {
     const context = this.pendingPaymentContext();
     if (!context || this.loading() || !this.canFallback()) return;
-    this.modal.confirm({
+    this.confirm({
       nzTitle: 'Thanh toán tại viện cho lịch hẹn này?',
       nzContent: 'Không tạo lịch hẹn mới. Hệ thống sẽ xác nhận lại chỗ giữ và trạng thái giao dịch trước khi chuyển.',
       nzOkText: 'Xác nhận', nzCancelText: 'Quay lại',
       nzOnOk: () => {
         this.loading.set(true);
-        this.api.fallbackToClinic(context.appointmentId).pipe(finalize(() => this.loading.set(false))).subscribe({
+        this.api.fallbackToClinic(context.appointmentId).pipe(finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
           next: () => {
             this.clearPendingPaymentContext();
             this.navigateToPaymentResult(context.appointmentId);
@@ -458,13 +465,18 @@ export class BookingStepperPage implements OnDestroy {
     this.step.set(1);
   }
 
-  goToStep(step: number): void { if (!this.recoveryActive() && !this.loading()) this.step.set(step); }
+  goToStep(step: number): void {
+    if (!this.recoveryActive() && !this.loading()) {
+      this.errorMessage.set(null);
+      this.step.set(step);
+    }
+  }
   starArray(rating: number): boolean[] { return Array.from({ length: 5 }, (_, index) => index < Math.round(rating)); }
   get formValue() { return this.patientForm.value; }
 
   private loadDoctor(doctorId: string): void {
     this.loading.set(true);
-    this.api.getDoctor(doctorId).pipe(finalize(() => this.loading.set(false))).subscribe({
+    this.api.getDoctor(doctorId).pipe(finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (detail) => {
         const doctor = this.mapDoctor(detail);
         this.doctors.update((items) => [doctor, ...items.filter((item) => item.id !== doctor.id)]);
@@ -544,7 +556,7 @@ export class BookingStepperPage implements OnDestroy {
   private checkPendingPayment(context: PendingPaymentContext, _initiateWhenPending: boolean): void {
     if (this.loading()) return;
     this.loading.set(true);
-    this.api.getPaymentStatus(context.appointmentId).pipe(finalize(() => this.loading.set(false))).subscribe({
+    this.api.getPaymentStatus(context.appointmentId).pipe(finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (status) => {
         this.checkoutStatus.set(status);
         const terminal = status.appointmentStatus !== AppointmentStatus.PENDING_PAYMENT;
@@ -553,7 +565,7 @@ export class BookingStepperPage implements OnDestroy {
           this.bookingCommitted = false;
           this.recoveryActive.set(false);
           this.step.set(1);
-          this.message.info('Checkout trước đã kết thúc. Bạn có thể đặt lịch mới hoặc xem lịch sử.');
+          this.messageIds.add(this.message.info('Checkout trước đã kết thúc. Bạn có thể đặt lịch mới hoặc xem lịch sử.').messageId);
           return;
         }
         const selectedFollowedProvider = this.paymentMethod() === context.provider || !context.provider;
@@ -570,7 +582,7 @@ export class BookingStepperPage implements OnDestroy {
         if (error instanceof HttpErrorResponse && [403, 404].includes(error.status)) {
           this.clearPendingPaymentContext();
           this.resetBookingFlow();
-          this.message.info('Checkout cũ không còn khả dụng. Bạn có thể đặt lịch mới.');
+          this.messageIds.add(this.message.info('Checkout cũ không còn khả dụng. Bạn có thể đặt lịch mới.').messageId);
           return;
         }
         this.errorMessage.set(this.errorText(error));
@@ -593,7 +605,7 @@ export class BookingStepperPage implements OnDestroy {
       ? this.api.initiatePayment(context.appointmentId, context.provider, context.idempotencyKey, true)
       : this.api.initiatePayment(context.appointmentId, context.provider, context.idempotencyKey);
 
-    payment$.pipe(finalize(() => this.loading.set(false))).subscribe({
+    payment$.pipe(finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (payment) => {
         sessionStorage.setItem('pendingPaymentAppointmentId', context.appointmentId);
         try {
@@ -639,6 +651,14 @@ export class BookingStepperPage implements OnDestroy {
     void this.router.navigate(['/patient/payment-result'], {
       queryParams: { appointmentId },
     });
+  }
+
+  private confirm(options: ModalOptions): void {
+    const modal = this.modal.confirm(options);
+    if (modal) {
+      this.modals.add(modal);
+      modal.afterClose.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.modals.delete(modal));
+    }
   }
 
   private errorText(error: unknown): string {
