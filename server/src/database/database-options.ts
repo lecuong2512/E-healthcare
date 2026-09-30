@@ -45,6 +45,9 @@ import { EmrAddendumEntity } from "./entities/emr-addendum.entity";
 import { AddEmrPrescriptionTables1790065218000 } from "./migrations/1790065218000-add-emr-prescription-tables";
 import { CreateEmrAddendumsTable1790150000000 } from "./migrations/1790150000000-create-emr-addendums-table";
 import { AddAppointmentConsent1790151600000 } from "./migrations/1790151600000-add-appointment-consent";
+import { AddAdminCatalogStaffReporting1790240000000 } from './migrations/1790240000000-add-admin-catalog-staff-reporting';
+import { AddSpecialtyHeadDoctor1790320000000 } from './migrations/1790320000000-add-specialty-head-doctor';
+import { Icd10CatalogEntity, MedicalServiceEntity, MedicineEntity } from './entities/admin-catalog.entity';
 import { ReportApprovalEntity } from './entities/report-approval.entity';
 import { AddReportApprovals1790300000000 } from './migrations/1790300000000-add-report-approvals';
 import { DoctorReviewEntity } from "./entities/doctor-review.entity";
@@ -77,6 +80,9 @@ export function createDataSource(url: string): DataSource {
       DoctorQueueCounterEntity,
       CounterPaymentTransactionEntity,
       ReceptionAuditLogEntity,
+      MedicineEntity,
+      MedicalServiceEntity,
+      Icd10CatalogEntity,
       EmrAddendumEntity,
       ReportApprovalEntity,
       DoctorReviewEntity,
@@ -104,6 +110,8 @@ export function createDataSource(url: string): DataSource {
       UniquePatientCitizenId1789938000000,
       CreateEmrAddendumsTable1790150000000,
       AddAppointmentConsent1790151600000,
+      AddAdminCatalogStaffReporting1790240000000,
+      AddSpecialtyHeadDoctor1790320000000,
       AddReportApprovals1790300000000,
       CreateDoctorReviews1790586000000,
     ],
