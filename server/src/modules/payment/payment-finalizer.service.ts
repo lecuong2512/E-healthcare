@@ -88,6 +88,7 @@ export class PaymentFinalizerService {
       const payments = await manager.getRepository(PaymentTransactionEntity)
         .createQueryBuilder('payment').setLock('pessimistic_write')
         .where('payment.appointment_id = :appointmentId', { appointmentId }).getMany();
+      const events: Record<string, unknown>[] = [];
       if (payments.some((payment) => [PaymentTransactionStatus.SUCCESS, PaymentTransactionStatus.LATE_SUCCESS].includes(payment.status))) {
         throw new ConflictException('Giao dịch đã ghi nhận thanh toán. Không thể hủy giao dịch chờ.');
       }
@@ -97,10 +98,12 @@ export class PaymentFinalizerService {
           .where('schedule.id = :id', { id: appointment.scheduleId }).getOneOrFail();
         for (const payment of payments) {
           if ([PaymentTransactionStatus.PENDING, PaymentTransactionStatus.RECONCILIATION_REQUIRED].includes(payment.status)) {
+            const previousStatus = payment.status;
             payment.status = PaymentTransactionStatus.SUPERSEDED;
             payment.nextReconcileAt = null;
             payment.reconciliationManualReview = false;
             await manager.save(payment);
+            events.push(this.stateEvent(payment, appointment, previousStatus, 'PATIENT_CANCELLED_PAYMENT'));
           }
         }
         appointment.status = AppointmentStatus.CANCELLED;
@@ -116,10 +119,12 @@ export class PaymentFinalizerService {
         await manager.save(appointment);
       }
       return {
+        events: events.map((event) => ({ ...event, appointmentStatus: appointment.status })),
         response: { appointmentId, appointmentStatus: AppointmentStatus.CANCELLED as const, paymentStatus: appointment.paymentStatus },
         release: appointment.reservationId ? this.reservationRelease(appointment, appointment.reservationId) : undefined,
       };
     });
+    for (const event of cancelled.events) this.logger.log(JSON.stringify(event));
     if (cancelled.release) await this.cleanupReservation(cancelled.release, 'Patient cancelled checkout');
     return cancelled.response;
   }
@@ -166,6 +171,7 @@ export class PaymentFinalizerService {
   ): Promise<void> {
     const finalized = await this.dataSource.transaction(async (manager) => {
       const { payment, appointment } = await this.lockPaymentContext(manager, provider, merchantTransactionId);
+      const previousStatus = payment.status;
       const schedule = await manager
         .getRepository(DoctorScheduleEntity)
         .createQueryBuilder('schedule')
@@ -195,9 +201,10 @@ export class PaymentFinalizerService {
       await manager.save(payment);
       await manager.save(appointment);
       await manager.save(schedule);
-      return { release: this.reservationRelease(appointment, payment.reservationId) };
+      return { release: this.reservationRelease(appointment, payment.reservationId), event: this.stateEvent(payment, appointment, previousStatus, 'RESERVATION_EXPIRED') };
     });
 
+    if (finalized.event) this.logger.log(JSON.stringify(finalized.event));
     if (finalized.release) {
       await this.cleanupReservation(finalized.release, 'Expired reservation');
     }
@@ -387,6 +394,7 @@ export class PaymentFinalizerService {
       return {
         outcome:
           result.state === 'PENDING' ? 'PENDING' : 'RECONCILIATION_REQUIRED',
+        event: payment.status !== previousStatus ? this.stateEvent(payment, appointment, previousStatus, result.state) : undefined,
       };
     }
 

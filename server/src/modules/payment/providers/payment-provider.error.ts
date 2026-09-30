@@ -13,7 +13,7 @@ export class PaymentProviderError extends BadGatewayException {
     message: string,
     options?: ErrorOptions,
   ) {
-    super(message, options);
+    super({ code: kind === PaymentProviderErrorKind.REJECTED ? 'PROVIDER_REJECTED' : 'PAYMENT_RECONCILIATION_REQUIRED', message }, options);
     this.name = 'PaymentProviderError';
   }
 
