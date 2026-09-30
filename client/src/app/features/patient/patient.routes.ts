@@ -23,7 +23,12 @@ export const PATIENT_ROUTES: Routes = [
   {
     path: 'payment-result',
     loadComponent: () =>
-      import('./pages/payment-result/payment-result.page').then((m) => m.PaymentResultPage),
+      import('./pages/payment-callback/payment-callback.page').then((m) => m.PaymentCallbackPage),
+  },
+  {
+    path: 'booking/payment-callback',
+    loadComponent: () =>
+      import('./pages/payment-callback/payment-callback.page').then((m) => m.PaymentCallbackPage),
   },
   {
     path: 'profile',
