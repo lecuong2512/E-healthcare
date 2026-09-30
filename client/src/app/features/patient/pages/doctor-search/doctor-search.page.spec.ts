@@ -43,5 +43,26 @@ describe('DoctorSearchPage', () => {
     expect(component.filteredDoctors().map((doctor) => doctor.id)).toEqual([
       '11111111-1111-4111-8111-111111111111',
     ]);
+    expect(api.searchDoctors.calls.count()).toBe(2);
+    expect(api.searchDoctors.calls.mostRecent().args[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('does not advertise today slots when the server returns no availability', async () => {
+    const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['searchDoctors']);
+    const doctor = {
+      id: 'doctor-id', fullName: 'Nguyễn Văn An', academicTitle: null,
+      specialty: { id: 's1', name: 'Tim mạch' }, consultationFee: 350_000,
+      bioDescription: null, roomNumber: '101', ratingAverage: 4.9,
+    };
+    api.searchDoctors.and.callFake(date => of({
+      data: date ? [] : [doctor], pagination: { page: 1, limit: 50, total: date ? 0 : 1, totalPages: 1 },
+    }));
+    await TestBed.configureTestingModule({
+      imports: [DoctorSearchPage], providers: [{ provide: PatientBookingApiService, useValue: api }],
+    }).compileComponents();
+    const component = TestBed.createComponent(DoctorSearchPage).componentInstance;
+    expect(component.doctors()[0].availableToday).toBeFalse();
+    component.filterAvailableToday.set(true);
+    expect(component.filteredDoctors()).toEqual([]);
   });
 });

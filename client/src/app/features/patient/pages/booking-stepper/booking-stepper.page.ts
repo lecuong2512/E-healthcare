@@ -104,11 +104,11 @@ export class BookingStepperPage implements OnDestroy {
   afternoonSlots: SlotItem[] = [];
   private schedules: PatientDoctorSchedule[] = [];
   readonly selectedSlotId = signal<string | null>(null);
-  readonly selectedSlotLabel = computed(() => {
+  selectedSlotLabel(): string {
     const slot = [...this.morningSlots, ...this.afternoonSlots]
       .find((item) => item.id === this.selectedSlotId());
     return slot ? `${slot.time} – ${this.calcEndTime(slot.time)}` : '';
-  });
+  }
 
   readonly patientForm = this.fb.group({
     fullName: ['', Validators.required],
@@ -214,14 +214,26 @@ export class BookingStepperPage implements OnDestroy {
     if (!this.bookingCommitted) this.releaseReservation();
   }
 
-  selectDoctor(doctor: Doctor): void { if (!this.recoveryActive()) this.selectedDoctorId.set(doctor.id); }
-  selectDoctorAndContinue(doctor: Doctor): void { if (!this.recoveryActive()) { this.selectDoctor(doctor); this.loadDoctor(doctor.id); } }
+  selectDoctor(doctor: Doctor): void {
+    if (this.recoveryActive() || this.loading()) return;
+    this.releaseReservation();
+    this.selectedSlotId.set(null);
+    this.selectedDoctorId.set(doctor.id);
+  }
+  selectDoctorAndContinue(doctor: Doctor): void { if (!this.recoveryActive()) this.loadDoctor(doctor.id); }
   setSearchQuery(query: string): void { this.searchQuery.set(query); }
   selectSpecialty(specialty: string): void { this.selectedSpecialty.set(specialty); }
   confirmDoctor(): void { const id = this.selectedDoctorId(); if (id) this.loadDoctor(id); }
 
   selectDate(day: DayOption): void {
-    if (!day.slotsCount) return;
+    if (!day.slotsCount || this.pendingPaymentContext()) return;
+    if (this.selectedDay() !== day.date) {
+      this.releaseReservation();
+      this.selectedSlotId.set(null);
+      if (this.timerInterval) clearInterval(this.timerInterval);
+      this.timerInterval = null;
+      this.errorMessage.set(null);
+    }
     this.selectedDay.set(day.date);
     this.refreshSlots(day.fullDate);
   }
@@ -236,6 +248,10 @@ export class BookingStepperPage implements OnDestroy {
       ? this.api.releaseSlot({ doctorId, slotId: this.selectedSlotId()!, reservationId: this.reservationId })
           .pipe(catchError(() => of(null)))
       : of(null);
+    this.reservationId = null;
+    this.selectedSlotId.set(null);
+    if (this.timerInterval) clearInterval(this.timerInterval);
+    this.timerInterval = null;
     release$.pipe(
       switchMap(() => this.api.reserveSlot({ doctorId, slotId: slot.id })),
       finalize(() => this.loading.set(false)),
@@ -459,6 +475,17 @@ export class BookingStepperPage implements OnDestroy {
     this.bookingCommitted = false;
     this.reservationId = null;
     this.selectedSlotId.set(null);
+    this.selectedDoctorId.set(null);
+    this.selectedDay.set('');
+    this.schedules = [];
+    this.days = [];
+    this.morningSlots = [];
+    this.afternoonSlots = [];
+    this.errorMessage.set(null);
+    this.removeVoucher();
+    this.paymentMethod.set(PaymentMethod.VNPAY);
+    this.selectedFileName.set(null);
+    this.countdownSeconds.set(TOTAL_SECONDS);
     this.patientForm.reset();
     this.consentAccepted = false;
     this.consentError = false;
@@ -475,6 +502,17 @@ export class BookingStepperPage implements OnDestroy {
   get formValue() { return this.patientForm.value; }
 
   private loadDoctor(doctorId: string): void {
+    if (this.loading()) return;
+    this.releaseReservation();
+    if (this.timerInterval) clearInterval(this.timerInterval);
+    this.timerInterval = null;
+    this.selectedSlotId.set(null);
+    this.selectedDay.set('');
+    this.morningSlots = [];
+    this.afternoonSlots = [];
+    this.days = [];
+    this.schedules = [];
+    this.errorMessage.set(null);
     this.loading.set(true);
     this.api.getDoctor(doctorId).pipe(finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (detail) => {
@@ -483,7 +521,8 @@ export class BookingStepperPage implements OnDestroy {
         this.selectedDoctorId.set(doctor.id);
         this.schedules = detail.availableSchedules;
         this.days = this.buildDays(detail.availableSchedules);
-        if (this.days[0]) this.selectDate(this.days[0]);
+        const firstAvailable = this.days.find(day => day.slotsCount > 0);
+        if (firstAvailable) this.selectDate(firstAvailable);
         this.step.set(2);
       },
       error: (error) => this.errorMessage.set(this.errorText(error)),

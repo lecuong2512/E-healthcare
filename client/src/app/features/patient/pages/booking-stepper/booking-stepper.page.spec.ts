@@ -281,6 +281,44 @@ describe('BookingStepperPage payment flow', () => {
     expect(api.initiatePayment.calls.mostRecent().args[2]).not.toBe('failed-key');
   });
 
+  it('clears old slots when the next doctor has no schedules', () => {
+    component.selectDoctorAndContinue(component.doctors()[0]);
+    component.chooseSlot(component.morningSlots[0]);
+    api.getDoctor.and.returnValue(of({ ...doctor, id: 'other-doctor', availableSchedules: [] }));
+    component.selectDoctorAndContinue({ ...component.doctors()[0], id: 'other-doctor' });
+    fixture.detectChanges();
+    expect(api.releaseSlot).toHaveBeenCalledWith({ doctorId, slotId, reservationId });
+    expect(component.days).toEqual([]);
+    expect(component.morningSlots).toEqual([]);
+    expect(component.afternoonSlots).toEqual([]);
+    expect(component.selectedSlotId()).toBeNull();
+    expect(component.selectedDay()).toBe('');
+    expect(fixture.nativeElement.textContent).toContain('Bác sĩ chưa có khung giờ trống');
+  });
+
+  it('chooses the first day with available slots', () => {
+    api.getDoctor.and.returnValue(of({ ...doctor, availableSchedules: [
+      { ...doctor.availableSchedules[0], date: '2026-10-09', status: 'BOOKED' },
+      doctor.availableSchedules[0],
+    ] }));
+    component.selectDoctorAndContinue(component.doctors()[0]);
+    expect(component.selectedDay()).toBe(component.days[1].date);
+    expect(component.morningSlots[0].status).toBe('available');
+  });
+
+  it('releases the selected slot when changing date', () => {
+    api.getDoctor.and.returnValue(of({ ...doctor, availableSchedules: [
+      doctor.availableSchedules[0],
+      { ...doctor.availableSchedules[0], id: 'tomorrow-slot', date: '2026-10-11' },
+    ] }));
+    component.selectDoctorAndContinue(component.doctors()[0]);
+    component.chooseSlot(component.morningSlots[0]);
+    component.selectDate(component.days[1]);
+    expect(api.releaseSlot).toHaveBeenCalledWith({ doctorId, slotId, reservationId });
+    expect(component.selectedSlotId()).toBeNull();
+    expect(component.selectedSlotLabel()).toBe('');
+  });
+
   it('clears the previous error when changing booking step', () => {
     component.errorMessage.set('Lỗi ở bước trước');
     component.goToStep(2);

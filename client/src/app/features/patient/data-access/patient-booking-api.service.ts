@@ -64,9 +64,9 @@ export class PatientBookingApiService {
   private readonly http = inject(HttpClient);
   private readonly api = environment.apiBaseUrl;
 
-  searchDoctors(): Observable<PatientDoctorSearchResponse> {
+  searchDoctors(date?: string): Observable<PatientDoctorSearchResponse> {
     return this.http.get<PatientDoctorSearchResponse>(`${this.api}/doctors/search`, {
-      params: { page: 1, limit: 50 },
+      params: { page: 1, limit: 50, ...(date ? { date } : {}) },
     });
   }
 

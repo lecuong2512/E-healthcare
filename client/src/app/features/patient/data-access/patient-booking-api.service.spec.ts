@@ -39,6 +39,13 @@ describe('PatientBookingApiService', () => {
     request.flush({});
   });
 
+  it('asks the server for doctors with bookable slots on the supplied day', () => {
+    service.searchDoctors('2026-10-01').subscribe();
+    const request = http.expectOne(req => req.url === '/api/v1/doctors/search');
+    expect(request.request.params.get('date')).toBe('2026-10-01');
+    request.flush({ data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } });
+  });
+
   it('loads and validates vouchers through the appointment APIs', () => {
     service.getVouchers().subscribe();
     const listRequest = http.expectOne('/api/v1/appointments/me/vouchers');

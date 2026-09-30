@@ -1,7 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { catchError, forkJoin, of } from 'rxjs';
 import { PatientBookingApiService } from '../../data-access/patient-booking-api.service';
 
 export interface Doctor {
@@ -29,6 +31,7 @@ export interface Doctor {
 })
 export class DoctorSearchPage {
   private readonly api = inject(PatientBookingApiService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly specialties = ['Nội tổng quát', 'Ngoại khoa', 'Nhi khoa', 'Da liễu', 'Tim mạch', 'Tai Mũi Họng'];
   readonly feeRanges = [
@@ -69,8 +72,17 @@ export class DoctorSearchPage {
   });
 
   constructor() {
-    this.api.searchDoctors().subscribe({
-      next: (response) => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date());
+    const part = (type: string) => parts.find(item => item.type === type)?.value;
+    const today = `${part('year')}-${part('month')}-${part('day')}`;
+    forkJoin({
+      response: this.api.searchDoctors(),
+      available: this.api.searchDoctors(today).pipe(catchError(() => of(null))),
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: ({ response, available }) => {
+        const availableIds = new Set(available?.data.map(doctor => doctor.id));
         this.doctors.set(response.data.map((doctor) => ({
           id: doctor.id,
           degree: doctor.academicTitle || 'Bác sĩ',
@@ -80,7 +92,7 @@ export class DoctorSearchPage {
           experienceYears: 0,
           tags: [doctor.specialty.name],
           services: [doctor.bioDescription || `Khám chuyên khoa ${doctor.specialty.name}`],
-          availableToday: true,
+          availableToday: availableIds.has(doctor.id),
           price: Number(doctor.consultationFee),
           rating: Number(doctor.ratingAverage),
           reviewCount: 0,
