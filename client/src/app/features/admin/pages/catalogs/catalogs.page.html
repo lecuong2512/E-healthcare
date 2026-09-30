@@ -1,0 +1,168 @@
+<main class="catalog-page">
+  <section class="catalog-container">
+    <h1>Quản lý danh mục y tế</h1>
+    <p class="intro">Chuẩn hóa chuyên khoa, thuốc, dịch vụ và mã ICD dùng toàn hệ thống.</p>
+
+    <section class="metrics">
+      <article><span>Chuyên khoa</span><strong>{{ specialtyCount() }}</strong><em>Đang hoạt động</em></article>
+      <article><span>Thuốc</span><strong>{{ medicineCount() }}</strong><em>Đang hoạt động</em></article>
+      <article><span>Dịch vụ</span><strong>{{ serviceCount() }}</strong><em>Đang hoạt động</em></article>
+      <article><span>ICD-10</span><strong>{{ icd10Count() }}</strong><em>Đang hoạt động</em></article>
+    </section>
+
+    <form class="filters" [formGroup]="filterForm" (ngSubmit)="load()">
+      <label>Tìm kiếm<input formControlName="search" placeholder="Tên hoặc mã danh mục" /></label>
+      <label>Loại danh mục
+        <select [value]="selectedType()" (change)="selectType($any($event.target).value)">
+          @for (type of types; track type.value) { <option [value]="type.value">{{ type.label }}</option> }
+        </select>
+      </label>
+      <button type="submit" class="secondary">Tìm</button>
+      @if (selectedType() === 'ICD10') { <button type="button" class="secondary" (click)="syncIcd10()">Đồng bộ ICD-10</button> }
+      <button type="button" class="primary" (click)="openCreate()">+ Thêm danh mục</button>
+    </form>
+
+    <section class="table-card">
+      <div class="table-title"><h2>{{ catalogListTitle() }}</h2><span>{{ total() }} mục</span></div>
+      @if (loading()) { <p class="state">Đang tải dữ liệu…</p> }
+      @else if (error()) { <p class="state error">{{ error() }}</p> }
+      @else {
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              @switch (selectedType()) {
+                @case ('SPECIALTY') { <th>Tên khoa</th><th>Mô tả</th><th>Biểu tượng</th><th>Trưởng khoa phụ trách</th> }
+                @case ('MEDICINE') { <th>Mã thuốc</th><th>Tên biệt dược</th><th>Tên hoạt chất</th><th>Hàm lượng</th><th>Đơn vị đóng gói</th><th>Giá tham chiếu</th> }
+                @case ('SERVICE') { <th>Mã dịch vụ</th><th>Tên dịch vụ</th><th>Giá niêm yết</th><th>Thời lượng khám</th> }
+                @case ('ICD10') { <th>Mã ICD-10</th><th>Tên bệnh / chẩn đoán</th><th>Nhóm ICD-10</th> }
+              }
+              <th>Trạng thái</th><th>Hành động</th>
+            </tr></thead>
+            <tbody>
+              @for (row of rows(); track row.id) {
+                <tr>
+                  @switch (selectedType()) {
+                    @case ('SPECIALTY') {
+                      <td><strong>{{ row.name || '—' }}</strong></td>
+                      <td>{{ row.description || '—' }}</td>
+                      <td>@if (row.iconUrl) { <img class="table-icon" [src]="row.iconUrl" alt="Biểu tượng chuyên khoa" /> } @else { — }</td>
+                      <td>{{ row.headDoctorId || '—' }}</td>
+                    }
+                    @case ('MEDICINE') {
+                      <td>{{ row.code || '—' }}</td><td><strong>{{ row.brandName || '—' }}</strong></td><td>{{ row.activeIngredient || '—' }}</td><td>{{ row.strength || '—' }}</td><td>{{ row.packageUnit || '—' }}</td><td>{{ formatVnd(row.referencePrice) }}</td>
+                    }
+                    @case ('SERVICE') {
+                      <td>{{ row.code || '—' }}</td><td><strong>{{ row.name || '—' }}</strong></td><td>{{ formatVnd(row.listedPrice) }}</td><td>{{ row.durationMinutes ? row.durationMinutes + ' phút' : '—' }}</td>
+                    }
+                    @case ('ICD10') {
+                      <td>{{ row.code || '—' }}</td><td><strong>{{ row.name || '—' }}</strong></td><td>{{ row.category || '—' }}</td>
+                    }
+                  }
+                  <td><span [class.inactive]="!row.isActive" class="status">{{ row.isActive ? 'Đang dùng' : 'Tạm khóa' }}</span></td>
+                  <td><button class="link" (click)="openDetails(row)">Xem chi tiết</button><button class="link" (click)="openEdit(row)">Chỉnh sửa</button><button class="link" (click)="toggle(row)">{{ row.isActive ? 'Ẩn' : 'Hiện' }}</button></td>
+                </tr>
+              }
+              @empty { <tr><td [attr.colspan]="selectedType() === 'MEDICINE' ? 8 : selectedType() === 'SPECIALTY' ? 6 : selectedType() === 'SERVICE' ? 6 : 5" class="state">Chưa có dữ liệu phù hợp.</td></tr> }
+            </tbody>
+          </table>
+        </div>
+        <div class="catalog-export-actions">
+          <button type="button" class="secondary" (click)="exportCatalog('csv')">Xuất CSV</button>
+          <button type="button" class="secondary" (click)="exportCatalog('xlsx')">Xuất Excel</button>
+        </div>
+        <nav class="catalog-pagination" aria-label="Phân trang danh mục">
+          <button type="button" class="secondary" [disabled]="page() === 1" (click)="goToPage(page() - 1)">Trước</button>
+          <span>Trang {{ page() }} / {{ totalPages() }}</span>
+          <button type="button" class="secondary" [disabled]="page() === totalPages()" (click)="goToPage(page() + 1)">Sau</button>
+        </nav>
+      }
+    </section>
+  </section>
+
+  @if (showEditor()) {
+    <div class="modal-backdrop">
+      <form class="modal" [formGroup]="editorForm" (ngSubmit)="save()">
+        <header><h2>{{ editing() ? 'Cập nhật danh mục' : 'Thêm danh mục' }}</h2><button type="button" (click)="showEditor.set(false)">×</button></header>
+        <div class="form-grid">
+          @if (selectedType() === 'SPECIALTY') {
+            <label>Tên chuyên khoa<input formControlName="name" required /></label>
+            <label class="specialty-icon-field">Biểu tượng chuyên khoa
+              <span class="icon-upload-control">
+                <input type="file" accept="image/png,image/jpeg,image/webp" (change)="onSpecialtyIconSelected($event)" />
+                <span class="icon-upload-status" aria-live="polite">
+                  @if (iconUploading()) { <span>Đang tải ảnh…</span> }
+                  @else if (iconUploadError()) { <span class="error">{{ iconUploadError() }}</span> }
+                  @else if (editorForm.controls.iconUrl.value) { <img [src]="editorForm.controls.iconUrl.value" alt="Biểu tượng chuyên khoa đã tải" /> }
+                </span>
+              </span>
+            </label>
+            <label class="full-width">Mô tả<textarea formControlName="description" rows="3"></textarea></label>
+            <label>Trưởng khoa phụ trách
+              <select formControlName="headDoctorId">
+                <option value="">Chưa phân công</option>
+                @for (doctor of doctors(); track doctor.id) {
+                  <option [value]="doctor.id">{{ doctor.academicTitle ? doctor.academicTitle + ' ' : '' }}{{ doctor.fullName }} — {{ doctor.specialty.name }}</option>
+                }
+              </select>
+            </label>
+          } @else if (selectedType() === 'MEDICINE') {
+            <label>Mã thuốc<input formControlName="code" required /></label>
+            <label>Tên biệt dược<input formControlName="brandName" required /></label>
+            <label>Tên hoạt chất<input formControlName="activeIngredient" required /></label>
+            <label>Hàm lượng<input formControlName="strength" required placeholder="Ví dụ: 500mg" /></label>
+            <label>Đơn vị đóng gói<input formControlName="packageUnit" required placeholder="Ví dụ: Hộp 10 vỉ" /></label>
+            <label>Giá tham chiếu (VND)<input type="number" min="0" formControlName="referencePrice" required /></label>
+            <label class="full-width">Hướng dẫn chống chỉ định<textarea formControlName="contraindications" rows="3"></textarea></label>
+          } @else if (selectedType() === 'SERVICE') {
+            <label>Mã dịch vụ<input formControlName="code" required /></label>
+            <label>Tên dịch vụ<input formControlName="name" required /></label>
+            <label>Giá niêm yết (VND)<input type="number" min="0" formControlName="listedPrice" required /></label>
+            <label>Thời lượng dự kiến (phút)<input type="number" min="1" formControlName="durationMinutes" required /></label>
+            <label class="full-width">Mô tả dịch vụ<textarea formControlName="description" rows="3"></textarea></label>
+          } @else {
+            <label>Mã ICD-10<input formControlName="code" required /></label>
+            <label>Tên bệnh / chẩn đoán<input formControlName="name" required /></label>
+            <label class="full-width">Nhóm ICD-10<input formControlName="category" placeholder="Ví dụ: Chương IX - Bệnh hệ tuần hoàn" /></label>
+          }
+        </div>
+        <footer><button type="button" class="secondary" (click)="showEditor.set(false)">Hủy</button><button class="primary" [disabled]="iconUploading()">{{ iconUploading() ? 'Đang tải ảnh…' : 'Lưu danh mục' }}</button></footer>
+      </form>
+    </div>
+  }
+
+  @if (detail(); as row) {
+    <div class="modal-backdrop">
+      <section class="modal detail-modal" role="dialog" aria-modal="true" aria-label="Chi tiết danh mục">
+        <header><h2>Chi tiết danh mục</h2><button type="button" aria-label="Đóng" (click)="detail.set(null)">×</button></header>
+        <dl class="detail-grid">
+          <div><dt>Trạng thái</dt><dd>{{ row.isActive ? 'Đang dùng' : 'Tạm khóa' }}</dd></div>
+          @if (selectedType() === 'SPECIALTY') {
+            <div><dt>Tên chuyên khoa</dt><dd>{{ row.name || '—' }}</dd></div>
+            <div class="full-detail"><dt>Mô tả</dt><dd>{{ row.description || '—' }}</dd></div>
+            <div><dt>Biểu tượng</dt><dd>@if (row.iconUrl) { <img class="detail-icon" [src]="row.iconUrl" alt="Biểu tượng chuyên khoa" /> } @else { — }</dd></div>
+            <div><dt>Trưởng khoa phụ trách</dt><dd>{{ row.headDoctorId || '—' }}</dd></div>
+          } @else if (selectedType() === 'MEDICINE') {
+            <div><dt>Mã thuốc</dt><dd>{{ row.code || '—' }}</dd></div>
+            <div><dt>Tên biệt dược</dt><dd>{{ row.brandName || '—' }}</dd></div>
+            <div><dt>Tên hoạt chất</dt><dd>{{ row.activeIngredient || '—' }}</dd></div>
+            <div><dt>Hàm lượng</dt><dd>{{ row.strength || '—' }}</dd></div>
+            <div><dt>Đơn vị đóng gói</dt><dd>{{ row.packageUnit || '—' }}</dd></div>
+            <div><dt>Giá tham chiếu</dt><dd>{{ formatVnd(row.referencePrice) }}</dd></div>
+            <div class="full-detail"><dt>Hướng dẫn chống chỉ định</dt><dd>{{ row.contraindications || '—' }}</dd></div>
+          } @else if (selectedType() === 'SERVICE') {
+            <div><dt>Mã dịch vụ</dt><dd>{{ row.code || '—' }}</dd></div>
+            <div><dt>Tên dịch vụ</dt><dd>{{ row.name || '—' }}</dd></div>
+            <div><dt>Giá niêm yết</dt><dd>{{ formatVnd(row.listedPrice) }}</dd></div>
+            <div><dt>Thời lượng khám dự kiến</dt><dd>{{ row.durationMinutes ? row.durationMinutes + ' phút' : '—' }}</dd></div>
+            <div class="full-detail"><dt>Mô tả dịch vụ</dt><dd>{{ row.description || '—' }}</dd></div>
+          } @else {
+            <div><dt>Mã ICD-10</dt><dd>{{ row.code || '—' }}</dd></div>
+            <div><dt>Tên bệnh / chẩn đoán</dt><dd>{{ row.name || '—' }}</dd></div>
+            <div class="full-detail"><dt>Nhóm ICD-10</dt><dd>{{ row.category || '—' }}</dd></div>
+          }
+        </dl>
+        <footer><button type="button" class="secondary" (click)="detail.set(null)">Đóng</button><button type="button" class="primary" (click)="openEdit(row)">Chỉnh sửa</button></footer>
+      </section>
+    </div>
+  }
+</main>

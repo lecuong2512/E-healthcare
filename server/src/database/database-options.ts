@@ -55,6 +55,9 @@ import { BackfillDoctorUserRoles1790730000000 } from './migrations/1790730000000
 import { AddClinicRoomDetails1790500000000 } from './migrations/1790500000000-add-clinic-room-details';
 import { StaffShiftAssignmentEntity } from './entities/staff-shift-assignment.entity';
 import { CreateStaffShiftAssignments1790600000000 } from './migrations/1790600000000-create-staff-shift-assignments';
+import { AddAdminCatalogStaffReporting1790240000000 } from './migrations/1790240000000-add-admin-catalog-staff-reporting';
+import { AddSpecialtyHeadDoctor1790320000000 } from './migrations/1790320000000-add-specialty-head-doctor';
+import { Icd10CatalogEntity, MedicalServiceEntity, MedicineEntity } from './entities/admin-catalog.entity';
 import { ReportApprovalEntity } from './entities/report-approval.entity';
 import { AddReportApprovals1790300000000 } from './migrations/1790300000000-add-report-approvals';
 import { DoctorReviewEntity } from "./entities/doctor-review.entity";
@@ -91,6 +94,9 @@ export function createDataSource(url: string): DataSource {
       DoctorQueueCounterEntity,
       CounterPaymentTransactionEntity,
       ReceptionAuditLogEntity,
+      MedicineEntity,
+      MedicalServiceEntity,
+      Icd10CatalogEntity,
       EmrAddendumEntity,
       ReportApprovalEntity,
       DoctorReviewEntity,
@@ -118,14 +124,16 @@ export function createDataSource(url: string): DataSource {
       UniquePatientCitizenId1789938000000,
       CreateEmrAddendumsTable1790150000000,
       AddAppointmentConsent1790151600000,
+      AddAdminCatalogStaffReporting1790240000000,
+      AddReportApprovals1790300000000,
       AddDoctorSpecialties1790310000000,
       AddDoctorRecurringShifts1790313600000,
-      BackfillDoctorUserRoles1790730000000,
+      AddSpecialtyHeadDoctor1790320000000,
       CreateClinicRooms1790400000000,
       AddClinicRoomDetails1790500000000,
-      CreateStaffShiftAssignments1790600000000,
-      AddReportApprovals1790300000000,
       CreateDoctorReviews1790586000000,
+      CreateStaffShiftAssignments1790600000000,
+      BackfillDoctorUserRoles1790730000000,
     ],
   });
 }
