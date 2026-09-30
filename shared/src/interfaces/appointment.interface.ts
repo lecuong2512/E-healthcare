@@ -5,7 +5,6 @@ import { PaymentMethod } from '../enums/payment-method.enum';
 export interface ReserveSlotRequest {
   doctorId: string;
   slotId: string;
-  userId?: string;
 }
 
 export type IReserveSlotRequest = ReserveSlotRequest;
@@ -13,7 +12,7 @@ export type IReserveSlotRequest = ReserveSlotRequest;
 export interface ReserveSlotData {
   doctorId: string;
   slotId: string;
-  userId: string;
+  reservationId: string;
   expiresAt: string;
   ttlSeconds: number;
 }
@@ -29,7 +28,7 @@ export type IReserveSlotResponse = ReserveSlotResponse;
 export interface ReleaseSlotRequest {
   doctorId: string;
   slotId: string;
-  userId?: string;
+  reservationId: string;
 }
 
 export type IReleaseSlotRequest = ReleaseSlotRequest;
@@ -44,10 +43,9 @@ export type IReleaseSlotResponse = ReleaseSlotResponse;
 export interface ConfirmBookingRequest {
   doctorId: string;
   slotId: string;
-  patientId?: string;
+  reservationId: string;
   reasonForVisit: string;
   paymentMethod: PaymentMethod;
-  totalAmount?: number;
   voucherCode?: string;
 }
 

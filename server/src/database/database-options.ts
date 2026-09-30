@@ -63,10 +63,21 @@ import { AddReportApprovals1790300000000 } from './migrations/1790300000000-add-
 import { DoctorReviewEntity } from "./entities/doctor-review.entity";
 import { CreateDoctorReviews1790586000000 } from "./migrations/1790586000000-create-doctor-reviews";
 import { AddAppointmentReminderLifecycle1790152800000 } from "./migrations/1790152800000-add-appointment-reminder-lifecycle";
+import { PaymentTransactionEntity } from "./entities/payment-trans.entity";
+import { CreatePaymentTransactions1790672400000 } from "./migrations/1790672400000-create-payment-transactions";
+import { AddReservationExpiry1790758800000 } from './migrations/1790758800000-add-reservation-expiry';
+import { AddPaymentSourceValidation1790762400000 } from './migrations/1790762400000-add-payment-source-validation';
+import { AddTransactionRefunds1790766000000 } from './migrations/1790766000000-add-transaction-refunds';
+import { AddReconciliationRetry1790769600000 } from './migrations/1790769600000-add-reconciliation-retry';
+import { AddCanonicalPayment1790773200000 } from './migrations/1790773200000-add-canonical-payment';
+import { AddRefundResolutionAudit1790776800000 } from './migrations/1790776800000-add-refund-resolution-audit';
+import { PaymentReconciliationAuditEntity } from './entities/payment-reconciliation-audit.entity';
+import { CreatePaymentReconciliationAudits1790780400000 } from './migrations/1790780400000-create-payment-reconciliation-audits';
 import { AuditLogEntity } from './entities/audit-log.entity';
 import { CreateAppendOnlyAuditLogs1790845200000 } from './migrations/1790845200000-create-append-only-audit-logs';
 import { EncryptMedicalDataAtRest1790848800000 } from './migrations/1790848800000-encrypt-medical-data-at-rest';
 import { SafeTypeOrmLogger } from './safe-typeorm.logger';
+
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -106,6 +117,8 @@ export function createDataSource(url: string): DataSource {
       EmrAddendumEntity,
       ReportApprovalEntity,
       DoctorReviewEntity,
+      PaymentTransactionEntity,
+      PaymentReconciliationAuditEntity,
       AuditLogEntity,
     ],
     migrationsTransactionMode: "each",
@@ -141,7 +154,15 @@ export function createDataSource(url: string): DataSource {
       AddClinicRoomDetails1790500000000,
       CreateDoctorReviews1790586000000,
       CreateStaffShiftAssignments1790600000000,
+      CreatePaymentTransactions1790672400000,
       BackfillDoctorUserRoles1790730000000,
+      AddReservationExpiry1790758800000,
+      AddPaymentSourceValidation1790762400000,
+      AddTransactionRefunds1790766000000,
+      AddReconciliationRetry1790769600000,
+      AddCanonicalPayment1790773200000,
+      AddRefundResolutionAudit1790776800000,
+      CreatePaymentReconciliationAudits1790780400000,
       CreateAppendOnlyAuditLogs1790845200000,
       EncryptMedicalDataAtRest1790848800000,
     ],

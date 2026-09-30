@@ -1,38 +1,52 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { HttpException, HttpStatus, BadRequestException, NotFoundException, INestApplication } from '@nestjs/common';
-import { DataSource, Repository, QueryRunner } from 'typeorm';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  INestApplication,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { APP_GUARD, Reflector } from '@nestjs/core';
+import { Test } from '@nestjs/testing';
+import { DataSource, QueryRunner, Repository } from 'typeorm';
 import request from 'supertest';
-import { BookingService } from '../src/modules/booking/booking.service';
-import { BookingController } from '../src/modules/booking/booking.controller';
-import { RedisService, REDIS_CLIENT } from '../src/common/redis/redis.service';
-import { DoctorScheduleEntity } from '../src/database/entities/doctor-schedule.entity';
+import {
+  AppointmentStatus,
+  PaymentMethod,
+  PaymentStatus,
+  Role,
+  SlotStatus,
+} from '@shared/enums';
+import { REQUIRED_ROLES } from '../src/common/decorators/auth.decorators';
+import { RedisService } from '../src/common/redis/redis.service';
+import { configureApp } from '../src/configure-app';
 import { AppointmentEntity } from '../src/database/entities/appointment.entity';
 import { DoctorEntity } from '../src/database/entities/doctor.entity';
-import { SlotStatus, AppointmentStatus, PaymentStatus, PaymentMethod } from '@shared/enums';
-import { configureApp } from '../src/configure-app';
+import { DoctorScheduleEntity } from '../src/database/entities/doctor-schedule.entity';
+import { BookingController } from '../src/modules/booking/booking.controller';
+import { BookingService } from '../src/modules/booking/booking.service';
 
 class MockRedisClient {
-  private store = new Map<string, { value: string; expiresAt: number }>();
+  private readonly store = new Map<string, { value: string; expiresAt: number }>();
 
-  async set(key: string, value: string, mode?: string, ttlSeconds?: number, flag?: string): Promise<string | null> {
-    const now = Date.now();
+  async set(
+    key: string,
+    value: string,
+    mode?: string,
+    ttlSeconds?: number,
+    flag?: string,
+  ): Promise<string | null> {
     const existing = this.store.get(key);
-
-    // If NX flag is passed, only set if key doesn't exist (or has expired)
-    if (flag === 'NX' && existing && existing.expiresAt > now) {
-      return null;
-    }
-
-    const ttl = (mode === 'EX' && ttlSeconds) ? ttlSeconds * 1000 : 600000;
-    this.store.set(key, { value, expiresAt: now + ttl });
+    if (flag === 'NX' && existing && existing.expiresAt > Date.now()) return null;
+    const ttl = mode === 'EX' && ttlSeconds ? ttlSeconds * 1000 : 600_000;
+    this.store.set(key, { value, expiresAt: Date.now() + ttl });
     return 'OK';
   }
 
   async get(key: string): Promise<string | null> {
-    const now = Date.now();
     const entry = this.store.get(key);
-    if (!entry) return null;
-    if (entry.expiresAt <= now) {
+    if (!entry || entry.expiresAt <= Date.now()) {
       this.store.delete(key);
       return null;
     }
@@ -40,451 +54,388 @@ class MockRedisClient {
   }
 
   async ttl(key: string): Promise<number> {
-    const now = Date.now();
     const entry = this.store.get(key);
-    if (!entry || entry.expiresAt <= now) {
-      this.store.delete(key);
-      return -2;
+    if (!entry || entry.expiresAt <= Date.now()) return -2;
+    return Math.ceil((entry.expiresAt - Date.now()) / 1000);
+  }
+
+  async eval(
+    _script: string,
+    numKeys: number,
+    ...args: string[]
+  ): Promise<number> {
+    if (numKeys === 2 && args.length === 5) {
+      const [lockKey, metadataKey, owner, metadata, ttl] = args;
+      const existing = this.store.get(lockKey);
+      if (existing && existing.expiresAt > Date.now()) return 0;
+      const expiresAt = Date.now() + Number(ttl) * 1000;
+      this.store.set(lockKey, { value: owner, expiresAt });
+      this.store.set(metadataKey, { value: metadata, expiresAt });
+      return 1;
     }
-    return Math.ceil((entry.expiresAt - now) / 1000);
+    const [lockKey, metadataKeyOrOwner, ownerForReservation] = args;
+    const owner = numKeys === 2 ? ownerForReservation : metadataKeyOrOwner;
+    const entry = this.store.get(lockKey);
+    if (!entry || entry.expiresAt <= Date.now() || entry.value !== owner) return 0;
+    this.store.delete(lockKey);
+    if (numKeys === 2) this.store.delete(metadataKeyOrOwner);
+    return 1;
   }
 
   async del(key: string): Promise<number> {
-    const existed = this.store.has(key);
-    this.store.delete(key);
-    return existed ? 1 : 0;
-  }
-
-  async eval(script: string, numKeys: number, key: string, arg: string): Promise<number> {
-    const now = Date.now();
-    const entry = this.store.get(key);
-    if (entry && entry.expiresAt > now && entry.value === arg) {
-      this.store.delete(key);
-      return 1;
-    }
-    return 0;
-  }
-
-  clear() {
-    this.store.clear();
+    return this.store.delete(key) ? 1 : 0;
   }
 }
 
-describe('Distributed Slot Locking (Section 5.1 & SRS-PAT-02)', () => {
-  let bookingService: BookingService;
-  let redisService: RedisService;
-  let mockRedisClient: MockRedisClient;
-  let mockDataSource: Partial<DataSource>;
-  let mockSlotRepo: Partial<Repository<DoctorScheduleEntity>>;
-  let mockQueryRunner: Partial<QueryRunner>;
+@Injectable()
+class BookingRoleTestGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector) {}
 
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest<{
+      headers: Record<string, string | undefined>;
+      auth?: { userId: string; role: Role };
+    }>();
+    const role = request.headers['x-test-role'] as Role | undefined;
+    if (!role) throw new UnauthorizedException();
+    const required = this.reflector.getAllAndOverride<Role[]>(REQUIRED_ROLES, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (required && !required.includes(role)) throw new ForbiddenException();
+    request.auth = { userId: 'c3d4e5f6-a1b2-4c3d-ae4f-5a6b7c8d9e0f', role };
+    return true;
+  }
+}
+
+describe('Secure distributed slot reservation', () => {
   const doctorId = 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d';
   const slotId = 'b2c3d4e5-f6a1-4b2c-9d3e-4f5a6b7c8d9e';
-  const userA = 'c3d4e5f6-a1b2-4c3d-ae4f-5a6b7c8d9e0f';
-  const userB = 'd4e5f6a1-b2c3-4d4e-bf5a-6b7c8d9e0f1a';
+  const patientA = 'c3d4e5f6-a1b2-4c3d-ae4f-5a6b7c8d9e0f';
+  const patientB = 'd4e5f6a1-b2c3-4d4e-bf5a-6b7c8d9e0f1a';
+  let redis: RedisService;
+  let service: BookingService;
+  let queryRunner: Partial<QueryRunner>;
+  let slotStatus: SlotStatus;
+  let slotExists: boolean;
+  const originalPaymentTimeout = process.env.PAYMENT_TIMEOUT_SECONDS;
 
   beforeEach(() => {
-    mockRedisClient = new MockRedisClient();
-    redisService = new RedisService(mockRedisClient as any);
-
-    mockSlotRepo = {
-      findOne: jest.fn().mockResolvedValue({
+    slotStatus = SlotStatus.AVAILABLE;
+    slotExists = true;
+    redis = new RedisService(new MockRedisClient() as never);
+    const slotRepository: Partial<Repository<DoctorScheduleEntity>> = {
+      findOne: jest.fn(async () =>
+        slotExists
+          ? (({
+              id: slotId,
+              doctorId,
+              status: slotStatus,
+            }) as DoctorScheduleEntity)
+          : null,
+      ),
+    };
+    const scheduleQuery = {
+      setLock: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getOne: jest.fn().mockResolvedValue({
         id: slotId,
         doctorId,
         status: SlotStatus.AVAILABLE,
-        date: '2026-09-20',
-        startTime: '08:30:00',
-        endTime: '09:00:00',
-        version: 0,
       }),
     };
-
-    mockQueryRunner = {
-      connect: jest.fn().mockResolvedValue(undefined),
-      startTransaction: jest.fn().mockResolvedValue(undefined),
-      commitTransaction: jest.fn().mockResolvedValue(undefined),
-      rollbackTransaction: jest.fn().mockResolvedValue(undefined),
-      release: jest.fn().mockResolvedValue(undefined),
+    queryRunner = {
+      connect: jest.fn(),
+      startTransaction: jest.fn(),
+      commitTransaction: jest.fn(),
+      rollbackTransaction: jest.fn(),
+      release: jest.fn(),
       manager: {
-        getRepository: jest.fn().mockReturnValue({
-          createQueryBuilder: jest.fn().mockReturnValue({
-            setLock: jest.fn().mockReturnThis(),
-            where: jest.fn().mockReturnThis(),
-            getOne: jest.fn().mockResolvedValue({
-              id: slotId,
-              doctorId,
-              status: SlotStatus.AVAILABLE,
-              version: 0,
-            }),
-          }),
-          findOne: jest.fn().mockResolvedValue({
-            id: doctorId,
-            consultationFee: 300000,
-          }),
-        }),
-        save: jest.fn().mockImplementation((entityClass, entity) => {
-          if (entityClass === DoctorScheduleEntity) {
-            return Promise.resolve(entity);
+        getRepository: jest.fn((entity) => {
+          if (entity === DoctorScheduleEntity) {
+            return { createQueryBuilder: () => scheduleQuery };
           }
-          return Promise.resolve({
-            id: 'apt-uuid-12345',
-            ...entity,
-          });
+          if (entity === DoctorEntity) {
+            return { findOne: jest.fn().mockResolvedValue({ id: doctorId, consultationFee: 300_000 }) };
+          }
+          return {};
         }),
-        create: jest.fn().mockImplementation((entityClass, plain) => plain),
-      } as any,
+        create: jest.fn((_entity, value) => value),
+        save: jest.fn((entity, value) =>
+          Promise.resolve(
+            entity === AppointmentEntity ? { id: 'appointment-id', ...value } : value,
+          ),
+        ),
+      } as never,
     };
-
-    mockDataSource = {
+    const dataSource = {
       isInitialized: true,
-      getRepository: jest.fn().mockImplementation((entity) => {
-        if (entity === DoctorScheduleEntity) return mockSlotRepo;
-        return {};
-      }),
-      createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
-    };
-
-    bookingService = new BookingService(
-      redisService,
-      mockDataSource as DataSource,
-    );
+      getRepository: jest.fn(() => slotRepository),
+      createQueryRunner: jest.fn(() => queryRunner),
+    } as unknown as DataSource;
+    service = new BookingService(redis, dataSource);
   });
 
   afterEach(() => {
-    mockRedisClient.clear();
-    jest.clearAllMocks();
+    if (originalPaymentTimeout === undefined) delete process.env.PAYMENT_TIMEOUT_SECONDS;
+    else process.env.PAYMENT_TIMEOUT_SECONDS = originalPaymentTimeout;
   });
 
-  describe('1. Khóa giữ chỗ (reserve-slot) & Tranh chấp khóa (Concurrency Contention)', () => {
-    it('cho phép người dùng A giữ chỗ thành công với TTL 600s khi slot còn trống', async () => {
-      const result = await bookingService.reserveSlot({
-        doctorId,
-        slotId,
-        userId: userA,
-      });
+  it('uses a unique reservation ID as the Redis owner without exposing patient ID', async () => {
+    const result = await service.reserveSlot({ doctorId, slotId }, patientA);
+    const lockKey = BookingService.formatSlotLockKey(doctorId, slotId);
 
-      expect(result.success).toBe(true);
-      expect(result.message).toContain('thành công');
-      expect(result.data.doctorId).toBe(doctorId);
-      expect(result.data.slotId).toBe(slotId);
-      expect(result.data.userId).toBe(userA);
-      expect(result.data.ttlSeconds).toBe(600);
+    expect(result.data.reservationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(await redis.get(lockKey)).toBe(result.data.reservationId);
+    expect(JSON.stringify(result)).not.toContain(patientA);
+  });
 
-      // Verify key in Redis
-      const lockKey = BookingService.formatSlotLockKey(doctorId, slotId);
-      const val = await redisService.get(lockKey);
-      expect(val).toBe(userA);
+  it('allows only one winner under concurrent contention', async () => {
+    const results = await Promise.allSettled(
+      Array.from({ length: 20 }, (_, index) =>
+        service.reserveSlot({ doctorId, slotId }, `patient-${index}`),
+      ),
+    );
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(19);
+  });
 
-      const ttl = await redisService.ttl(lockKey);
-      expect(ttl).toBeGreaterThan(0);
-      expect(ttl).toBeLessThanOrEqual(600);
-    });
+  it('rejects a reservation when the database slot is already holding', async () => {
+    slotStatus = SlotStatus.HOLDING;
 
-    it('từ chối người dùng B với mã lỗi HTTP 409 Conflict khi người dùng A đang giữ chỗ', async () => {
-      // User A acquires lock
-      await bookingService.reserveSlot({
-        doctorId,
-        slotId,
-        userId: userA,
-      });
-
-      // User B tries to acquire lock on the SAME slot
-      await expect(
-        bookingService.reserveSlot({
-          doctorId,
-          slotId,
-          userId: userB,
-        }),
-      ).rejects.toThrow(HttpException);
-
-      try {
-        await bookingService.reserveSlot({
-          doctorId,
-          slotId,
-          userId: userB,
-        });
-      } catch (error: any) {
-        expect(error.getStatus()).toBe(HttpStatus.CONFLICT);
-        const response = error.getResponse();
-        expect(response.message).toBe(
-          'Khung giờ này vừa được người khác chọn, vui lòng chọn khung giờ khác.',
-        );
-      }
-    });
-
-    it('cho phép người dùng A gọi lại mà không bị lỗi (idempotent)', async () => {
-      await bookingService.reserveSlot({
-        doctorId,
-        slotId,
-        userId: userA,
-      });
-
-      const secondCall = await bookingService.reserveSlot({
-        doctorId,
-        slotId,
-        userId: userA,
-      });
-
-      expect(secondCall.success).toBe(true);
-      expect(secondCall.data.userId).toBe(userA);
-    });
-
-    it('từ chối giữ chỗ nếu slot trong CSDL đã chuyển sang BOOKED hoặc OFF', async () => {
-      (mockSlotRepo.findOne as jest.Mock).mockResolvedValueOnce({
-        id: slotId,
-        doctorId,
-        status: SlotStatus.BOOKED,
-      });
-
-      await expect(
-        bookingService.reserveSlot({
-          doctorId,
-          slotId,
-          userId: userA,
-        }),
-      ).rejects.toThrow(HttpException);
-    });
-
-    it('giả lập 100 requests đồng thời tranh chấp 1 slot: DUY NHẤT 1 request thành công, 99 nhận 409 Conflict', async () => {
-      const requests = Array.from({ length: 100 }, (_, i) => {
-        const candidateUserId = `user-${i}`;
-        return bookingService
-          .reserveSlot({
-            doctorId,
-            slotId,
-            userId: candidateUserId,
-          })
-          .then((res) => ({ status: 201, res }))
-          .catch((err) => ({
-            status: err instanceof HttpException ? err.getStatus() : 500,
-            err,
-          }));
-      });
-
-      const results = await Promise.all(requests);
-      const successful = results.filter((r) => r.status === 201);
-      const conflicts = results.filter((r) => r.status === 409);
-
-      expect(successful.length).toBe(1);
-      expect(conflicts.length).toBe(99);
-      expect((successful[0] as any).res.success).toBe(true);
+    await expect(service.reserveSlot({ doctorId, slotId }, patientA)).rejects.toMatchObject({
+      status: 409,
     });
   });
 
-  describe('2. Giải phóng khóa (release-slot)', () => {
-    it('cho phép chính người giữ chỗ giải phóng khóa', async () => {
-      await bookingService.reserveSlot({
-        doctorId,
-        slotId,
-        userId: userA,
-      });
+  it('does not create Redis keys for a nonexistent database slot', async () => {
+    slotExists = false;
 
-      const releaseResult = await bookingService.releaseSlot({
-        doctorId,
-        slotId,
-        userId: userA,
-      });
-
-      expect(releaseResult.success).toBe(true);
-
-      // Now user B can acquire the slot
-      const userBResult = await bookingService.reserveSlot({
-        doctorId,
-        slotId,
-        userId: userB,
-      });
-      expect(userBResult.success).toBe(true);
-      expect(userBResult.data.userId).toBe(userB);
-    });
-
-    it('ngăn chặn người khác giải phóng khóa không thuộc quyền sở hữu của mình', async () => {
-      await bookingService.reserveSlot({
-        doctorId,
-        slotId,
-        userId: userA,
-      });
-
-      // User B attempts to release User A's lock
-      const releaseAttempt = await bookingService.releaseSlot({
-        doctorId,
-        slotId,
-        userId: userB,
-      });
-
-      expect(releaseAttempt.success).toBe(false);
-
-      // Lock is still retained by User A
-      const status = await bookingService.getSlotLockStatus(doctorId, slotId);
-      expect(status.isLocked).toBe(true);
-      expect(status.holder).toBe(userA);
-    });
+    await expect(service.reserveSlot({ doctorId, slotId }, patientA)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(await redis.get(BookingService.formatSlotLockKey(doctorId, slotId))).toBeNull();
   });
 
-  describe('3. Chốt đặt khám thanh toán tại quầy (confirm-booking) với DB Transaction', () => {
-    it('thực thi Transaction SELECT ... FOR UPDATE, chuyển slot sang BOOKED, tạo Appointment CONFIRMED và xóa khóa Redis', async () => {
-      // User A reserves slot first
-      await bookingService.reserveSlot({
-        doctorId,
-        slotId,
-        userId: userA,
-      });
+  it('uses the configured payment timeout for reservation TTL and expiry', async () => {
+    process.env.PAYMENT_TIMEOUT_SECONDS = '900';
+    const before = Date.now();
 
-      const confirmed = await bookingService.confirmBooking({
+    const reservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+
+    expect(reservation.data.ttlSeconds).toBe(900);
+    expect(new Date(reservation.data.expiresAt).getTime() - before).toBeGreaterThanOrEqual(
+      899_000,
+    );
+  });
+
+  it('prevents another patient from releasing or confirming a stolen reservation ID', async () => {
+    const reservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+    const dto = { doctorId, slotId, reservationId: reservation.data.reservationId };
+
+    await expect(service.releaseSlot(dto, patientB)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    await expect(
+      service.confirmBooking(
+        {
+          ...dto,
+          reasonForVisit: 'Unauthorized booking',
+          paymentMethod: PaymentMethod.VNPAY,
+        },
+        patientB,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect((await service.getSlotLockStatus(doctorId, slotId)).isLocked).toBe(true);
+  });
+
+  it('releases only the matching reservation owner', async () => {
+    const reservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+    const wrongRelease = await service.releaseSlot(
+      { doctorId, slotId, reservationId: '95276349-390f-4ebc-b62b-5c96f60cf899' },
+      patientB,
+    );
+    expect(wrongRelease.success).toBe(false);
+    expect((await service.getSlotLockStatus(doctorId, slotId)).isLocked).toBe(true);
+
+    const ownerRelease = await service.releaseSlot(
+      { doctorId, slotId, reservationId: reservation.data.reservationId },
+      patientA,
+    );
+    expect(ownerRelease.success).toBe(true);
+  });
+
+  it('does not let an old reservation delete a newer lock', async () => {
+    const oldReservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+    await service.releaseSlot(
+      { doctorId, slotId, reservationId: oldReservation.data.reservationId },
+      patientA,
+    );
+    const newReservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+
+    await service.releaseSlot(
+      { doctorId, slotId, reservationId: oldReservation.data.reservationId },
+      patientA,
+    );
+
+    expect(await redis.get(BookingService.formatSlotLockKey(doctorId, slotId))).toBe(
+      newReservation.data.reservationId,
+    );
+  });
+
+  it('never exposes the lock owner in public status', async () => {
+    await service.reserveSlot({ doctorId, slotId }, patientA);
+    const status = await service.getSlotLockStatus(doctorId, slotId);
+    expect(status).toEqual({ isLocked: true, ttlSeconds: expect.any(Number) });
+    expect(status).not.toHaveProperty('holder');
+  });
+
+  it('confirms pay-at-clinic only with the matching reservation and releases it safely', async () => {
+    const reservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+    const appointment = await service.confirmBooking(
+      {
         doctorId,
         slotId,
-        patientId: userA,
-        reasonForVisit: 'Đau đầu, sốt nhẹ 2 ngày',
+        reservationId: reservation.data.reservationId,
+        reasonForVisit: 'Khám tổng quát',
         paymentMethod: PaymentMethod.PAY_AT_CLINIC,
-      });
+      },
+      patientA,
+    );
 
-      expect(confirmed.appointmentCode).toMatch(/^APT-\d{6}-\d{4}$/);
-      expect(confirmed.status).toBe(AppointmentStatus.CONFIRMED);
-      expect(confirmed.paymentStatus).toBe(PaymentStatus.UNPAID);
-      expect(confirmed.paymentMethod).toBe(PaymentMethod.PAY_AT_CLINIC);
-      expect(confirmed.totalAmount).toBe(300000);
-
-      // Verify DB Transaction was committed
-      expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
-
-      // Verify Redis lock was released after confirmation
-      const status = await bookingService.getSlotLockStatus(doctorId, slotId);
-      expect(status.isLocked).toBe(false);
-    });
-
-    it('từ chối chốt lịch nếu người chốt không phải người giữ khóa Redis', async () => {
-      await bookingService.reserveSlot({
-        doctorId,
-        slotId,
-        userId: userA,
-      });
-
-      await expect(
-        bookingService.confirmBooking({
-          doctorId,
-          slotId,
-          patientId: userB,
-          reasonForVisit: 'Khám tổng quát',
-          paymentMethod: PaymentMethod.PAY_AT_CLINIC,
-        }),
-      ).rejects.toThrow(HttpException);
-
-      expect(mockQueryRunner.commitTransaction).not.toHaveBeenCalled();
-    });
-
-    it('rollback Transaction nếu slot trong CSDL đã bị người khác chốt trước đó', async () => {
-      await bookingService.reserveSlot({
-        doctorId,
-        slotId,
-        userId: userA,
-      });
-
-      // Mock slot in DB as already BOOKED
-      const repoMock = (mockQueryRunner.manager as any).getRepository(DoctorScheduleEntity);
-      repoMock.createQueryBuilder().getOne.mockResolvedValueOnce({
-        id: slotId,
-        doctorId,
-        status: SlotStatus.BOOKED,
-      });
-
-      await expect(
-        bookingService.confirmBooking({
-          doctorId,
-          slotId,
-          patientId: userA,
-          reasonForVisit: 'Khám mắt',
-          paymentMethod: PaymentMethod.PAY_AT_CLINIC,
-        }),
-      ).rejects.toThrow(HttpException);
-
-      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
-    });
+    expect(appointment.status).toBe(AppointmentStatus.CONFIRMED);
+    expect(appointment.paymentStatus).toBe(PaymentStatus.UNPAID);
+    expect(queryRunner.commitTransaction).toHaveBeenCalled();
+    expect((await service.getSlotLockStatus(doctorId, slotId)).isLocked).toBe(false);
   });
 
-  describe('4. Tích hợp Controller & API Endpoints qua Supertest', () => {
-    let app: INestApplication;
+  it('keeps an online booking pending with a holding slot and active reservation', async () => {
+    const reservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+    const appointment = await service.confirmBooking(
+      {
+        doctorId,
+        slotId,
+        reservationId: reservation.data.reservationId,
+        reasonForVisit: 'Khám tổng quát',
+        paymentMethod: PaymentMethod.VNPAY,
+      },
+      patientA,
+    );
 
-    beforeAll(async () => {
-      const moduleRef: TestingModule = await Test.createTestingModule({
-        controllers: [BookingController],
-        providers: [
-          BookingService,
-          {
-            provide: RedisService,
-            useValue: redisService,
-          },
-          {
-            provide: DataSource,
-            useValue: mockDataSource,
-          },
-        ],
-      }).compile();
+    expect(appointment.status).toBe(AppointmentStatus.PENDING_PAYMENT);
+    expect(appointment.paymentStatus).toBe(PaymentStatus.PENDING);
+    expect(queryRunner.manager!.save).toHaveBeenCalledWith(
+      DoctorScheduleEntity,
+      expect.objectContaining({ status: SlotStatus.HOLDING }),
+    );
+    expect(queryRunner.manager!.create).toHaveBeenCalledWith(
+      AppointmentEntity,
+      expect.objectContaining({
+        reservationId: reservation.data.reservationId,
+        reservationExpiresAt: new Date(reservation.data.expiresAt),
+        paymentStatus: PaymentStatus.PENDING,
+      }),
+    );
+    expect((await service.getSlotLockStatus(doctorId, slotId)).isLocked).toBe(true);
+  });
 
-      app = moduleRef.createNestApplication();
-      configureApp(app);
-      await app.init();
+  it('rejects confirmation when the reservation expires after the initial check', async () => {
+    const reservation = await service.reserveSlot({ doctorId, slotId }, patientA);
+    const originalGet = redis.get.bind(redis);
+    let metadataReads = 0;
+    jest.spyOn(redis, 'get').mockImplementation(async (key) => {
+      if (key === BookingService.formatReservationKey(reservation.data.reservationId)) {
+        metadataReads += 1;
+        if (metadataReads === 2) return null;
+      }
+      return originalGet(key);
     });
 
-    afterAll(async () => {
-      await app.close();
-    });
-
-    it('POST /api/v1/booking/reserve-slot trả về 201 Created khi đặt thành công', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/api/v1/booking/reserve-slot')
-        .send({
+    await expect(
+      service.confirmBooking(
+        {
           doctorId,
           slotId,
-          userId: userA,
-        });
+          reservationId: reservation.data.reservationId,
+          reasonForVisit: 'Boundary expiry',
+          paymentMethod: PaymentMethod.VNPAY,
+        },
+        patientA,
+      ),
+    ).rejects.toMatchObject({ status: 409 });
 
-      expect(res.status).toBe(201);
-      expect(res.body.success).toBe(true);
-      expect(res.body.data.ttlSeconds).toBe(600);
-    });
+    expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+    expect(queryRunner.manager!.create).not.toHaveBeenCalled();
+  });
+});
 
-    it('POST /api/v1/booking/reserve-slot trả về 409 Conflict khi bị trùng slot', async () => {
-      // First reservation
-      await request(app.getHttpServer())
-        .post('/api/v1/booking/reserve-slot')
-        .send({ doctorId, slotId, userId: userA });
+describe('Booking mutation authorization', () => {
+  let app: INestApplication;
+  const service = {
+    reserveSlot: jest.fn().mockResolvedValue({
+      success: true,
+      message: 'ok',
+      data: {
+        doctorId: 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d',
+        slotId: 'b2c3d4e5-f6a1-4b2c-9d3e-4f5a6b7c8d9e',
+        reservationId: '95276349-390f-4ebc-b62b-5c96f60cf899',
+        expiresAt: new Date().toISOString(),
+        ttlSeconds: 600,
+      },
+    }),
+    releaseSlot: jest.fn().mockResolvedValue({ success: true, message: 'ok' }),
+  };
 
-      // Second reservation on same slot
-      const res = await request(app.getHttpServer())
-        .post('/api/v1/booking/reserve-slot')
-        .send({ doctorId, slotId, userId: userB });
+  beforeAll(async () => {
+    const module = await Test.createTestingModule({
+      controllers: [BookingController],
+      providers: [
+        Reflector,
+        { provide: BookingService, useValue: service },
+        { provide: APP_GUARD, useClass: BookingRoleTestGuard },
+      ],
+    }).compile();
+    app = module.createNestApplication();
+    configureApp(app);
+    await app.init();
+  });
 
-      expect(res.status).toBe(409);
-      expect(res.body.message).toBe(
-        'Khung giờ này vừa được người khác chọn, vui lòng chọn khung giờ khác.',
-      );
-    });
+  afterAll(async () => app.close());
 
-    it('POST /api/v1/booking/release-slot giải phóng thành công', async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/booking/reserve-slot')
-        .send({ doctorId, slotId, userId: userA });
+  it('rejects anonymous and non-patient slot mutations', async () => {
+    const body = {
+      doctorId: 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d',
+      slotId: 'b2c3d4e5-f6a1-4b2c-9d3e-4f5a6b7c8d9e',
+    };
+    await request(app.getHttpServer()).post('/api/v1/booking/reserve-slot').send(body).expect(401);
+    await request(app.getHttpServer())
+      .post('/api/v1/booking/reserve-slot')
+      .set('x-test-role', Role.DOCTOR)
+      .send(body)
+      .expect(403);
+    await request(app.getHttpServer())
+      .post('/api/v1/booking/release-slot')
+      .set('x-test-role', Role.ADMIN)
+      .send({ ...body, reservationId: '95276349-390f-4ebc-b62b-5c96f60cf899' })
+      .expect(403);
+  });
 
-      const res = await request(app.getHttpServer())
-        .post('/api/v1/booking/release-slot')
-        .send({ doctorId, slotId, userId: userA });
-
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-    });
-
-    it('GET /api/v1/booking/slot-lock/:doctorId/:slotId trả về trạng thái khóa', async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/booking/reserve-slot')
-        .send({ doctorId, slotId, userId: userA });
-
-      const res = await request(app.getHttpServer())
-        .get(`/api/v1/booking/slot-lock/${doctorId}/${slotId}`);
-
-      expect(res.status).toBe(200);
-      expect(res.body.isLocked).toBe(true);
-      expect(res.body.holder).toBe(userA);
-      expect(res.body.ttlSeconds).toBeGreaterThan(0);
-    });
+  it('accepts patient mutations and rejects forged identity fields', async () => {
+    const body = {
+      doctorId: 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d',
+      slotId: 'b2c3d4e5-f6a1-4b2c-9d3e-4f5a6b7c8d9e',
+    };
+    await request(app.getHttpServer())
+      .post('/api/v1/booking/reserve-slot')
+      .set('x-test-role', Role.PATIENT)
+      .send(body)
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/api/v1/booking/reserve-slot')
+      .set('x-test-role', Role.PATIENT)
+      .send({ ...body, userId: 'forged-user' })
+      .expect(400);
   });
 });

@@ -45,6 +45,9 @@
               "../node_modules/ng-zorro-antd/message/style/index.min.css",
               "../node_modules/ng-zorro-antd/modal/style/index.min.css",
               "../node_modules/ng-zorro-antd/rate/style/index.min.css",
+              "../node_modules/ng-zorro-antd/alert/style/index.min.css",
+              "../node_modules/ng-zorro-antd/result/style/index.min.css",
+              "../node_modules/ng-zorro-antd/spin/style/index.min.css",
               "src/styles.scss"
             ],
             "scripts": []
@@ -111,6 +114,9 @@
               "../node_modules/ng-zorro-antd/message/style/index.min.css",
               "../node_modules/ng-zorro-antd/modal/style/index.min.css",
               "../node_modules/ng-zorro-antd/rate/style/index.min.css",
+              "../node_modules/ng-zorro-antd/alert/style/index.min.css",
+              "../node_modules/ng-zorro-antd/result/style/index.min.css",
+              "../node_modules/ng-zorro-antd/spin/style/index.min.css",
               "src/styles.scss"
             ],
             "scripts": []

@@ -7,8 +7,8 @@ import { authInterceptor } from './core/interceptors/auth.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
 import { AuthService } from './core/services/auth.service';
 import { registerLocaleData } from '@angular/common';
-import localeVi from '@angular/common/locales/vi';
 import { provideAnimations } from '@angular/platform-browser/animations';
+import localeVi from '@angular/common/locales/vi';
 // Gọi /auth/refresh 1 lần khi app khởi động để phục hồi phiên đăng nhập
 // từ HttpOnly cookie (access token chỉ sống trong bộ nhớ nên mất khi F5).
 function initializeSession(authService: AuthService) {

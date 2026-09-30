@@ -10,6 +10,7 @@ import { OAuth2Client } from "google-auth-library";
 import request from "supertest";
 import { DataSource } from "typeorm";
 import { AppModule } from "../src/app.module";
+import { RedisService } from "../src/common/redis/redis.service";
 import { Roles } from "../src/common/decorators/auth.decorators";
 import { configureApp } from "../src/configure-app";
 import { environment } from "../src/config/environment";
@@ -127,6 +128,12 @@ describe("SRS-AUTH-02 HTTP và PostgreSQL thật", () => {
     await database.query(
       "TRUNCATE registration_otp_sends,registration_sessions,google_oauth_flows,google_registration_sessions,auth_sessions,personal_health_profiles,user_roles,users CASCADE",
     );
+    try {
+      const redis = app.get(RedisService);
+      await redis.getClient().flushdb();
+    } catch {
+      // Redis might not be initialized yet
+    }
   });
 
   afterAll(async () => {
@@ -301,14 +308,16 @@ describe("SRS-AUTH-02 HTTP và PostgreSQL thật", () => {
   });
 
   test("tám lần sai đồng thời không làm mất bộ đếm hoặc vượt ngưỡng khóa", async () => {
-    await seed();
+    const concurrentEmail = "concurrent_failed@example.com";
+    await seed(Role.PATIENT, concurrentEmail);
     const responses = await Promise.all(
-      Array.from({ length: 8 }, () => login(email, "Sai1234!")),
+      Array.from({ length: 8 }, () => login(concurrentEmail, "Sai1234!")),
     );
     expect(responses.filter((result) => result.status === 401)).toHaveLength(4);
     expect(responses.filter((result) => result.status === 429)).toHaveLength(4);
     const [user] = await database.query(
-      "SELECT failed_login_attempts FROM users",
+      "SELECT failed_login_attempts FROM users WHERE email = $1",
+      [concurrentEmail],
     );
     expect(user.failed_login_attempts).toBe(5);
   });

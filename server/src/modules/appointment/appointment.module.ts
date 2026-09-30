@@ -6,5 +6,16 @@ import { AppointmentController } from './appointment.controller';
 import { AppointmentLifecycleService } from './appointment-lifecycle.service';
 import { AppointmentPaymentExpiryScheduler } from './appointment-payment-expiry.scheduler';
 import { AuditModule } from '../audit/audit.module';
-@Module({ imports: [DatabaseModule, NotificationModule.register(), RealtimeModule, AuditModule], controllers: [AppointmentController], providers: [AppointmentLifecycleService, AppointmentPaymentExpiryScheduler], exports: [AppointmentLifecycleService] })
+
+@Module({
+  imports: [
+    DatabaseModule,
+    NotificationModule.register(),
+    RealtimeModule,
+    AuditModule,
+  ],
+  controllers: [AppointmentController],
+  providers: [AppointmentLifecycleService, AppointmentPaymentExpiryScheduler],
+  exports: [AppointmentLifecycleService],
+})
 export class AppointmentModule {}

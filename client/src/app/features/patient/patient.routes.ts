@@ -21,9 +21,9 @@ export const PATIENT_ROUTES: Routes = [
       import('./pages/medical-history/medical-history.page').then((m) => m.MedicalHistoryPage),
   },
   {
-    path: 'payment-qr/:method',
+    path: 'payment-result',
     loadComponent: () =>
-      import('./pages/payment-qr/payment-qr.page').then((m) => m.PaymentQrPage),
+      import('./pages/payment-result/payment-result.page').then((m) => m.PaymentResultPage),
   },
   {
     path: 'profile',

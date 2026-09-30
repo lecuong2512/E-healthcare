@@ -16,6 +16,7 @@ import { ReceptionModule } from "./modules/reception/reception.module";
 import { StaffAdminModule } from './modules/admin/staff-admin.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AdminDashboardModule } from './modules/admin/admin-dashboard.module';
+import { PaymentModule } from "./modules/payment/payment.module";
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { AdminDashboardModule } from './modules/admin/admin-dashboard.module';
     StaffAdminModule,
     AdminModule,
     AdminDashboardModule,
+    PaymentModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
   ],
   providers: [
