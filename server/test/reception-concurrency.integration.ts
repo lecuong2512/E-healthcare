@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import './test-environment';
 import { randomUUID } from 'node:crypto';
 import { ConflictException } from '@nestjs/common';
 import {

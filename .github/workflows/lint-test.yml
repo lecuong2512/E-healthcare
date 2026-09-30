@@ -128,6 +128,8 @@ jobs:
       TEST_REDIS_URL: redis://localhost:6379/15
       TEST_REDIS_HOST: localhost
       TEST_REDIS_PORT: 6379
+      MEDICAL_DATA_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      MEDICAL_DATA_ENCRYPTION_KEY_VERSION: "1"
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
