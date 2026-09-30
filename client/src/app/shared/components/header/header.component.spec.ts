@@ -1,105 +1,236 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { signal } from '@angular/core';
-import { NavbarComponent } from './header.component';
+import { provideRouter, Router } from '@angular/router';
+import { of, throwError } from 'rxjs';
+import { NavbarComponent, getInitials, DEFAULT_USERS, ROLE_CONFIG } from './header.component';
 import { AuthService } from '../../../core/services/auth.service';
+import { TokenStoreService } from '../../../core/services/token-store.service';
 import { Role } from '@shared/enums';
 
-describe('NavbarComponent (Role-based Navigation)', () => {
-  let component: NavbarComponent;
+describe('NavbarComponent', () => {
   let fixture: ComponentFixture<NavbarComponent>;
-  let mockUserRole: ReturnType<typeof signal<string | null>>;
+  let component: NavbarComponent;
+  let authServiceSpy: jasmine.SpyObj<AuthService>;
+  let tokenStore: TokenStoreService;
+  let router: Router;
 
   beforeEach(async () => {
-    mockUserRole = signal<string | null>(null);
+    authServiceSpy = jasmine.createSpyObj<AuthService>('AuthService', ['logout']);
+    authServiceSpy.logout.and.returnValue(of(undefined));
 
     await TestBed.configureTestingModule({
       imports: [NavbarComponent],
       providers: [
         provideRouter([]),
-        {
-          provide: AuthService,
-          useValue: {
-            userRole: mockUserRole,
-          },
-        },
+        { provide: AuthService, useValue: authServiceSpy },
       ],
     }).compileComponents();
 
+    tokenStore = TestBed.inject(TokenStoreService);
+    router = TestBed.inject(Router);
+    spyOn(router, 'navigateByUrl').and.returnValue(Promise.resolve(true));
+
     fixture = TestBed.createComponent(NavbarComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
   });
 
-  it('should create the navbar component', () => {
-    expect(component).toBeTruthy();
+  afterEach(() => {
+    tokenStore.clear();
+    localStorage.clear();
   });
 
-  it('should render patient menu items when role is ROLE_PATIENT', () => {
-    mockUserRole.set(Role.PATIENT);
-    fixture.detectChanges();
+  describe('getInitials helper', () => {
+    it('returns initials for 2-word names correctly', () => {
+      expect(getInitials('Nguyễn An')).toBe('NA');
+      expect(getInitials('Trần Bình')).toBe('TB');
+      expect(getInitials('Lê Cường')).toBe('LC');
+      expect(getInitials('Phạm Dũng')).toBe('PD');
+    });
 
-    const compiled = fixture.nativeElement as HTMLElement;
-    const links = Array.from(compiled.querySelectorAll('nav a')).map((a) =>
-      a.textContent?.trim(),
-    );
+    it('returns initials for 3+ word names using first and last word', () => {
+      expect(getInitials('Nguyễn Văn An')).toBe('NA');
+      expect(getInitials('Lê Thị Diễm Cường')).toBe('LC');
+      expect(getInitials('Trần Quốc Bình')).toBe('TB');
+    });
 
-    expect(links).toEqual(['Tìm bác sĩ', 'Lịch sử khám', 'Hồ sơ sức khỏe']);
-    expect(component.homeRoute()).toBe('/patient/doctor-search');
+    it('handles single word or empty input gracefully', () => {
+      expect(getInitials('Admin')).toBe('AD');
+      expect(getInitials('')).toBe('EH');
+    });
   });
 
-  it('should render doctor menu items when role is ROLE_DOCTOR', () => {
-    mockUserRole.set(Role.DOCTOR);
-    fixture.detectChanges();
+  describe('Unauthenticated state', () => {
+    it('renders login link when user is not authenticated', () => {
+      tokenStore.clear();
+      fixture.detectChanges();
 
-    const compiled = fixture.nativeElement as HTMLElement;
-    const links = Array.from(compiled.querySelectorAll('nav a')).map((a) =>
-      a.textContent?.trim(),
-    );
-
-    expect(links).toEqual(['Hàng đợi khám', 'Cấu hình ca trực']);
-    expect(component.homeRoute()).toBe('/doctor/queue');
+      const el = fixture.nativeElement as HTMLElement;
+      const loginBtn = el.querySelector('a[routerLink="/login"]');
+      expect(loginBtn).not.toBeNull();
+      expect(loginBtn?.textContent?.trim()).toContain('Đăng nhập');
+    });
   });
 
-  it('should render receptionist menu items when role is ROLE_RECEPTIONIST', () => {
-    mockUserRole.set(Role.RECEPTIONIST);
-    fixture.detectChanges();
+  describe('Role-based navigation', () => {
+    it('renders Patient navigation links for PATIENT role', () => {
+      tokenStore.setSession('fake-token', Role.PATIENT);
+      fixture.detectChanges();
 
-    const compiled = fixture.nativeElement as HTMLElement;
-    const links = Array.from(compiled.querySelectorAll('nav a')).map((a) =>
-      a.textContent?.trim(),
-    );
+      const text = fixture.nativeElement.textContent;
+      expect(text).toContain('Tìm bác sĩ');
+      expect(text).toContain('Lịch sử khám & Đơn thuốc');
+      expect(text).toContain('Hồ sơ sức khỏe');
+    });
 
-    expect(links).toEqual(['Bàn tiếp đón check-in', 'Tiếp nhận vãng lai']);
-    expect(component.homeRoute()).toBe('/receptionist/checkin');
+    it('renders Doctor navigation links for DOCTOR role', () => {
+      tokenStore.setSession('fake-token', Role.DOCTOR);
+      fixture.detectChanges();
+
+      const text = fixture.nativeElement.textContent;
+      expect(text).toContain('Hàng đợi khám');
+      expect(text).toContain('Lịch khám & Ca trực');
+    });
+
+    it('renders Receptionist navigation links for RECEPTIONIST role', () => {
+      tokenStore.setSession('fake-token', Role.RECEPTIONIST);
+      fixture.detectChanges();
+
+      const text = fixture.nativeElement.textContent;
+      expect(text).toContain('Tiếp đón check-in');
+      expect(text).toContain('Đặt lịch vãng lai');
+      expect(text).toContain('Bảng gọi số Smart TV');
+    });
+
+    it('renders Admin navigation links for ADMIN role', () => {
+      tokenStore.setSession('fake-token', Role.ADMIN);
+      fixture.detectChanges();
+
+      const text = fixture.nativeElement.textContent;
+      expect(text).toContain('Dashboard KPI');
+      expect(text).toContain('Danh mục y tế');
+      expect(text).toContain('Quản lý nhân sự');
+      expect(text).toContain('Nhật ký kiểm toán');
+    });
   });
 
-  it('should render admin menu items when role is ROLE_ADMIN', () => {
-    mockUserRole.set(Role.ADMIN);
-    fixture.detectChanges();
+  describe('User Avatar and Dropdown Menu', () => {
+    it('displays initials and full name corresponding to role defaults', () => {
+      tokenStore.setSession('fake-token', Role.PATIENT);
+      fixture.detectChanges();
 
-    const compiled = fixture.nativeElement as HTMLElement;
-    const links = Array.from(compiled.querySelectorAll('nav a')).map((a) =>
-      a.textContent?.trim(),
-    );
+      expect(component.userInitials()).toBe('NA');
+      expect(component.currentUser().fullName).toBe('Nguyễn An');
 
-    expect(links).toEqual([
-      'Dashboard KPI',
-      'Danh mục y tế',
-      'Nhân sự',
-      'Nhật ký kiểm toán',
-    ]);
-    expect(component.homeRoute()).toBe('/admin/dashboard');
-  });
+      tokenStore.setSession('fake-token', Role.DOCTOR);
+      fixture.detectChanges();
+      expect(component.userInitials()).toBe('TB');
 
-  it('should render empty navigation links when not logged in', () => {
-    mockUserRole.set(null);
-    fixture.detectChanges();
+      tokenStore.setSession('fake-token', Role.RECEPTIONIST);
+      fixture.detectChanges();
+      expect(component.userInitials()).toBe('LC');
 
-    const compiled = fixture.nativeElement as HTMLElement;
-    const links = Array.from(compiled.querySelectorAll('nav a'));
+      tokenStore.setSession('fake-token', Role.ADMIN);
+      fixture.detectChanges();
+      expect(component.userInitials()).toBe('PD');
+    });
 
-    expect(links.length).toBe(0);
-    expect(component.homeRoute()).toBe('/');
+    it('displays custom user profile when set in tokenStore', () => {
+      tokenStore.setSession('fake-token', Role.PATIENT, {
+        fullName: 'Phạm Minh Tuấn',
+        email: 'tuanpm@example.com',
+        phoneNumber: '0909999999',
+        role: Role.PATIENT,
+      });
+      fixture.detectChanges();
+
+      expect(component.userInitials()).toBe('PT');
+      expect(component.currentUser().fullName).toBe('Phạm Minh Tuấn');
+      expect(component.currentUser().email).toBe('tuanpm@example.com');
+    });
+
+    it('opens and closes dropdown menu when avatar button is clicked', () => {
+      tokenStore.setSession('fake-token', Role.PATIENT);
+      fixture.detectChanges();
+
+      expect(component.isUserMenuOpen()).toBeFalse();
+
+      component.toggleUserMenu();
+      fixture.detectChanges();
+      expect(component.isUserMenuOpen()).toBeTrue();
+
+      const dropdown = fixture.nativeElement.querySelector('[role="menu"]');
+      expect(dropdown).not.toBeNull();
+      expect(dropdown.textContent).toContain('Nguyễn An');
+      expect(dropdown.textContent).toContain('Bệnh nhân');
+
+      component.closeUserMenu();
+      fixture.detectChanges();
+      expect(component.isUserMenuOpen()).toBeFalse();
+    });
+
+    it('closes menu when Escape key is pressed', () => {
+      tokenStore.setSession('fake-token', Role.PATIENT);
+      component.isUserMenuOpen.set(true);
+      fixture.detectChanges();
+
+      component.onEscape();
+      expect(component.isUserMenuOpen()).toBeFalse();
+    });
+
+    it('shows PHR and Medical History links in dropdown for PATIENT', () => {
+      tokenStore.setSession('fake-token', Role.PATIENT);
+      component.isUserMenuOpen.set(true);
+      fixture.detectChanges();
+
+      const el = fixture.nativeElement as HTMLElement;
+      const menu = el.querySelector('[role="menu"]') as HTMLElement;
+      expect(menu).not.toBeNull();
+
+      const phrLink = menu.querySelector('a[routerLink="/patient/profile"]');
+      const historyLink = menu.querySelector('a[routerLink="/patient/history"]');
+
+      expect(phrLink).not.toBeNull();
+      expect(phrLink?.textContent).toContain('Hồ sơ sức khỏe cá nhân (PHR)');
+      expect(historyLink).not.toBeNull();
+      expect(historyLink?.textContent).toContain('Lịch sử khám bệnh');
+    });
+
+    it('does not show PHR links in dropdown for DOCTOR or ADMIN', () => {
+      tokenStore.setSession('fake-token', Role.DOCTOR);
+      component.isUserMenuOpen.set(true);
+      fixture.detectChanges();
+
+      const el = fixture.nativeElement as HTMLElement;
+      const menu = el.querySelector('[role="menu"]') as HTMLElement;
+      expect(menu).not.toBeNull();
+
+      const phrLink = menu.querySelector('a[routerLink="/patient/profile"]');
+      expect(phrLink).toBeNull();
+    });
+
+    it('calls authService.logout, clears store and navigates to /login on logout', () => {
+      tokenStore.setSession('fake-token', Role.PATIENT);
+      component.isUserMenuOpen.set(true);
+      fixture.detectChanges();
+
+      component.logout();
+
+      expect(authServiceSpy.logout).toHaveBeenCalled();
+      expect(tokenStore.isAuthenticated()).toBeFalse();
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/login');
+      expect(component.isUserMenuOpen()).toBeFalse();
+    });
+
+    it('clears store and navigates to /login even if authService.logout errors', () => {
+      authServiceSpy.logout.and.returnValue(throwError(() => new Error('Network error')));
+      tokenStore.setSession('fake-token', Role.PATIENT);
+      component.isUserMenuOpen.set(true);
+      fixture.detectChanges();
+
+      component.logout();
+
+      expect(authServiceSpy.logout).toHaveBeenCalled();
+      expect(tokenStore.isAuthenticated()).toBeFalse();
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/login');
+    });
   });
 });
