@@ -223,4 +223,19 @@ describe('CheckinDeskPage', () => {
     syncButton.click();
     expect(refreshSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('renders a prominent queue board Smart TV launcher button in the desk toolbar', () => {
+    const queueBoardLink = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('a'),
+    ).find((link) =>
+      link.textContent?.includes('Mở Bảng gọi số sảnh chờ (Smart TV)'),
+    );
+
+    expect(queueBoardLink).toBeDefined();
+    const hrefOrRouterLink =
+      queueBoardLink?.getAttribute('href') ||
+      queueBoardLink?.getAttribute('ng-reflect-router-link') ||
+      '';
+    expect(hrefOrRouterLink).toContain('/receptionist/queue-board');
+  });
 });
