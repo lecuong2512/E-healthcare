@@ -67,7 +67,7 @@ type ResultState = 'loading' | 'success' | 'warning' | 'recoverable' | 'error';
           >
             <div nz-result-extra>
               <button nz-button (click)="refresh()">Kiểm tra lại</button>
-              <a nz-button nzType="primary" routerLink="/patient/booking">Đặt lại lịch</a>
+              <a nz-button nzType="primary" routerLink="/patient/doctor-search">Đặt lại lịch</a>
               <a nz-button routerLink="/patient/history">Xem lịch sử</a>
             </div>
           </nz-result>

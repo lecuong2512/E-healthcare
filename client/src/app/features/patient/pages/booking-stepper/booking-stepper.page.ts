@@ -411,7 +411,12 @@ export class BookingStepperPage implements OnDestroy {
   }
 
   startNewBooking(): void {
-    if (!this.pendingPaymentContext()) { this.resetBookingFlow(); return; }
+    if (this.loading()) return;
+    if (!this.pendingPaymentContext()) {
+      this.resetBookingFlow();
+      void this.router.navigate(['/patient/doctor-search']);
+      return;
+    }
     this.cancelPendingPayment(true);
   }
 
@@ -433,7 +438,8 @@ export class BookingStepperPage implements OnDestroy {
             }
             this.clearPendingPaymentContext();
             this.resetBookingFlow();
-            this.messageIds.add(this.message.info('Đã hủy checkout. Bạn có thể đặt lịch mới.').messageId);
+            if (startNew) void this.router.navigate(['/patient/doctor-search']);
+            else this.messageIds.add(this.message.info('Đã hủy checkout. Bạn có thể đặt lịch mới.').messageId);
           },
           error: (error) => this.errorMessage.set(this.errorText(error)),
         });

@@ -265,6 +265,7 @@ describe('BookingStepperPage payment flow', () => {
     expect(component.pendingPaymentContext()).toBeNull();
     expect(sessionStorage.getItem('pendingPaymentContext')).toBeNull();
     expect(component.step()).toBe(1);
+    expect(router.navigate).toHaveBeenCalledWith(['/patient/doctor-search']);
   });
 
   it('keeps a FAILED attempt recoverable and retries with a fresh key', () => {
@@ -317,6 +318,11 @@ describe('BookingStepperPage payment flow', () => {
     expect(api.releaseSlot).toHaveBeenCalledWith({ doctorId, slotId, reservationId });
     expect(component.selectedSlotId()).toBeNull();
     expect(component.selectedSlotLabel()).toBe('');
+  });
+
+  it('routes a new booking to doctor search without a pending checkout', () => {
+    component.startNewBooking();
+    expect(router.navigate).toHaveBeenCalledWith(['/patient/doctor-search']);
   });
 
   it('allows clinic payment for a recoverable checkout after confirmation', () => {

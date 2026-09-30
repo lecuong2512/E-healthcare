@@ -242,7 +242,8 @@ try {
   await waitFor('!document.querySelector("[aria-label=\\"Khôi phục checkout\\"]")');
   assert.equal(await evaluate('sessionStorage.getItem("pendingPaymentContext")'), null);
   await send('Page.reload', {}, page);
-  await waitFor('document.body.innerText.includes("Bước 1: Chọn bác sĩ")');
+  await waitFor('!!document.querySelector("app-doctor-search-page")');
+  assert.equal(await evaluate('location.pathname'), '/patient/doctor-search');
   report.checks.push({ scenario: 'cancellation errors keep context; acknowledged new booking clears it', pass: true });
 
   status = { ...status, appointmentStatus: 'PENDING_PAYMENT', paymentStatus: 'FAILED', provider: 'VNPAY',
