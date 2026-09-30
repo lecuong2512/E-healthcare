@@ -4,6 +4,7 @@ import { Observable, catchError, finalize, of, tap } from 'rxjs';
 import { TokenStoreService } from './token-store.service';
 import { SocketService } from './socket.service';
 import {
+  CurrentUser,
   LoginResponse,
   RefreshResponse,
   RegisterRequest,
@@ -19,6 +20,17 @@ export class AuthService {
   private readonly tokenStore = inject(TokenStoreService);
   private readonly socketService = inject(SocketService);
 
+  readonly userRole = this.tokenStore.userRole;
+  readonly currentUser = this.tokenStore.currentUser;
+
+  getCurrentUser(): CurrentUser | null {
+    return this.tokenStore.currentUser();
+  }
+
+  setCurrentUser(user: CurrentUser | null): void {
+    this.tokenStore.setCurrentUser(user);
+  }
+
   login(identifier: string, password: string): Observable<LoginResponse> {
     return this.http
       .post<LoginResponse>(
@@ -27,7 +39,7 @@ export class AuthService {
         { withCredentials: true }, // để backend set HttpOnly refresh-token cookie
       )
       .pipe(
-        tap((res) => this.tokenStore.setSession(res.accessToken, res.role)),
+        tap((res) => this.tokenStore.setSession(res.accessToken, res.role, res.user)),
       );
   }
 
@@ -98,7 +110,7 @@ export class AuthService {
         { withCredentials: true },
       )
       .pipe(
-        tap((res) => this.tokenStore.setSession(res.accessToken, res.role)),
+        tap((res) => this.tokenStore.setSession(res.accessToken, res.role, res.user)),
       );
   }
 }

@@ -9,6 +9,7 @@ interface StaffView {
   phoneNumber: string; gender: string; dateOfBirth: string;
   facility: string; status: string; licenseNumber: string; academicTitle: string;
   yearsExperience: number; roomNumber: string; specialtyIds: string[];
+  avatarUrl?: string | null;
 }
 interface RoomCatalogView extends ClinicRoomRow {}
 
@@ -44,6 +45,10 @@ export class StaffMgmtPage {
   readonly searchTerm = signal('');
   readonly roleFilter = signal<Role | ''>('');
   readonly selectedStaff = signal<StaffView | null>(null);
+  readonly staffAvatarPreview = signal<string | null>(null);
+  readonly uploadingAvatar = signal(false);
+  readonly avatarUploadError = signal('');
+  readonly avatarUploadSuccess = signal('');
   readonly selectedCreateSpecialtyIds = signal<string[]>([]);
   readonly selectedDetailSpecialtyIds = signal<string[]>([]);
   readonly filteredStaff = computed(() => {
@@ -132,9 +137,44 @@ export class StaffMgmtPage {
 
   openDetails(person: StaffView): void {
     this.selectedStaff.set(person);
+    this.staffAvatarPreview.set(person.avatarUrl || null);
+    this.avatarUploadError.set('');
+    this.avatarUploadSuccess.set('');
     this.selectedDetailSpecialtyIds.set([...person.specialtyIds]);
     this.detailForm.reset({ fullName: person.name, phoneNumber: person.phoneNumber, gender: person.gender, dateOfBirth: person.dateOfBirth, licenseNumber: person.licenseNumber, roomNumber: person.roomNumber, academicTitle: person.academicTitle, yearsExperience: person.yearsExperience });
     this.errorMessage.set('');
+  }
+
+  onAvatarSelected(event: Event): void {
+    const person = this.selectedStaff();
+    if (!person) return;
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    if (file.size > 2 * 1024 * 1024) {
+      this.avatarUploadError.set('Ảnh vượt quá dung lượng 2MB.');
+      return;
+    }
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      this.avatarUploadError.set('Chỉ chấp nhận file ảnh JPG, PNG, WEBP.');
+      return;
+    }
+    this.uploadingAvatar.set(true);
+    this.avatarUploadError.set('');
+    this.avatarUploadSuccess.set('');
+    this.api.uploadAvatar(person.id, file).subscribe({
+      next: (res) => {
+        this.uploadingAvatar.set(false);
+        this.staffAvatarPreview.set(res.avatarUrl);
+        this.avatarUploadSuccess.set('Tải lên ảnh đại diện thành công.');
+        this.loadStaff();
+      },
+      error: (err) => {
+        this.uploadingAvatar.set(false);
+        this.avatarUploadError.set(err?.error?.message || 'Không thể tải lên ảnh đại diện.');
+      },
+    });
   }
 
   toggleDetailSpecialty(id: string, checked: boolean): void {
@@ -232,6 +272,7 @@ export class StaffMgmtPage {
       licenseNumber: person.licenseNumber ?? '', academicTitle: person.academicTitle ?? '',
       yearsExperience: person.yearsExperience ?? 0, roomNumber: person.roomNumber ?? '',
       specialtyIds: person.specialtyIds ?? [],
+      avatarUrl: person.avatarUrl ?? null,
     };
   }
   private roleLabel(role: Role): string {

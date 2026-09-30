@@ -1,3 +1,4 @@
+import { HttpClient } from '@angular/common/http';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
@@ -6,6 +7,7 @@ import {
   UpdatePhrProfileRequest,
 } from '@shared/interfaces';
 import { Gender } from '@shared/enums';
+import { environment } from '../../../../../environments/environment';
 
 import { ButtonComponent } from '../../../../shared/components/button/button.component';
 import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
@@ -19,6 +21,7 @@ import { PhrService } from '../../../../core/services/phr.service';
 })
 export class PhrProfilePage implements OnInit {
   private readonly phrService = inject(PhrService);
+  private readonly http = inject(HttpClient, { optional: true });
 
   protected readonly Gender = Gender;
 
@@ -31,6 +34,12 @@ export class PhrProfilePage implements OnInit {
   protected errorMessage = '';
   protected consentAccepted = false;
   protected consentError = false;
+
+  protected avatarPreview: string | null = null;
+  protected selectedAvatarFile: File | null = null;
+  protected isUploadingAvatar = false;
+  protected avatarUploadSuccess = false;
+  protected avatarUploadError = '';
 
   ngOnInit(): void {
     this.loadPhr();
@@ -90,6 +99,59 @@ export class PhrProfilePage implements OnInit {
     this.consentError = false;
   }
 
+  protected onAvatarFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+
+    const file = input.files[0];
+    if (file.size > 2 * 1024 * 1024) {
+      this.avatarUploadError = 'Kích thước ảnh không được vượt quá 2MB.';
+      return;
+    }
+
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      this.avatarUploadError = 'Định dạng ảnh không hợp lệ. Chỉ chấp nhận JPG, PNG, WEBP.';
+      return;
+    }
+
+    this.selectedAvatarFile = file;
+    this.avatarUploadError = '';
+    this.avatarUploadSuccess = false;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.avatarPreview = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  protected uploadAvatar(): void {
+    if (!this.selectedAvatarFile || !this.http) return;
+
+    this.isUploadingAvatar = true;
+    this.avatarUploadError = '';
+    this.avatarUploadSuccess = false;
+
+    const formData = new FormData();
+    formData.append('file', this.selectedAvatarFile);
+
+    this.http.post<{ avatarUrl: string }>(`${environment.apiBaseUrl}/users/avatar`, formData).subscribe({
+      next: (res) => {
+        this.form.avatarUrl = res.avatarUrl;
+        this.savedForm.avatarUrl = res.avatarUrl;
+        this.avatarPreview = res.avatarUrl;
+        this.selectedAvatarFile = null;
+        this.isUploadingAvatar = false;
+        this.avatarUploadSuccess = true;
+      },
+      error: (err) => {
+        this.avatarUploadError = err?.error?.message || 'Không thể tải lên ảnh đại diện.';
+        this.isUploadingAvatar = false;
+      },
+    });
+  }
+
   private loadPhr(): void {
     this.isLoading = true;
     this.errorMessage = '';
@@ -98,6 +160,7 @@ export class PhrProfilePage implements OnInit {
       next: (profile) => {
         this.form = { ...profile };
         this.savedForm = { ...profile };
+        this.avatarPreview = profile.avatarUrl || null;
 
         this.isLoading = false;
       },
@@ -123,6 +186,7 @@ export class PhrProfilePage implements OnInit {
       allergies: null,
       chronicDiseases: null,
       surgeryHistory: null,
+      avatarUrl: null,
     };
   }
 }

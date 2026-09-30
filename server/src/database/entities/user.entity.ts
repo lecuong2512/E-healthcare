@@ -56,6 +56,9 @@ export class UserEntity {
   @Column({ name: 'google_subject', type: 'varchar', length: 255, nullable: true })
   googleSubject!: string | null;
 
+  @Column({ name: 'avatar_url', type: 'varchar', length: 500, nullable: true })
+  avatarUrl?: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

@@ -24,6 +24,7 @@ export interface PatientDoctorSummary {
   bioDescription: string | null;
   roomNumber: string;
   ratingAverage: number;
+  avatarUrl?: string | null;
 }
 
 export interface PatientDoctorSchedule {

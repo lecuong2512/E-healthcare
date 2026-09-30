@@ -4,6 +4,7 @@ import {
   fakeAsync,
   tick,
 } from '@angular/core/testing';
+import { Router, provideRouter } from '@angular/router';
 
 import { QueueBoardTicketViewModel } from './queue-board.models';
 import { QueueBoardPage } from './queue-board.page';
@@ -26,6 +27,7 @@ describe('QueueBoardPage', () => {
     await TestBed.configureTestingModule({
       imports: [QueueBoardPage],
       providers: [
+        provideRouter([]),
         {
           provide: QueueBoardRealtimeService,
           useValue: { connect: jasmine.createSpy().and.returnValue(() => undefined) },
@@ -110,5 +112,36 @@ describe('QueueBoardPage', () => {
       '[role="status"]',
     ) as HTMLElement;
     expect(status.textContent).toContain('Phiên trình chiếu đã hết hạn');
+  });
+
+  it('provides a return to check-in desk button in the presentation launcher', () => {
+    const cancelButton = fixture.nativeElement.querySelector(
+      '.presentation-launcher__cancel',
+    ) as HTMLAnchorElement;
+
+    expect(cancelButton).not.toBeNull();
+    expect(cancelButton.textContent).toContain('Quay lại quầy lễ tân');
+    const href =
+      cancelButton.getAttribute('href') ||
+      cancelButton.getAttribute('ng-reflect-router-link') ||
+      '';
+    expect(href).toContain('/receptionist/checkin');
+  });
+
+  it('provides an exit presentation button that exits fullscreen and navigates back to check-in', async () => {
+    const router = TestBed.inject(Router);
+    spyOn(router, 'navigate').and.returnValue(Promise.resolve(true));
+
+    const exitButton = fixture.nativeElement.querySelector(
+      '.queue-board__exit',
+    ) as HTMLButtonElement;
+
+    expect(exitButton).not.toBeNull();
+    expect(exitButton.getAttribute('aria-label')).toBe(
+      'Thoát chế độ trình chiếu / Quay lại quầy',
+    );
+
+    exitButton.click();
+    expect(router.navigate).toHaveBeenCalledWith(['/receptionist/checkin']);
   });
 });

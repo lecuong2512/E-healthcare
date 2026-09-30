@@ -17,6 +17,7 @@ import { StaffAdminModule } from './modules/admin/staff-admin.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AdminDashboardModule } from './modules/admin/admin-dashboard.module';
 import { PaymentModule } from "./modules/payment/payment.module";
+import { UserModule } from "./modules/user/user.module";
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { PaymentModule } from "./modules/payment/payment.module";
     QueueModule.forRoot(),
     NotificationModule.register(),
     AuthModule,
+    UserModule,
     DoctorModule,
     BookingModule,
     PhrModule,

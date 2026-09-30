@@ -11,6 +11,7 @@
     "migration:run": "node -r ts-node/register -r tsconfig-paths/register ../node_modules/typeorm/cli.js migration:run -d src/database/data-source.ts",
     "migration:revert": "node -r ts-node/register -r tsconfig-paths/register ../node_modules/typeorm/cli.js migration:revert -d src/database/data-source.ts",
     "security:key-rotate": "ts-node -r tsconfig-paths/register src/commands/rotate-medical-encryption.ts",
+    "seed:qa": "node -r ts-node/register -r tsconfig-paths/register src/database/seeds/seed-qa.ts",
     "test": "jest --runInBand",
     "test:integration:payment": "node test/run-payment-integration.cjs",
     "test:integration": "jest --runInBand --config jest.integration.config.cjs"
@@ -25,6 +26,7 @@
     "@nestjs/throttler": "^6.4.0",
     "@nestjs/websockets": "^11.2.5",
     "@socket.io/redis-adapter": "^8.3.0",
+    "@types/web-push": "^3.6.4",
     "bcrypt": "^6.0.0",
     "bullmq": "^6.3.8",
     "class-transformer": "^0.5.1",
@@ -43,7 +45,8 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "socket.io": "^4.8.3",
-    "typeorm": "^0.3.28"
+    "typeorm": "^0.3.28",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.1.0",

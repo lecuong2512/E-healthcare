@@ -143,6 +143,7 @@ describe("DoctorSearchService", () => {
           id: "doctor-id",
           fullName: "Nguyễn Văn An",
           academicTitle: "Bác sĩ chuyên khoa II",
+          avatarUrl: null,
           specialty: { id: "specialty-id", name: "Tim mạch" },
           consultationFee: 500000,
           bioDescription: "Điều trị bệnh tim mạch",

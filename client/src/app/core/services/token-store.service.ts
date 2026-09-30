@@ -1,34 +1,56 @@
 import { Injectable, signal } from '@angular/core';
+import { CurrentUser } from '@shared/interfaces';
 
-/**
- * In-memory Access Token store.
- *
- * SRS-AUTH-02 / NFR-SEC-02:
- * - Access Token (TTL 15 phút) chỉ giữ trong bộ nhớ JS (KHÔNG localStorage/sessionStorage)
- *   để giảm bề mặt tấn công XSS.
- * - Refresh Token (TTL 7 ngày) hoàn toàn không chạm tới từ JS — nó nằm trong
- *   HttpOnly + Secure + SameSite=Strict cookie do backend set, trình duyệt tự
- *   động gửi kèm khi gọi /auth/refresh với { withCredentials: true }.
- *
- * Vì access token chỉ sống trong bộ nhớ, khi F5 lại trang, app phải tự động
- * gọi /auth/refresh 1 lần lúc khởi động (xem AuthService.bootstrapSession()).
- */
+export type UserProfileInfo = CurrentUser;
+
 @Injectable({ providedIn: 'root' })
 export class TokenStoreService {
   private readonly _accessToken = signal<string | null>(null);
   private readonly _userRole = signal<string | null>(null);
+  private readonly _currentUser = signal<UserProfileInfo | null>(this.readSavedUser());
 
   readonly accessToken = this._accessToken.asReadonly();
   readonly userRole = this._userRole.asReadonly();
+  readonly currentUser = this._currentUser.asReadonly();
 
-  setSession(accessToken: string, role: string): void {
+  private readSavedUser(): UserProfileInfo | null {
+    try {
+      const saved = localStorage.getItem('currentUser');
+      return saved ? (JSON.parse(saved) as UserProfileInfo) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  setSession(accessToken: string, role: string, user?: UserProfileInfo): void {
     this._accessToken.set(accessToken);
     this._userRole.set(role);
+    if (user) {
+      this._currentUser.set(user);
+      try {
+        localStorage.setItem('currentUser', JSON.stringify(user));
+      } catch {}
+    }
+  }
+
+  setCurrentUser(user: UserProfileInfo | null): void {
+    this._currentUser.set(user);
+    try {
+      if (user) {
+        localStorage.setItem('currentUser', JSON.stringify(user));
+      } else {
+        localStorage.removeItem('currentUser');
+      }
+    } catch {}
   }
 
   clear(): void {
     this._accessToken.set(null);
     this._userRole.set(null);
+    this._currentUser.set(null);
+    try {
+      localStorage.removeItem('currentUser');
+    } catch {}
   }
 
   isAuthenticated(): boolean {

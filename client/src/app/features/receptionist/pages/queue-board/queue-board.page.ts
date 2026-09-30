@@ -8,6 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router, RouterLink } from '@angular/router';
 import { fromEvent, map, merge } from 'rxjs';
 
 import { QueueBoardStatusEventViewModel } from './queue-board.models';
@@ -24,13 +25,19 @@ import { QueueBoardRealtimeService } from './queue-board-realtime.service';
 @Component({
   selector: 'app-queue-board-page',
   standalone: true,
-  imports: [DatePipe, QueueBoardNowServingComponent, QueueBoardNextUpComponent],
+  imports: [
+    DatePipe,
+    RouterLink,
+    QueueBoardNowServingComponent,
+    QueueBoardNextUpComponent,
+  ],
   templateUrl: './queue-board.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [QueueBoardPresentationStore, QueueBoardRealtimeCoordinator],
 })
 export class QueueBoardPage {
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
   readonly store = inject(QueueBoardPresentationStore);
   private readonly realtimeCoordinator = inject(QueueBoardRealtimeCoordinator);
   private readonly realtime = inject(QueueBoardRealtimeService);
@@ -115,6 +122,21 @@ export class QueueBoardPage {
     } finally {
       this.presentationStarted.set(true);
     }
+  }
+
+  async exitPresentation(): Promise<void> {
+    if (
+      typeof document !== 'undefined' &&
+      document.fullscreenElement &&
+      document.exitFullscreen
+    ) {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        // Trình duyệt có thể đã tự thoát toàn màn hình
+      }
+    }
+    await this.router.navigate(['/receptionist/checkin']);
   }
 
   toggleMuted(): void {

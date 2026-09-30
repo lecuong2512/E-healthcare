@@ -1,4 +1,4 @@
-﻿import {
+import {
   ConflictException,
   Injectable,
   BadRequestException,
@@ -133,6 +133,7 @@ export class PhrService {
       allergies: phr.allergies,
       chronicDiseases: phr.chronicDiseases,
       surgeryHistory: phr.surgeryHistory,
+      avatarUrl: user.avatarUrl ?? null,
     };
   }
 }
