@@ -8,6 +8,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
+    "qa:payment": "node scripts/payment-ui-qa.mjs",
     "qa:print": "node scripts/print-preview-qa.mjs"
   },
   "private": true,
