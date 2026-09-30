@@ -3,7 +3,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, ParamMap, Router, RouterModule } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { AppointmentStatus, PaymentStatus, PaymentTransactionStatus } from '@shared/enums';
+import { AppointmentStatus, PaymentMethod, PaymentStatus, PaymentTransactionStatus } from '@shared/enums';
 import { PaymentStatusResponse } from '@shared/interfaces';
 import { toDataURL } from 'qrcode';
 import { EMPTY, Subscription, catchError, expand, switchMap, take, timer } from 'rxjs';
@@ -74,6 +74,7 @@ export class PaymentCallbackPage {
   readonly qrDataUrl = signal('');
   private latestParams: ParamMap | null = null;
   private verificationSubscription?: Subscription;
+  private callbackAppointmentId: string | null = null;
 
   constructor() {
     this.route.queryParamMap
@@ -83,6 +84,8 @@ export class PaymentCallbackPage {
 
   async simulateBackendSuccess(): Promise<void> {
     if (!this.showDemoControls) return;
+    this.verificationSubscription?.unsubscribe();
+    const requestId = ++this.verificationSequence;
 
     const response: PaymentReceipt = {
       appointment: {
@@ -104,6 +107,7 @@ export class PaymentCallbackPage {
         margin: 1,
         errorCorrectionLevel: 'M',
       });
+      if (requestId !== this.verificationSequence) return;
       this.verifiedPayment.set(response);
       this.qrDataUrl.set(qrDataUrl);
       this.state.set('success');
@@ -133,22 +137,15 @@ export class PaymentCallbackPage {
   }
 
   choosePaymentAgain(): void {
-    void this.router.navigate(['/patient/booking']);
+    void this.router.navigate(['/patient/booking'], {
+      queryParams: this.callbackAppointmentId ? { appointmentId: this.callbackAppointmentId } : {},
+    });
   }
 
   cancelAndBookNew(): void {
-    const appointmentId = this.latestParams?.get('appointmentId')?.trim()
-      || sessionStorage.getItem('pendingPaymentAppointmentId');
-    sessionStorage.removeItem('pendingPaymentAppointmentId');
-    sessionStorage.removeItem('pendingPaymentContext');
-    if (appointmentId) {
-      this.paymentApi.cancelAppointment(appointmentId, 'Hủy đơn lỗi thanh toán để đặt lại').subscribe({
-        next: () => void this.router.navigate(['/patient/booking']),
-        error: () => void this.router.navigate(['/patient/booking']),
-      });
-    } else {
-      void this.router.navigate(['/patient/booking']);
-    }
+    // Booking owns confirmation, payment-aware cancellation and clinic fallback.
+    // A failed attempt does not mean the appointment has ended.
+    this.choosePaymentAgain();
   }
 
   retryStatusCheck(): void {
@@ -161,6 +158,7 @@ export class PaymentCallbackPage {
     const requestId = ++this.verificationSequence;
     this.verifiedPayment.set(null);
     this.qrDataUrl.set('');
+    this.callbackAppointmentId = null;
     const hasVnpayFields = ['vnp_ResponseCode', 'vnp_TxnRef', 'vnp_SecureHash']
       .some((key) => params.has(key));
     const hasMomoFields = ['resultCode', 'orderId'].some((key) => params.has(key));
@@ -202,6 +200,7 @@ export class PaymentCallbackPage {
       this.state.set('error');
       return;
     }
+    this.callbackAppointmentId = appointmentId;
 
     this.state.set('loading');
     let pollCount = 0;
@@ -225,6 +224,11 @@ export class PaymentCallbackPage {
     ).subscribe({
         next: (status) => {
           if (requestId !== this.verificationSequence) return;
+          if (status.appointmentStatus !== AppointmentStatus.PENDING_PAYMENT) this.clearMatchingContext(status.appointmentId);
+          if (status.provider === PaymentMethod.PAY_AT_CLINIC && status.appointmentStatus === AppointmentStatus.CONFIRMED && status.paymentStatus === PaymentStatus.UNPAID) {
+            void this.router.navigate(['/patient/payment-result'], { queryParams: { appointmentId: status.appointmentId } });
+            return;
+          }
           const state = this.stateFor(status);
           if (state !== 'success') {
             this.state.set(state);
@@ -234,10 +238,6 @@ export class PaymentCallbackPage {
               );
             } else {
               this.message.set(this.statusMessage(status, state));
-            }
-            if (state === 'cancelled') {
-              sessionStorage.removeItem('pendingPaymentAppointmentId');
-              sessionStorage.removeItem('pendingPaymentContext');
             }
             return;
           }
@@ -374,5 +374,13 @@ export class PaymentCallbackPage {
     const response = error as { error?: { message?: string | string[] } };
     const message = response?.error?.message;
     return Array.isArray(message) ? message.join(' ') : message || fallback;
+  }
+
+  private clearMatchingContext(appointmentId: string): void {
+    if (sessionStorage.getItem('pendingPaymentAppointmentId') === appointmentId) sessionStorage.removeItem('pendingPaymentAppointmentId');
+    try {
+      const context = JSON.parse(sessionStorage.getItem('pendingPaymentContext') || 'null');
+      if (context?.appointmentId === appointmentId) sessionStorage.removeItem('pendingPaymentContext');
+    } catch { /* Malformed local data is not proof of payment completion. */ }
   }
 }

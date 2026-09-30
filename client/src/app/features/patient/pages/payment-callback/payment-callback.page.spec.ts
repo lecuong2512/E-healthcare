@@ -94,16 +94,33 @@ describe('PaymentCallbackPage', () => {
     expect(fixture.nativeElement.textContent).toContain('Backend xác nhận giao dịch thất bại');
     expect(fixture.nativeElement.textContent).toContain('Chọn lại phương thức thanh toán');
     fixture.componentInstance.choosePaymentAgain();
-    expect(router.navigate).toHaveBeenCalledWith(['/patient/booking']);
+    expect(router.navigate).toHaveBeenCalledWith(['/patient/booking'], { queryParams: { appointmentId: 'appointment-id' } });
   });
 
-  it('allows canceling failed appointment to book a new appointment or pay at clinic', async () => {
+  it('delegates cancellation to booking recovery without clearing context or calling generic cancellation', async () => {
     await createPage({ resultCode: '0', orderId: 'order-failed' }, failedStatus());
 
-    expect(fixture.nativeElement.textContent).toContain('Hủy ca này để đặt lại / Thanh toán tại viện');
+    expect(fixture.nativeElement.textContent).toContain('Quản lý checkout / Hủy để đặt lịch mới');
     fixture.componentInstance.cancelAndBookNew();
-    expect(paymentApi.cancelAppointment).toHaveBeenCalledWith('appointment-id', jasmine.any(String));
-    expect(router.navigate).toHaveBeenCalledWith(['/patient/booking']);
+    expect(paymentApi.cancelAppointment).not.toHaveBeenCalled();
+    expect(router.navigate).toHaveBeenCalledWith(['/patient/booking'], { queryParams: { appointmentId: 'appointment-id' } });
+    expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBe('appointment-id');
+  });
+
+  it('does not clear a newer checkout when an older callback is terminal', async () => {
+    sessionStorage.setItem('pendingPaymentContext', JSON.stringify({ appointmentId: 'newer-id' }));
+    await createPage({ appointmentId: 'older-id' }, { ...cancelledStatus(), appointmentId: 'older-id' });
+    expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBe('appointment-id');
+    expect(JSON.parse(sessionStorage.getItem('pendingPaymentContext')!).appointmentId).toBe('newer-id');
+    sessionStorage.removeItem('pendingPaymentContext');
+  });
+
+  it('delegates confirmed unpaid clinic receipt to payment-result instead of showing online failure', async () => {
+    await createPage({ appointmentId: 'appointment-id' }, {
+      ...failedStatus(), provider: PaymentMethod.PAY_AT_CLINIC,
+      appointmentStatus: AppointmentStatus.CONFIRMED, paymentStatus: PaymentStatus.UNPAID,
+    });
+    expect(router.navigate).toHaveBeenCalledWith(['/patient/payment-result'], { queryParams: { appointmentId: 'appointment-id' } });
     expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBeNull();
   });
 
