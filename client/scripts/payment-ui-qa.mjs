@@ -34,6 +34,7 @@ const doctor = { id: doctorId, fullName: 'Nguyễn Văn An', academicTitle: 'BS.
 const calls = { initiate: [], confirm: [], cancel: 0 };
 let cancelFails = false;
 let statusFails = false;
+let statusFailureCode = 503;
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const json = (body, code = 200) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
@@ -44,7 +45,7 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/api/v1/doctors/search') return json({ data: [doctor], pagination: { page: 1, limit: 100, total: 1, totalPages: 1 } });
   if (url.pathname === `/api/v1/doctors/${doctorId}`) return json(doctor);
   if (url.pathname === '/api/v1/appointments/me/vouchers' || url.pathname === '/api/v1/appointments/me') return json([]);
-  if (url.pathname.endsWith('/status')) return statusFails ? json({ message: 'Không thể tải trạng thái. Thử lại.' }, 503) : json(status);
+  if (url.pathname.endsWith('/status')) return statusFails ? json({ message: 'Không thể tải trạng thái. Thử lại.' }, statusFailureCode) : json(status);
   if (url.pathname.endsWith('/fallback-to-clinic')) {
     status = { ...status, provider: 'PAY_AT_CLINIC', appointmentStatus: 'CONFIRMED', paymentStatus: 'UNPAID', canRetry: false, canFallbackToClinic: false };
     return json({ appointmentId: id });
@@ -53,7 +54,7 @@ const server = createServer(async (req, res) => {
     calls.initiate.push({ ...body, key: req.headers['idempotency-key'] });
     status = { ...status, provider: body.provider, idempotencyKey: req.headers['idempotency-key'] };
     return json({ transactionId: 'qa-payment', appointmentId: id, provider: body.provider,
-      merchantTransactionId: 'PAYQA', paymentUrl: 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?qa=1', expiresAt: '2099-01-01T00:00:00Z' }, 201);
+      merchantTransactionId: 'PAYQA', paymentUrl: body.provider === 'MOMO' ? 'https://test-payment.momo.vn/pay?qa=1' : 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?qa=1', expiresAt: '2099-01-01T00:00:00Z' }, 201);
   }
   if (url.pathname.endsWith('/cancel-pending')) {
     calls.cancel++;
@@ -103,9 +104,33 @@ try {
   socket.onmessage = ({ data }) => {
     const message = JSON.parse(data);
     if (message.method === 'Fetch.requestPaused') {
-      // Return a local gateway stand-in; never send requests to the sandbox provider.
-      void send('Fetch.fulfillRequest', { requestId: message.params.requestId, responseCode: 200,
-        responseHeaders: [{ name: 'Content-Type', value: 'text/html' }], body: Buffer.from('<p>QA gateway stand-in</p>').toString('base64') }, message.sessionId);
+      // Production API URLs must also stay local after Angular file replacements.
+      void (async () => {
+        const request = message.params.request;
+        const url = new URL(request.url);
+        if (url.hostname === 'api.ehealth-portal.vn') {
+          const headers = [{ name: 'Content-Type', value: 'application/json' },
+            { name: 'Access-Control-Allow-Origin', value: origin },
+            { name: 'Access-Control-Allow-Credentials', value: 'true' },
+            { name: 'Access-Control-Allow-Methods', value: 'GET, POST, DELETE, OPTIONS' },
+            { name: 'Access-Control-Allow-Headers', value: 'authorization, content-type, idempotency-key' }];
+          if (request.method === 'OPTIONS') {
+            await send('Fetch.fulfillRequest', { requestId: message.params.requestId, responseCode: 204, responseHeaders: headers }, message.sessionId);
+            return;
+          }
+          const localPath = url.pathname.startsWith('/v1') ? `/api${url.pathname}` : url.pathname;
+          const response = await fetch(`${origin}${localPath}${url.search}`, {
+            method: request.method, headers: request.headers,
+            ...(request.postData ? { body: request.postData } : {}),
+          });
+          await send('Fetch.fulfillRequest', { requestId: message.params.requestId, responseCode: response.status,
+            responseHeaders: headers,
+            body: Buffer.from(await response.text()).toString('base64') }, message.sessionId);
+        } else {
+          await send('Fetch.fulfillRequest', { requestId: message.params.requestId, responseCode: 200,
+            responseHeaders: [{ name: 'Content-Type', value: 'text/html' }], body: Buffer.from('<p>QA gateway stand-in</p>').toString('base64') }, message.sessionId);
+        }
+      })();
       return;
     }
     const request = requests.get(message.id);
@@ -125,7 +150,9 @@ try {
   const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
   const { sessionId: page } = await send('Target.attachToTarget', { targetId, flatten: true });
   await send('Page.enable', {}, page);
-  await send('Fetch.enable', { patterns: [{ urlPattern: 'https://sandbox.vnpayment.vn/*' }] }, page);
+  await send('Network.enable', {}, page);
+  await send('Network.setBlockedURLs', { urls: ['wss://api.ehealth-portal.vn/*'] }, page);
+  await send('Fetch.enable', { patterns: [{ urlPattern: 'https://sandbox.vnpayment.vn/*' }, { urlPattern: 'https://test-payment.momo.vn/*' }, { urlPattern: 'https://api.ehealth-portal.vn/*' }] }, page);
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `if (location.origin === ${JSON.stringify(origin)} && !sessionStorage.getItem('qaSeeded')) {
     sessionStorage.setItem('qaSeeded', 'true'); sessionStorage.setItem('pendingPaymentContext', ${JSON.stringify(JSON.stringify(pending))}); }` }, page);
   async function evaluate(expression) {
@@ -139,7 +166,7 @@ try {
   }
   async function navigate(path = '/patient/booking') {
     await send('Page.navigate', { url: `${origin}${path}` }, page);
-    await waitFor('!!document.querySelector("app-booking-stepper-page, app-payment-result-page")');
+    await waitFor('!!document.querySelector("app-booking-stepper-page, app-payment-result-page, app-payment-callback-page")');
     await evaluate(`(() => { const button = document.querySelector('app-dev-route-nav button');
       if (button?.textContent.includes('Ẩn Dev Nav')) button.click();
       // Development routing tools are unrelated to the patient payment UI.
@@ -253,6 +280,30 @@ try {
   assert.equal(await evaluate('sessionStorage.getItem("pendingPaymentContext")'), null);
   assert.equal(await evaluate('location.pathname'), '/patient/booking');
   report.checks.push({ scenario: 'API failures preserve context; backend-terminal context clears without hijacking navigation', pass: true });
+  status = { ...status, appointmentStatus: 'PENDING_PAYMENT', provider: 'MOMO', paymentStatus: 'FAILED',
+    transactionStatus: 'FAILED', canRetry: true, canSwitchProvider: true, canFallbackToClinic: true };
+  await evaluate(`sessionStorage.setItem('pendingPaymentContext', JSON.stringify({appointmentId:${JSON.stringify(id)}})); sessionStorage.setItem('pendingPaymentAppointmentId', ${JSON.stringify(id)})`);
+  await navigate(`/patient/booking/payment-callback?appointmentId=${id}&resultCode=99&orderId=qa-momo`);
+  await waitFor('document.body.innerText.includes("Quản lý checkout / Hủy để đặt lịch mới")');
+  const cancelsBeforeRecovery = calls.cancel;
+  await click('Quản lý checkout / Hủy để đặt lịch mới');
+  await waitFor('!!document.querySelector("app-booking-stepper-page") && [...document.querySelectorAll("button")].some(b => b.textContent.trim() === "Thanh toán lịch hẹn hiện tại")');
+  assert.equal(calls.cancel, cancelsBeforeRecovery);
+  assert(await evaluate('!!sessionStorage.getItem("pendingPaymentContext")'));
+  await click('Thanh toán lịch hẹn hiện tại');
+  await waitFor('location.hostname === "test-payment.momo.vn"');
+  assert.equal(calls.initiate.at(-1).provider, 'MOMO');
+  report.checks.push({ scenario: 'MoMo callback delegates recovery without unsafe cancellation; retry redirects to trusted MoMo gateway URL', pass: true });
+  statusFails = true;
+  for (const code of [403, 404]) {
+    statusFailureCode = code;
+    await navigate();
+    await evaluate(`sessionStorage.setItem('pendingPaymentContext', JSON.stringify({appointmentId:${JSON.stringify(id)}})); sessionStorage.setItem('pendingPaymentAppointmentId', ${JSON.stringify(id)})`);
+    await navigate();
+    await waitFor('!sessionStorage.getItem("pendingPaymentContext") && document.body.innerText.includes("Bước 1: Chọn bác sĩ")');
+    assert.equal(await evaluate('sessionStorage.getItem("pendingPaymentAppointmentId")'), null);
+  }
+  report.checks.push({ scenario: '403 and 404 discard stale pointers and unlock booking', pass: true });
   await writeFile(join(output, 'report.json'), JSON.stringify(report, null, 2));
   console.log(`Payment browser QA passed (${report.checks.length} scenarios). Artifacts: ${output}`);
 } finally {
