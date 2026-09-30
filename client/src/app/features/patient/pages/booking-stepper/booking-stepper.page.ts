@@ -378,6 +378,7 @@ export class BookingStepperPage implements OnDestroy {
   retryPendingPayment(): void {
     const context = this.pendingPaymentContext();
     if (!context || this.loading()) return;
+    if (!this.recoveryActive() && context.provider) this.paymentMethod.set(context.provider);
     this.recoveryActive.set(true);
     this.bookingCommitted = true;
     this.step.set(4);
@@ -643,6 +644,7 @@ export class BookingStepperPage implements OnDestroy {
   private errorText(error: unknown): string {
     if (error instanceof HttpErrorResponse) {
       const messages: Record<string, string> = {
+        MOMO_CONFIGURATION_ERROR: 'MoMo chưa khả dụng do cấu hình tài khoản doanh nghiệp. Vui lòng chọn VNPay hoặc thanh toán tại bệnh viện.',
         PAYMENT_RECONCILIATION_REQUIRED: 'Giao dịch đang đối soát. Không thanh toán lại; hãy kiểm tra trạng thái.',
         RESERVATION_EXPIRED: 'Chỗ giữ đã hết hạn. Hãy kiểm tra checkout trước khi đặt lịch mới.',
         PROVIDER_REJECTED: 'Cổng thanh toán đã từ chối lần thử này. Hãy kiểm tra checkout để chọn cách khôi phục.',

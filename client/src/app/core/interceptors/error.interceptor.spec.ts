@@ -52,4 +52,14 @@ describe('errorInterceptor', () => {
 
     expect(notifications.warning).toHaveBeenCalledOnceWith('Khung giờ đã được giữ.');
   });
+
+  it('leaves gateway errors to the payment recovery screen', () => {
+    http.post('/api/v1/payments/appointment-id/initiate', {}).subscribe({ error: () => undefined });
+    httpMock.expectOne('/api/v1/payments/appointment-id/initiate').flush(
+      { code: 'PAYMENT_RECONCILIATION_REQUIRED', message: 'MoMo response invalid' },
+      { status: 502, statusText: 'Bad Gateway' },
+    );
+    expect(notifications.error).not.toHaveBeenCalled();
+    expect(notifications.warning).not.toHaveBeenCalled();
+  });
 });

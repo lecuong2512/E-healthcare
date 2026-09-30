@@ -13,7 +13,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const isPublic = isPublicEndpoint(req.url);
   const isReception = isReceptionEndpoint(req.url);
   const isLocallyHandledBusinessError =
-    isReception || isDoctorReviewEndpoint(req.url);
+    isReception || isDoctorReviewEndpoint(req.url) || /\/payments\/[^/]+\/(?:initiate|status|cancel-pending|fallback-to-clinic)(?:\?|$)/.test(req.url);
 
   return next(req).pipe(
     catchError((error: unknown) => {

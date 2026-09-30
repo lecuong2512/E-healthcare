@@ -103,6 +103,58 @@ describe('MoMo sandbox provider', () => {
     ).rejects.toBeInstanceOf(BadGatewayException);
   });
 
+  it('rejects an unsigned create response', async () => {
+    const payload = signedCreateResponse();
+    delete payload.signature;
+    jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => payload } as Response);
+    await expect(new MomoProvider(config).initiate({
+      provider: PaymentMethod.MOMO, merchantTransactionId: 'PAY202609280001',
+      requestId: 'request-1', amountVnd: 300_000, clientIp: '127.0.0.1',
+      createdAt: new Date(), expiresAt: new Date(),
+    })).rejects.toBeInstanceOf(BadGatewayException);
+  });
+
+  it.each([
+    { signature: 'invalid' }, { orderId: 'OTHER' }, { amount: 1 },
+    { resultCode: null }, { resultCode: '' }, { resultCode: 'invalid' },
+    { payUrl: 'https://evil.example/pay' },
+  ])('rejects invalid create response %j', async overrides => {
+    const payload = signedCreateResponse(overrides);
+    if ('signature' in overrides) payload.signature = overrides.signature;
+    jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => payload } as Response);
+    await expect(new MomoProvider(config).initiate({
+      provider: PaymentMethod.MOMO, merchantTransactionId: 'PAY202609280001',
+      requestId: 'request-1', amountVnd: 300_000, clientIp: '127.0.0.1',
+      createdAt: new Date(), expiresAt: new Date(),
+    })).rejects.toBeInstanceOf(BadGatewayException);
+  });
+
+  it('rejects unsigned IPN', async () => {
+    const payload = signedCreateResponse();
+    delete payload.signature;
+    await expect(new MomoProvider(config).verifyCallback(payload)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('reports MoMo HTTP 400 code 13 as a definitive configuration error', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false, status: 400,
+      json: async () => ({ resultCode: 13, message: 'Invalid merchant configuration', secret: 'must-not-expose' }),
+    } as Response);
+    try {
+      await new MomoProvider(config).initiate({
+        provider: PaymentMethod.MOMO, merchantTransactionId: 'PAY202609280001',
+        requestId: 'request-1', amountVnd: 300_000, clientIp: '127.0.0.1',
+        createdAt: new Date(), expiresAt: new Date(),
+      });
+      throw new Error('Expected initiation to fail');
+    } catch (error: any) {
+      expect(error.isDefinitive).toBe(true);
+      expect(error.getResponse()).toMatchObject({ code: 'MOMO_CONFIGURATION_ERROR' });
+      expect(error.message).toContain('mã 13');
+      expect(error.message).not.toContain('must-not-expose');
+    }
+  });
+
   it.each([
     [0, 'SUCCESS'],
     [9000, 'SUCCESS'],

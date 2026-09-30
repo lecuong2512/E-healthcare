@@ -69,6 +69,13 @@ export class MomoProvider implements PaymentProvider {
       );
     }
     if (!response.ok) {
+      if (response.status === 400) {
+        // Only expose a known configuration failure, never raw gateway payloads.
+        const errorBody = await response.json().catch(() => null);
+        if (errorBody && typeof errorBody === 'object' && 'resultCode' in errorBody && errorBody.resultCode === 13) {
+          throw this.configurationError();
+        }
+      }
       throw new PaymentProviderError(
         response.status >= 400 && response.status < 500
           ? PaymentProviderErrorKind.REJECTED
@@ -179,12 +186,27 @@ export class MomoProvider implements PaymentProvider {
         'MoMo create response mismatch.',
       );
     }
-    if (Number(result.resultCode) !== 0) {
+    if (typeof result.resultCode !== 'number' || !Number.isSafeInteger(result.resultCode)) {
+      throw new PaymentProviderError(
+        PaymentProviderErrorKind.INVALID_RESPONSE,
+        'Invalid MoMo create response result code.',
+      );
+    }
+    if (result.resultCode !== 0) {
+      if (result.resultCode === 13) throw this.configurationError();
       throw new PaymentProviderError(
         PaymentProviderErrorKind.REJECTED,
         `MoMo rejected payment creation with code ${String(result.resultCode)}.`,
       );
     }
+  }
+
+  private configurationError(): PaymentProviderError {
+    return new PaymentProviderError(
+      PaymentProviderErrorKind.REJECTED,
+      'MoMo chưa khả dụng do cấu hình tài khoản doanh nghiệp (mã 13). Vui lòng chọn phương thức thanh toán khác.',
+      { clientCode: 'MOMO_CONFIGURATION_ERROR' },
+    );
   }
 
   private normalize(

@@ -11,9 +11,9 @@ export class PaymentProviderError extends BadGatewayException {
   constructor(
     readonly kind: PaymentProviderErrorKind,
     message: string,
-    options?: ErrorOptions,
+    options?: ErrorOptions & { clientCode?: 'MOMO_CONFIGURATION_ERROR' },
   ) {
-    super({ code: kind === PaymentProviderErrorKind.REJECTED ? 'PROVIDER_REJECTED' : 'PAYMENT_RECONCILIATION_REQUIRED', message }, options);
+    super({ code: options?.clientCode ?? (kind === PaymentProviderErrorKind.REJECTED ? 'PROVIDER_REJECTED' : 'PAYMENT_RECONCILIATION_REQUIRED'), message }, options);
     this.name = 'PaymentProviderError';
   }
 

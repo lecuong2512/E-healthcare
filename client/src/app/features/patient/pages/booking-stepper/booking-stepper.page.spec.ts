@@ -281,6 +281,25 @@ describe('BookingStepperPage payment flow', () => {
     expect(api.initiatePayment.calls.mostRecent().args[2]).not.toBe('failed-key');
   });
 
+  it('shows a configuration message and keeps clinic recovery after MoMo code 13', () => {
+    api.getPaymentStatus.and.returnValue(of({
+      appointmentId, appointmentStatus: AppointmentStatus.PENDING_PAYMENT, paymentStatus: PaymentStatus.FAILED,
+      provider: PaymentMethod.MOMO, transactionStatus: PaymentTransactionStatus.FAILED,
+      canRetry: true, canSwitchProvider: true, canFallbackToClinic: true, expiresAt: null, paidAt: null,
+    }));
+    api.initiatePayment.and.returnValue(throwError(() => new HttpErrorResponse({
+      status: 502, error: { code: 'MOMO_CONFIGURATION_ERROR' },
+    })));
+    reloadCheckout();
+    component.retryPendingPayment();
+    component.submitBooking();
+    expect(component.errorMessage()).toContain('cấu hình tài khoản doanh nghiệp');
+    expect(component.canFallback()).toBeTrue();
+    expect(component.pendingPaymentContext()?.appointmentId).toBe(appointmentId);
+    component.selectPayment(PaymentMethod.PAY_AT_CLINIC);
+    expect(component.paymentMethod()).toBe(PaymentMethod.PAY_AT_CLINIC);
+  });
+
   it('blocks repayment while reconciliation is required', () => {
     reloadCheckout();
     api.getPaymentStatus.and.returnValue(of({
