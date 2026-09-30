@@ -565,7 +565,15 @@ export class BookingStepperPage implements OnDestroy {
           this.errorMessage.set('Giao dịch đang được đối soát. Không thanh toán lại; hãy kiểm tra trạng thái hoặc liên hệ hỗ trợ.');
         }
       },
-      error: (error) => this.errorMessage.set(this.errorText(error)),
+      error: (error) => {
+        if (error instanceof HttpErrorResponse && [403, 404].includes(error.status)) {
+          this.clearPendingPaymentContext();
+          this.resetBookingFlow();
+          this.message.info('Checkout cũ không còn khả dụng. Bạn có thể đặt lịch mới.');
+          return;
+        }
+        this.errorMessage.set(this.errorText(error));
+      },
     });
   }
 

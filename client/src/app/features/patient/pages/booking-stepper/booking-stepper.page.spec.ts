@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed, discardPeriodicTasks, fakeAsync, tick } from '@angular/core/testing';
+import { HttpErrorResponse } from '@angular/common/http';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -311,6 +312,30 @@ describe('BookingStepperPage payment flow', () => {
     expect(component.pendingPaymentContext()?.appointmentId).toBe(appointmentId);
     expect(sessionStorage.getItem('pendingPaymentContext')).not.toBeNull();
     expect(api.initiatePayment).not.toHaveBeenCalled();
+  });
+
+  [403, 404].forEach(status => {
+    it(`clears an inaccessible checkout pointer after HTTP ${status}`, () => {
+      reloadCheckout();
+      api.getPaymentStatus.and.returnValue(throwError(() => new HttpErrorResponse({ status })));
+      component.retryPendingPayment();
+      expect(component.pendingPaymentContext()).toBeNull();
+      expect(component.recoveryActive()).toBeFalse();
+      expect(component.step()).toBe(1);
+      expect(sessionStorage.getItem('pendingPaymentContext')).toBeNull();
+      expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBeNull();
+      component.startNewBooking();
+      expect(api.cancelPendingPayment).not.toHaveBeenCalled();
+    });
+  });
+
+  [0, 503].forEach(status => {
+    it(`preserves an uncertain checkout after HTTP ${status}`, () => {
+      api.getPaymentStatus.and.returnValue(throwError(() => new HttpErrorResponse({ status })));
+      reloadCheckout();
+      expect(component.pendingPaymentContext()?.appointmentId).toBe(appointmentId);
+      expect(sessionStorage.getItem('pendingPaymentContext')).not.toBeNull();
+    });
   });
 
   it('requires consent before creating the appointment', () => {
