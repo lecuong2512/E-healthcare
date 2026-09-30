@@ -118,9 +118,9 @@ export class ConsultationPage {
 
   icdSearch = '';
   icdTags: Icd[] = [{ code: 'I20.9', name: 'Đau thắt ngực, không đặc hiệu' }];
-  readonly icdCatalog = ICD;
+  icdCatalog: Icd[] = [...ICD];
 
-  readonly drugCatalog = DRUGS;
+  drugCatalog: Drug[] = [...DRUGS];
   drugSearch = '';
   selectedCatalogDrug: Drug | null = null;
   rxList: Rx[] = [];
@@ -139,6 +139,7 @@ export class ConsultationPage {
         this.appointmentId = id;
         this.recordCode = id;
         this.loadRecord(id);
+        this.loadPatientSummary(id);
       }
     });
     this.route.queryParams.subscribe((p) => {
@@ -146,7 +147,7 @@ export class ConsultationPage {
       if (p['gender']) this.patientGender = p['gender'];
       if (p['year']) this.patientYear = Number(p['year']);
     });
-    this.loadPhr();
+    this.loadCatalogs();
   }
 
   get filteredDrugs() {
@@ -218,18 +219,97 @@ export class ConsultationPage {
     return this.icdTags.slice(1).map((t) => t.code).join(',');
   }
 
-  loadPhr() {
-    this.phr.getMyPhr().subscribe({
-      next: (p) => {
-        this.bloodType = p.bloodType || 'Chưa có';
-        this.allergies = p.allergies || 'Chưa ghi nhận';
-        this.chronicDiseases = p.chronicDiseases || 'Chưa ghi nhận';
-        this.surgeryHistory = p.surgeryHistory || 'Chưa ghi nhận';
-        if (p.fullName) this.patientName = p.fullName;
-        if (p.dateOfBirth) this.patientYear = new Date(p.dateOfBirth).getFullYear();
+  loadPatientSummary(appointmentId: string) {
+    if (!appointmentId) return;
+    this.clinical.getPatientSummary(appointmentId).subscribe({
+      next: (summary) => {
+        if (summary.patient) {
+          if (summary.patient.fullName) this.patientName = summary.patient.fullName;
+          if (summary.patient.gender) {
+            this.patientGender = summary.patient.gender === 'FEMALE' ? 'Nữ' : 'Nam';
+          }
+          if (summary.patient.dateOfBirth) {
+            this.patientYear = new Date(summary.patient.dateOfBirth).getFullYear();
+          }
+        }
+        if (summary.phr) {
+          this.bloodType = summary.phr.bloodType || 'Chưa có';
+          this.allergies = summary.phr.allergies || 'Chưa ghi nhận';
+          this.chronicDiseases = summary.phr.chronicDiseases || 'Chưa ghi nhận';
+          this.surgeryHistory = summary.phr.surgeryHistory || 'Chưa ghi nhận';
+        }
       },
       error: () => {},
     });
+  }
+
+  loadCatalogs() {
+    this.clinical.searchMedicines('', 100).subscribe({
+      next: (items) => {
+        if (items && items.length > 0) {
+          this.drugCatalog = items.map((m) => ({
+            name: m.brandName,
+            ingredient: m.activeIngredient,
+            unit: m.packageUnit || 'Viên',
+            allergyGroup: m.contraindications || undefined,
+          }));
+        }
+      },
+      error: () => {},
+    });
+
+    this.clinical.searchIcd10('', 100).subscribe({
+      next: (items) => {
+        if (items && items.length > 0) {
+          this.icdCatalog = items.map((i) => ({
+            code: i.code,
+            name: i.nameVi,
+          }));
+        }
+      },
+      error: () => {},
+    });
+  }
+
+  onIcdSearchChange() {
+    const q = this.icdSearch.trim();
+    if (q.length >= 2) {
+      this.clinical.searchIcd10(q, 20).subscribe({
+        next: (items) => {
+          if (items && items.length > 0) {
+            for (const item of items) {
+              if (!this.icdCatalog.some((x) => x.code === item.code)) {
+                this.icdCatalog.push({ code: item.code, name: item.nameVi });
+              }
+            }
+          }
+        },
+        error: () => {},
+      });
+    }
+  }
+
+  onDrugSearchChange() {
+    const q = this.drugSearch.trim();
+    if (q.length >= 2) {
+      this.clinical.searchMedicines(q, 20).subscribe({
+        next: (items) => {
+          if (items && items.length > 0) {
+            for (const m of items) {
+              if (!this.drugCatalog.some((x) => x.name.toLowerCase() === m.brandName.toLowerCase())) {
+                this.drugCatalog.push({
+                  name: m.brandName,
+                  ingredient: m.activeIngredient,
+                  unit: m.packageUnit || 'Viên',
+                  allergyGroup: m.contraindications || undefined,
+                });
+              }
+            }
+          }
+        },
+        error: () => {},
+      });
+    }
   }
 
   loadRecord(id: string) {

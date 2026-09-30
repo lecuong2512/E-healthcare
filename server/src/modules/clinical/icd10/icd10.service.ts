@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { Icd10CatalogEntity } from '../../../database/entities/admin-catalog.entity';
 import { Icd10Item } from '@shared/interfaces';
 
 /**
@@ -196,9 +198,41 @@ function removeVietnameseDiacritics(str: string): string {
 export class Icd10Service {
   private readonly catalog: Icd10Item[] = BASELINE_ICD10_CATALOG;
 
+  constructor(@Optional() private readonly dataSource?: DataSource) {}
+
   async search(query: string, limit = 20): Promise<Icd10Item[]> {
+    const safeLimit = Math.max(1, Math.min(limit, 50));
+
+    if (this.dataSource && this.dataSource.isInitialized) {
+      try {
+        const repo = this.dataSource.getRepository(Icd10CatalogEntity);
+        const qb = repo.createQueryBuilder('c').where('c.is_active = :isActive', { isActive: true });
+        if (query && query.trim()) {
+          const trimmed = query.trim();
+          qb.andWhere('(c.code ILIKE :q OR c.name ILIKE :q)', { q: `%${trimmed}%` });
+        }
+        qb.orderBy('c.code', 'ASC').take(safeLimit);
+        const dbItems = await qb.getMany();
+        if (dbItems && dbItems.length > 0) {
+          return dbItems.map((item) => ({
+            code: item.code,
+            nameVi: item.name,
+            nameEn: item.name,
+            chapter: item.category ?? undefined,
+            isChronic: this.isChronicCode(item.code),
+          }));
+        }
+      } catch {
+        // Fallback to baseline catalog on any DB query issue
+      }
+    }
+
+    return this.searchBaseline(query, safeLimit);
+  }
+
+  private searchBaseline(query: string, limit: number): Icd10Item[] {
     if (!query || !query.trim()) {
-      return this.catalog.slice(0, Math.min(limit, 50));
+      return this.catalog.slice(0, limit);
     }
 
     const trimmed = query.trim().toLowerCase();
@@ -217,13 +251,33 @@ export class Icd10Service {
       return codeMatch || nameMatch || nameEnMatch;
     });
 
-    const safeLimit = Math.max(1, Math.min(limit, 50));
-    return matches.slice(0, safeLimit);
+    return matches.slice(0, limit);
   }
 
   async findByCode(code: string): Promise<Icd10Item | null> {
     if (!code) return null;
     const normalized = code.trim().toUpperCase();
+
+    if (this.dataSource && this.dataSource.isInitialized) {
+      try {
+        const repo = this.dataSource.getRepository(Icd10CatalogEntity);
+        const found = await repo.findOne({
+          where: { code: normalized, isActive: true },
+        });
+        if (found) {
+          return {
+            code: found.code,
+            nameVi: found.name,
+            nameEn: found.name,
+            chapter: found.category ?? undefined,
+            isChronic: this.isChronicCode(found.code),
+          };
+        }
+      } catch {
+        // Fallback to baseline
+      }
+    }
+
     const found = this.catalog.find(
       (item) => item.code.toUpperCase() === normalized,
     );

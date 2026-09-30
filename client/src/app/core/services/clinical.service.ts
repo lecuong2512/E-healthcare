@@ -6,7 +6,10 @@ import {
   CreateMedicalRecordRequest,
   EmrAddendumData,
   EmrHistoryResponse,
+  Icd10Item,
   MedicalRecordDetailResponse,
+  MedicineCatalogItem,
+  PatientSummaryResponse,
   UpdateMedicalRecordRequest,
 } from '@shared/interfaces';
 import { TokenStoreService } from './token-store.service';
@@ -95,6 +98,27 @@ export class ClinicalService {
         headers: this.authHeaders(),
         responseType: 'blob',
       },
+    );
+  }
+
+  searchIcd10(query: string, limit = 20): Observable<Icd10Item[]> {
+    return this.http.get<Icd10Item[]>(`${API_BASE}/icd10/search`, {
+      params: { q: query, limit },
+      headers: this.authHeaders(),
+    });
+  }
+
+  searchMedicines(query = '', limit = 50): Observable<MedicineCatalogItem[]> {
+    return this.http.get<MedicineCatalogItem[]>(`${API_BASE}/medicines`, {
+      params: { q: query, limit },
+      headers: this.authHeaders(),
+    });
+  }
+
+  getPatientSummary(appointmentId: string): Observable<PatientSummaryResponse> {
+    return this.http.get<PatientSummaryResponse>(
+      `${API_BASE}/appointments/${encodeURIComponent(appointmentId)}/patient-summary`,
+      { headers: this.authHeaders() },
     );
   }
 

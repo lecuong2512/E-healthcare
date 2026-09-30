@@ -73,9 +73,29 @@ describe('ConsultationPage (SRS-DOC-03, SRS-DOC-04 & Section 5.4)', () => {
       'updateMedicalRecord',
       'completeConsultation',
       'downloadPrescriptionPdf',
+      'getPatientSummary',
+      'searchMedicines',
+      'searchIcd10',
     ]);
 
     phrService.getMyPhr.and.returnValue(of(mockPhr));
+    clinicalService.getPatientSummary.and.returnValue(
+      of({
+        patient: {
+          fullName: 'Nguyễn Văn Bệnh Nhân',
+          gender: Gender.MALE,
+          dateOfBirth: '1990-05-15',
+        },
+        phr: {
+          bloodType: 'A+',
+          allergies: 'Penicillin, Aspirin',
+          chronicDiseases: 'Hen phế quản',
+          surgeryHistory: 'Chưa phẫu thuật',
+        },
+      }),
+    );
+    clinicalService.searchMedicines.and.returnValue(of([]));
+    clinicalService.searchIcd10.and.returnValue(of([]));
     clinicalService.getMedicalRecordByAppointment.and.returnValue(of(mockRecord));
     clinicalService.getEmrHistory.and.returnValue(of(mockHistory));
     clinicalService.createMedicalRecord.and.returnValue(of(mockRecord));
@@ -118,7 +138,7 @@ describe('ConsultationPage (SRS-DOC-03, SRS-DOC-04 & Section 5.4)', () => {
 
   it('TC-UI-CONSULT-01: should create component and load patient PHR profile', () => {
     expect(component).toBeTruthy();
-    expect(phrService.getMyPhr).toHaveBeenCalled();
+    expect(clinicalService.getPatientSummary).toHaveBeenCalledWith('app-123');
     expect(component.allergies).toBe('Penicillin, Aspirin');
     expect(component.chronicDiseases).toBe('Hen phế quản');
     expect(component.bloodType).toBe('A+');

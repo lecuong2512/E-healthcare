@@ -208,6 +208,52 @@ describe('Card 3.3: Clinical Module (EMR, ICD-10, e-Prescription)', () => {
       expect(icd10Service.isChronicCode('J00')).toBe(false);
       expect(icd10Service.isChronicCode('K29')).toBe(false);
     });
+
+    it('queries icd10_catalogs table when DataSource is provided', async () => {
+      const mockIcdRepo = {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          take: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([
+            { code: 'A00', name: 'Bệnh tả', category: 'Nhiễm trùng', isActive: true },
+          ]),
+        }),
+        findOne: jest.fn().mockResolvedValue({
+          code: 'A00',
+          name: 'Bệnh tả',
+          category: 'Nhiễm trùng',
+          isActive: true,
+        }),
+      };
+
+      const dsWithIcd: any = {
+        isInitialized: true,
+        getRepository: jest.fn().mockReturnValue(mockIcdRepo),
+      };
+
+      const dbIcd10Service = new Icd10Service(dsWithIcd);
+      const searchRes = await dbIcd10Service.search('tả');
+      expect(searchRes).toEqual([
+        {
+          code: 'A00',
+          nameVi: 'Bệnh tả',
+          nameEn: 'Bệnh tả',
+          chapter: 'Nhiễm trùng',
+          isChronic: false,
+        },
+      ]);
+
+      const found = await dbIcd10Service.findByCode('A00');
+      expect(found).toEqual({
+        code: 'A00',
+        nameVi: 'Bệnh tả',
+        nameEn: 'Bệnh tả',
+        chapter: 'Nhiễm trùng',
+        isChronic: false,
+      });
+    });
   });
 
   describe('3. Drug Safety: Allergy Warnings', () => {
@@ -933,6 +979,53 @@ describe('Card 3.3: Clinical Module (EMR, ICD-10, e-Prescription)', () => {
           createdRecord.id,
         ),
       ).rejects.toThrow(ForbiddenException);
+    });
+
+    describe('getMedicines & getPatientSummary (BUG-NEW-08 & BUG-NEW-14)', () => {
+      it('returns medicines catalog with baseline fallback', async () => {
+        const results = await service.getMedicines('Paracetamol', 10);
+        expect(results).toBeDefined();
+        expect(Array.isArray(results)).toBe(true);
+        expect(results.length).toBeGreaterThan(0);
+        expect(results[0].brandName).toContain('Paracetamol');
+      });
+
+      it('returns patient summary for authorized doctor without 403 (BUG-NEW-14)', async () => {
+        mockAppointmentRepo.findOne.mockResolvedValue({
+          id: APPOINTMENT_ID,
+          doctorId: DOCTOR_ID,
+          patientId: PATIENT_ID,
+          patient: {
+            fullName: 'Bệnh Nhân Test',
+            gender: 'MALE',
+            dateOfBirth: '1995-01-01',
+          },
+        });
+        mockPhrRepo.findOne.mockResolvedValue({
+          bloodType: 'O+',
+          allergies: 'Penicillin',
+          chronicDiseases: 'Hen phế quản',
+          surgeryHistory: 'Chưa phẫu thuật',
+        });
+
+        const summary = await service.getPatientSummary(DOCTOR_USER_ID, APPOINTMENT_ID);
+        expect(summary).toBeDefined();
+        expect(summary.patient.fullName).toBe('Bệnh Nhân Test');
+        expect(summary.phr.bloodType).toBe('O+');
+        expect(summary.phr.allergies).toBe('Penicillin');
+      });
+
+      it('rejects patient summary for unauthorized doctor', async () => {
+        mockAppointmentRepo.findOne.mockResolvedValue({
+          id: APPOINTMENT_ID,
+          doctorId: OTHER_DOCTOR_ID,
+          patientId: PATIENT_ID,
+        });
+
+        await expect(
+          service.getPatientSummary(DOCTOR_USER_ID, APPOINTMENT_ID),
+        ).rejects.toThrow(ForbiddenException);
+      });
     });
   });
 });

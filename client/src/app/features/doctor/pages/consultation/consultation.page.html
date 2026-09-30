@@ -105,7 +105,7 @@
                   </span>
                 }
               </div>
-              <input [(ngModel)]="icdSearch" placeholder="Tìm nhanh mã ICD-10 hoặc tên bệnh tiếng Việt..." class="w-full rounded border p-2" />
+              <input [(ngModel)]="icdSearch" (input)="onIcdSearchChange()" placeholder="Tìm nhanh mã ICD-10 hoặc tên bệnh tiếng Việt..." class="w-full rounded border p-2" />
               @if(filteredIcd.length){
                 <div class="mt-1 max-h-40 overflow-auto rounded border bg-white">
                   @for(d of filteredIcd;track d.code){
@@ -146,7 +146,7 @@
               </div>
             }
             <div class="flex gap-2">
-              <input [(ngModel)]="drugSearch" placeholder="Tìm tên thuốc / hoạt chất..." class="min-w-0 flex-1 rounded border p-2" />
+              <input [(ngModel)]="drugSearch" (input)="onDrugSearchChange()" placeholder="Tìm tên thuốc / hoạt chất..." class="min-w-0 flex-1 rounded border p-2" />
               <button (click)="tryAddDrug()" [disabled]="!selectedCatalogDrug" class="rounded bg-sky-600 px-4 font-bold text-white disabled:opacity-50 cursor-pointer">
                 Thêm
               </button>

@@ -1,7 +1,10 @@
 import { Module } from "@nestjs/common";
 import { OwnDoctorGuard } from "../../common/guards/own-doctor.guard";
 import { DatabaseModule } from "../../database/database.module";
-import { DoctorScheduleController } from "./doctor-schedule.controller";
+import {
+  DoctorScheduleController,
+  DoctorSelfScheduleController,
+} from "./doctor-schedule.controller";
 import { DoctorScheduleService } from "./doctor-schedule.service";
 import { DoctorCacheService } from "./doctor-cache.service";
 import { DoctorSearchController } from "./doctor-search.controller";
@@ -13,6 +16,7 @@ import { DoctorReviewService } from "./doctor-review.service";
   imports: [DatabaseModule],
   controllers: [
     DoctorScheduleController,
+    DoctorSelfScheduleController,
     DoctorSearchController,
     DoctorReviewController,
   ],
@@ -23,5 +27,6 @@ import { DoctorReviewService } from "./doctor-review.service";
     DoctorReviewService,
     OwnDoctorGuard,
   ],
+  exports: [DoctorScheduleService],
 })
 export class DoctorModule {}

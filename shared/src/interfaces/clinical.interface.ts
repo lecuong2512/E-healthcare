@@ -161,3 +161,30 @@ export interface EmrHistoryResponse {
   currentSnapshot: EmrClinicalSnapshot;
   addendums: EmrAddendumData[];
 }
+
+export interface PatientSummaryResponse {
+  patient: {
+    fullName: string;
+    gender: string;
+    dateOfBirth: string;
+  };
+  phr: {
+    bloodType: string | null;
+    allergies: string | null;
+    chronicDiseases: string | null;
+    surgeryHistory: string | null;
+  };
+}
+
+export interface MedicineCatalogItem {
+  id: string;
+  code: string;
+  brandName: string;
+  activeIngredient: string;
+  strength?: string;
+  packageUnit?: string;
+  contraindications?: string | null;
+  referencePrice?: number;
+  isActive?: boolean;
+}
+

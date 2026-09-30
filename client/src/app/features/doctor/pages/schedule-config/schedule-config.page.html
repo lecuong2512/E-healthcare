@@ -8,10 +8,9 @@
     <button type="button" (click)="openRegistration()" class="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-800">+ Đăng ký ca làm việc</button>
   </header>
 
-  <section class="grid gap-3 sm:grid-cols-3">
+  <section class="grid gap-3 sm:grid-cols-2">
     <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-medium uppercase tracking-wide text-slate-500">Ca sáng</p><p class="mt-1 text-lg font-bold text-slate-900">08:00 – 12:00</p></div>
     <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-medium uppercase tracking-wide text-slate-500">Ca chiều</p><p class="mt-1 text-lg font-bold text-slate-900">13:30 – 17:30</p></div>
-    <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-medium uppercase tracking-wide text-slate-500">Ca tối (tùy chọn)</p><p class="mt-1 text-lg font-bold text-slate-900">18:00 – 21:00</p></div>
   </section>
 
   @if (formMessage) {
@@ -50,7 +49,7 @@
             <div class="grid grid-cols-8 border-b border-slate-200 last:border-b-0">
               <div class="bg-slate-50/70 p-3">
                 <p class="text-sm font-bold text-slate-800">{{ shiftLabel(shift) }}</p>
-                <p class="mt-1 text-xs text-slate-500">{{ shift === 'MORNING' ? '08:00 – 12:00' : shift === 'AFTERNOON' ? '13:30 – 17:30' : '18:00 – 21:00' }}</p>
+                <p class="mt-1 text-xs text-slate-500">{{ shift === 'MORNING' ? '08:00 – 12:00' : '13:30 – 17:30' }}</p>
               </div>
               @for (date of weekDates; track date.toISOString()) {
                 <div class="min-h-36 border-l border-slate-200 p-2">
@@ -130,7 +129,7 @@
         }
         <label class="text-sm font-semibold text-slate-700">Ca làm việc
           <select [(ngModel)]="selectedShift" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal">
-            <option value="MORNING">Ca sáng · 08:00 – 12:00</option><option value="AFTERNOON">Ca chiều · 13:30 – 17:30</option><option value="EVENING">Ca tối · 18:00 – 21:00</option>
+            <option value="MORNING">Ca sáng · 08:00 – 12:00</option><option value="AFTERNOON">Ca chiều · 13:30 – 17:30</option>
           </select>
         </label>
         <label class="text-sm font-semibold text-slate-700">Thời lượng mỗi slot
@@ -159,7 +158,7 @@
         <p class="font-semibold">⏰ Hạn đăng ký</p><p class="mt-0.5 text-xs">{{ deadlineWarning }} @if (isAfterDeadline) { <span class="font-bold">Đã quá hạn, không thể đăng ký lịch tuần sau.</span> } @if (isTargetDateInPast) { <span class="font-bold">Không thể đăng ký ngày trong quá khứ.</span> }</p>
       </div>
       @if (formMessage) { <p class="mt-3 text-sm text-rose-700" role="alert">{{ formMessage }}</p> }
-      <div class="mt-5 flex justify-end gap-2"><button type="button" (click)="showRegistrationForm = false" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Đóng</button><button type="button" (click)="registerShift()" [disabled]="isAfterDeadline || isTargetDateInPast || !roomNumber || previewSlots.length === 0" class="rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50">Xác nhận đăng ký</button></div>
+      <div class="mt-5 flex justify-end gap-2"><button type="button" (click)="showRegistrationForm = false" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Đóng</button><button type="button" (click)="registerShift()" [disabled]="isLoading || isAfterDeadline || isTargetDateInPast || !roomNumber || previewSlots.length === 0" class="rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50">{{ isLoading ? 'Đang lưu...' : 'Xác nhận đăng ký' }}</button></div>
     </section>
   </div>
 }
@@ -170,12 +169,12 @@
       <h2 class="text-lg font-bold text-slate-900">Sửa ca làm việc</h2><p class="mt-1 text-sm text-slate-500">Ca này chưa có bệnh nhân đặt, có thể điều chỉnh thông tin và tạo lại slot.</p>
       <div class="mt-4 grid gap-3 sm:grid-cols-2">
         <label class="text-sm font-semibold text-slate-700">Ngày làm việc<input type="date" [(ngModel)]="editDate" class="mt-1.5 w-full rounded-lg border border-slate-300 p-2.5 font-normal" /></label>
-        <label class="text-sm font-semibold text-slate-700">Ca trực<select [(ngModel)]="editShift" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal"><option value="MORNING">Ca sáng</option><option value="AFTERNOON">Ca chiều</option><option value="EVENING">Ca tối</option></select></label>
+        <label class="text-sm font-semibold text-slate-700">Ca trực<select [(ngModel)]="editShift" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal"><option value="MORNING">Ca sáng</option><option value="AFTERNOON">Ca chiều</option></select></label>
         <label class="text-sm font-semibold text-slate-700">Thời lượng slot<select [(ngModel)]="editDuration" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal"><option [ngValue]="15">15 phút</option><option [ngValue]="30">30 phút</option></select></label>
         <label class="text-sm font-semibold text-slate-700">Số bệnh nhân tối đa<input type="number" min="1" [max]="editMaxAllowedPatients" [(ngModel)]="editMaxPatients" class="mt-1.5 w-full rounded-lg border border-slate-300 p-2.5 font-normal" /></label>
         <label class="text-sm font-semibold text-slate-700 sm:col-span-2">Phòng khám / Buồng khám<select [(ngModel)]="editRoomNumber" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2.5 font-normal">@for (room of roomOptions; track room) { <option [value]="room">Buồng {{ room }}</option> }</select></label>
       </div>
-      <div class="mt-5 flex justify-end gap-2"><button type="button" (click)="editingSlot = null" class="rounded-lg border px-4 py-2 text-sm">Đóng</button><button type="button" (click)="saveEdit()" class="rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white">Lưu thay đổi</button></div>
+      <div class="mt-5 flex justify-end gap-2"><button type="button" (click)="editingSlot = null" class="rounded-lg border px-4 py-2 text-sm">Đóng</button><button type="button" (click)="saveEdit()" [disabled]="isLoading" class="rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{{ isLoading ? 'Đang lưu...' : 'Lưu thay đổi' }}</button></div>
     </section>
   </div>
 }

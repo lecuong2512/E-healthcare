@@ -5,17 +5,23 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  Req,
+  UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
+import { DataSource } from "typeorm";
 import { Role } from "@shared/enums";
 import { Roles } from "../../common/decorators/auth.decorators";
 import { OwnDoctor } from "../../common/decorators/own-doctor.decorator";
 import { OwnDoctorGuard } from "../../common/guards/own-doctor.guard";
+import { AuthenticatedRequest } from "../../common/guards/authenticated-request";
+import { DoctorEntity } from "../../database/entities/doctor.entity";
 import { DoctorScheduleService } from "./doctor-schedule.service";
 import { CreateDoctorScheduleDto } from "./dto/create-schedule.dto";
 import { ScheduleRangeDto } from "./dto/schedule-range.dto";
@@ -65,3 +71,54 @@ export class DoctorScheduleController {
     return this.service.deleteSchedule(doctorId, scheduleId);
   }
 }
+
+@Controller("doctor/schedules")
+@Roles(Role.DOCTOR)
+export class DoctorSelfScheduleController {
+  constructor(
+    private readonly service: DoctorScheduleService,
+    private readonly dataSource: DataSource,
+  ) {}
+
+  @Get()
+  async getMySchedules(
+    @Req() req: AuthenticatedRequest,
+    @Query() range: ScheduleRangeDto,
+  ) {
+    const doctor = await this.findDoctorByUserId(req.auth?.userId);
+    return this.service.getSchedules(doctor.id, range);
+  }
+
+  @Post()
+  async createSchedule(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: CreateDoctorScheduleDto,
+  ) {
+    const doctor = await this.findDoctorByUserId(req.auth?.userId);
+    return this.service.createSchedule(doctor.id, dto);
+  }
+
+  @Delete(":scheduleId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteSchedule(
+    @Req() req: AuthenticatedRequest,
+    @Param("scheduleId", ParseUUIDPipe) scheduleId: string,
+  ) {
+    const doctor = await this.findDoctorByUserId(req.auth?.userId);
+    return this.service.deleteSchedule(doctor.id, scheduleId);
+  }
+
+  private async findDoctorByUserId(userId?: string): Promise<DoctorEntity> {
+    if (!userId) {
+      throw new UnauthorizedException("Chưa đăng nhập.");
+    }
+    const doctor = await this.dataSource
+      .getRepository(DoctorEntity)
+      .findOneBy({ userId });
+    if (!doctor) {
+      throw new NotFoundException("Không tìm thấy thông tin bác sĩ.");
+    }
+    return doctor;
+  }
+}
+

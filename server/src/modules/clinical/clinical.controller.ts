@@ -73,6 +73,35 @@ export class ClinicalController {
   }
 
   /**
+   * Get medicines catalog for doctor prescribing.
+   */
+  @Get('medicines')
+  @Roles(Role.DOCTOR, Role.ADMIN)
+  async getMedicines(
+    @Query('q') q?: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.clinicalService.getMedicines(q, limit ? Number(limit) : 50);
+  }
+
+  /**
+   * Get patient summary & PHR by appointment ID for doctor consultation.
+   * Resolves BUG-NEW-14: avoids doctor 403 on /phr/me.
+   */
+  @Get('appointments/:appointmentId/patient-summary')
+  @Roles(Role.DOCTOR, Role.ADMIN)
+  async getPatientSummary(
+    @Req() req: AuthenticatedRequest,
+    @Param('appointmentId', ParseUUIDPipe) appointmentId: string,
+  ) {
+    return this.clinicalService.getPatientSummary(
+      req.auth!.userId,
+      appointmentId,
+      req.auth!.role,
+    );
+  }
+
+  /**
    * Check drug allergies and chronic disease constraints before saving prescription.
    */
   @Post('prescriptions/safety-check')

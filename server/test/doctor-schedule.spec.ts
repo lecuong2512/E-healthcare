@@ -91,3 +91,63 @@ describe('DoctorScheduleService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 });
+
+describe('DoctorSelfScheduleController', () => {
+  const service = {
+    getSchedules: jest.fn().mockResolvedValue({ doctorId: 'doc-1', roomNumber: '204', slots: [] }),
+    createSchedule: jest.fn().mockResolvedValue({ doctorId: 'doc-1', roomNumber: '204', slots: [] }),
+    deleteSchedule: jest.fn().mockResolvedValue(undefined),
+  };
+
+  const doctorRepository = {
+    findOneBy: jest.fn().mockImplementation(({ userId }: { userId: string }) => {
+      if (userId === 'user-doctor') {
+        return Promise.resolve({ id: 'doc-1', userId: 'user-doctor', roomNumber: '204' });
+      }
+      return Promise.resolve(null);
+    }),
+  };
+
+  const dataSource = {
+    getRepository: jest.fn(() => doctorRepository),
+  } as unknown as DataSource;
+
+  const controller = new (require('../src/modules/doctor/doctor-schedule.controller').DoctorSelfScheduleController)(
+    service,
+    dataSource,
+  );
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('gets schedules for the currently authenticated doctor', async () => {
+    const req = { auth: { userId: 'user-doctor', role: 'DOCTOR' } } as any;
+    const result = await controller.getMySchedules(req, { from: '2026-10-01', to: '2026-10-07' });
+
+    expect(doctorRepository.findOneBy).toHaveBeenCalledWith({ userId: 'user-doctor' });
+    expect(service.getSchedules).toHaveBeenCalledWith('doc-1', { from: '2026-10-01', to: '2026-10-07' });
+    expect(result).toEqual({ doctorId: 'doc-1', roomNumber: '204', slots: [] });
+  });
+
+  it('creates schedule for the currently authenticated doctor', async () => {
+    const req = { auth: { userId: 'user-doctor', role: 'DOCTOR' } } as any;
+    const dto = { date: '2026-10-05', shiftType: ShiftType.MORNING, slotDurationMinutes: 30 };
+    await controller.createSchedule(req, dto);
+
+    expect(doctorRepository.findOneBy).toHaveBeenCalledWith({ userId: 'user-doctor' });
+    expect(service.createSchedule).toHaveBeenCalledWith('doc-1', dto);
+  });
+
+  it('deletes schedule for the currently authenticated doctor', async () => {
+    const req = { auth: { userId: 'user-doctor', role: 'DOCTOR' } } as any;
+    await controller.deleteSchedule(req, 'schedule-1');
+
+    expect(doctorRepository.findOneBy).toHaveBeenCalledWith({ userId: 'user-doctor' });
+    expect(service.deleteSchedule).toHaveBeenCalledWith('doc-1', 'schedule-1');
+  });
+
+  it('throws NotFoundException when doctor profile is not found', async () => {
+    const req = { auth: { userId: 'unknown-user', role: 'DOCTOR' } } as any;
+    await expect(controller.getMySchedules(req, {})).rejects.toThrow();
+  });
+});
+
