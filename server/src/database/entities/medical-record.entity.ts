@@ -44,11 +44,20 @@ export class MedicalRecordEntity {
   @JoinColumn({ name: 'doctor_id' })
   doctor!: DoctorEntity;
 
-  @Column({ name: 'vital_signs', type: 'jsonb' })
+  /** Decrypted in memory only by ClinicalEncryptedStore after authorization. */
   vitalSigns!: Record<string, number>;
 
-  @Column({ name: 'clinical_notes', type: 'text' })
+  /** Decrypted in memory only by ClinicalEncryptedStore after authorization. */
   clinicalNotes!: string;
+
+  @Column({ name: 'vital_signs_ciphertext', type: 'bytea', select: false })
+  vitalSignsCiphertext!: Buffer;
+
+  @Column({ name: 'clinical_notes_ciphertext', type: 'bytea', select: false })
+  clinicalNotesCiphertext!: Buffer;
+
+  @Column({ name: 'encryption_key_version', type: 'smallint' })
+  encryptionKeyVersion!: number;
 
   @Column({ name: 'icd10_primary_code', type: 'varchar', length: 10 })
   icd10PrimaryCode!: string;

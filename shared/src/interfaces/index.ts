@@ -8,3 +8,4 @@ export * from './reception.interface';
 export * from './clinic-print.interface';
 export * from './queue.interface';
 export * from './doctor-review.interface';
+export * from './audit.interface';

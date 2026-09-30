@@ -15,3 +15,4 @@ export * from "./counter-payment-status.enum";
 export * from "./date-of-birth-precision.enum";
 export * from "./reception-audit-action.enum";
 export * from "./audit-action.enum";
+export * from "./audit-outcome.enum";
