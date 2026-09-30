@@ -44,6 +44,9 @@ export class DoctorEntity {
   @Column({ name: 'academic_title', type: 'varchar', length: 50, nullable: true })
   academicTitle!: string | null;
 
+  @Column({ name: 'years_experience', type: 'int', default: 0 })
+  yearsExperience!: number;
+
   @Column({
     name: 'consultation_fee',
     type: 'numeric',
