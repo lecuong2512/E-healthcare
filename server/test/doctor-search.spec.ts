@@ -133,7 +133,7 @@ describe("DoctorSearchService", () => {
     );
     expect(query.andWhere).toHaveBeenCalledWith(
       expect.stringContaining("FROM doctor_schedules schedule"),
-      { date: "2099-01-05", available: "AVAILABLE" },
+      { date: "2099-01-05", available: "AVAILABLE", earliestStart: expect.any(Date) },
     );
     expect(query.skip).toHaveBeenCalledWith(5);
     expect(query.take).toHaveBeenCalledWith(5);

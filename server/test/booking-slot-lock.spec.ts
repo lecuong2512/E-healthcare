@@ -131,6 +131,8 @@ describe('Secure distributed slot reservation', () => {
               id: slotId,
               doctorId,
               status: slotStatus,
+              date: '2099-01-01',
+              startTime: '09:00:00',
             }) as DoctorScheduleEntity)
           : null,
       ),
@@ -142,6 +144,8 @@ describe('Secure distributed slot reservation', () => {
         id: slotId,
         doctorId,
         status: SlotStatus.AVAILABLE,
+        date: '2099-01-01',
+        startTime: '09:00:00',
       }),
     };
     queryRunner = {
