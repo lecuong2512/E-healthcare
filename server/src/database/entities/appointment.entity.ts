@@ -5,11 +5,13 @@ import {
   ManyToOne,
   JoinColumn,
   CreateDateColumn,
+  OneToOne,
 } from 'typeorm';
 import { UserEntity } from './user.entity';
 import { DoctorEntity } from './doctor.entity';
 import { DoctorScheduleEntity } from './doctor-schedule.entity';
 import { AppointmentStatus, PaymentStatus, PaymentMethod, QueueSource } from '@shared/enums';
+import { DoctorReviewEntity } from './doctor-review.entity';
 
 @Entity('appointments')
 export class AppointmentEntity {
@@ -32,6 +34,9 @@ export class AppointmentEntity {
   @ManyToOne(() => DoctorEntity)
   @JoinColumn({ name: 'doctor_id' })
   doctor!: DoctorEntity;
+
+  @OneToOne(() => DoctorReviewEntity, (review) => review.appointment)
+  review?: DoctorReviewEntity | null;
 
   @Column({ name: 'schedule_id', type: 'uuid' })
   scheduleId!: string;

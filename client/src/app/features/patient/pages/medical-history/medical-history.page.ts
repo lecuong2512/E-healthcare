@@ -3,6 +3,16 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import {
+  AppointmentDoctorReview,
+  CreateDoctorReviewRequest,
+  DoctorReviewResponse,
+} from '@shared/interfaces';
+import { NzButtonModule } from 'ng-zorro-antd/button';
+import { NzInputModule } from 'ng-zorro-antd/input';
+import { NzMessageModule, NzMessageService } from 'ng-zorro-antd/message';
+import { NzModalModule } from 'ng-zorro-antd/modal';
+import { NzRateModule } from 'ng-zorro-antd/rate';
 import { TokenStoreService } from '../../../../core/services/token-store.service';
 import { PatientConsentCheckboxComponent } from '../../../../shared/components/patient-consent-checkbox/patient-consent-checkbox.component';
 
@@ -18,6 +28,8 @@ interface Appointment {
   refundAmount?: number;
   refundPercent?: number;
   doctor?: {
+    id?: string;
+    ratingAverage?: number;
     academicTitle?: string;
     consultationFee?: number;
     roomNumber?: string;
@@ -26,6 +38,7 @@ interface Appointment {
   };
   schedule?: { date: string; startTime: string; endTime: string };
   medicalRecord?: MedicalRecord;
+  review?: AppointmentDoctorReview | null;
 }
 
 interface MedicalRecord {
@@ -63,13 +76,24 @@ interface PrescriptionItem {
 @Component({
   selector: 'app-medical-history-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, PatientConsentCheckboxComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    PatientConsentCheckboxComponent,
+    NzButtonModule,
+    NzInputModule,
+    NzMessageModule,
+    NzModalModule,
+    NzRateModule,
+  ],
   templateUrl: './medical-history.page.html',
   styleUrls: ['./medical-history.page.scss'],
 })
 export class MedicalHistoryPage implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
   private readonly tokens = inject(TokenStoreService);
+  private readonly message = inject(NzMessageService);
 
   readonly tabs: { id: Tab; label: string }[] = [
     { id: 'upcoming', label: 'Sắp tới' },
@@ -81,7 +105,13 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   readonly appointments = signal<Appointment[]>([]);
   readonly loading = signal(true);
   readonly error = signal('');
-  readonly isMock = signal(true);
+  readonly isMock = signal(false);
+
+  readonly reviewTarget = signal<Appointment | null>(null);
+  readonly reviewRating = signal(0);
+  readonly reviewModalVisible = signal(false);
+  readonly reviewSubmitting = signal(false);
+  reviewComment = '';
 
   readonly cancelTarget = signal<Appointment | null>(null);
   cancelReason = '';
@@ -102,7 +132,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
   readonly clock = signal(Date.now());
 
   ngOnInit(): void {
-    this.useMockData();
+    this.load();
     this.tick = setInterval(() => this.clock.set(Date.now()), 1000);
   }
 
@@ -183,6 +213,7 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
       specialty: string,
       room: string
     ) => ({
+      id: `mock-${name}`,
       academicTitle: title,
       roomNumber: room,
       specialty: { name: specialty },
@@ -328,6 +359,90 @@ export class MedicalHistoryPage implements OnInit, OnDestroy {
 
   canCancel(a: Appointment): boolean {
     return ['CONFIRMED'].includes(a.status);
+  }
+
+  canReview(a: Appointment): boolean {
+    return a.status === 'COMPLETED' && !a.review;
+  }
+
+  openReview(a: Appointment): void {
+    if (!this.canReview(a)) return;
+    this.reviewTarget.set(a);
+    this.reviewRating.set(0);
+    this.reviewComment = '';
+    this.reviewModalVisible.set(true);
+  }
+
+  closeReview(): void {
+    if (this.reviewSubmitting()) return;
+    this.reviewModalVisible.set(false);
+    this.reviewTarget.set(null);
+  }
+
+  submitReview(): void {
+    const appointment = this.reviewTarget();
+    const doctorId = appointment?.doctor?.id;
+    const rating = this.reviewRating();
+    if (!appointment || !doctorId || rating < 1 || this.reviewSubmitting()) return;
+
+    const payload: CreateDoctorReviewRequest = {
+      appointmentId: appointment.id,
+      rating,
+      comment: this.reviewComment.trim() || null,
+    };
+    this.reviewSubmitting.set(true);
+
+    const success = (response: DoctorReviewResponse) => {
+      this.appointments.update((rows) =>
+        rows.map((row) =>
+          row.id === appointment.id
+            ? {
+                ...row,
+                doctor: row.doctor
+                  ? { ...row.doctor, ratingAverage: response.ratingAverage }
+                  : row.doctor,
+                review: {
+                  id: response.id,
+                  rating: response.rating,
+                  comment: response.comment,
+                  createdAt: response.createdAt,
+                },
+              }
+            : row
+        )
+      );
+      this.reviewSubmitting.set(false);
+      this.reviewModalVisible.set(false);
+      this.reviewTarget.set(null);
+      this.message.success('Đã gửi đánh giá bác sĩ. Cảm ơn phản hồi của bạn!');
+    };
+
+    if (this.isMock()) {
+      success({
+        id: `mock-review-${appointment.id}`,
+        appointmentId: appointment.id,
+        doctorId,
+        rating,
+        comment: payload.comment ?? null,
+        createdAt: new Date().toISOString(),
+        ratingAverage: rating,
+      });
+      return;
+    }
+
+    this.http
+      .post<DoctorReviewResponse>(`/api/v1/doctors/${doctorId}/reviews`, payload, {
+        headers: this.headers(),
+      })
+      .subscribe({
+        next: success,
+        error: (error) => {
+          this.reviewSubmitting.set(false);
+          this.message.error(
+            error?.error?.message || 'Không thể gửi đánh giá. Vui lòng thử lại.'
+          );
+        },
+      });
   }
 
   openCancel(a: Appointment): void {

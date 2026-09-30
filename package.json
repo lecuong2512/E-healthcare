@@ -13,10 +13,13 @@
     "build:client": "npm run build --workspace=ehealth-web-client",
     "build:shared": "npm run build --workspace=@ehealth/shared",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "seed:admin-demo": "docker exec -i ehealth-postgres psql -v ON_ERROR_STOP=1 -U postgres -d ehealth_db < scripts/seed-admin-dashboard-demo.sql"
   },
   "dependencies": {},
   "overrides": {
-    "@nestjs/platform-express": { "multer": "^2.3.0" }
+    "@nestjs/platform-express": {
+      "multer": "^2.3.0"
+    }
   }
 }

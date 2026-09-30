@@ -55,6 +55,10 @@ import { BackfillDoctorUserRoles1790730000000 } from './migrations/1790730000000
 import { AddClinicRoomDetails1790500000000 } from './migrations/1790500000000-add-clinic-room-details';
 import { StaffShiftAssignmentEntity } from './entities/staff-shift-assignment.entity';
 import { CreateStaffShiftAssignments1790600000000 } from './migrations/1790600000000-create-staff-shift-assignments';
+import { ReportApprovalEntity } from './entities/report-approval.entity';
+import { AddReportApprovals1790300000000 } from './migrations/1790300000000-add-report-approvals';
+import { DoctorReviewEntity } from "./entities/doctor-review.entity";
+import { CreateDoctorReviews1790586000000 } from "./migrations/1790586000000-create-doctor-reviews";
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -88,6 +92,8 @@ export function createDataSource(url: string): DataSource {
       CounterPaymentTransactionEntity,
       ReceptionAuditLogEntity,
       EmrAddendumEntity,
+      ReportApprovalEntity,
+      DoctorReviewEntity,
     ],
     migrationsTransactionMode: "each",
     migrations: [
@@ -118,6 +124,8 @@ export function createDataSource(url: string): DataSource {
       CreateClinicRooms1790400000000,
       AddClinicRoomDetails1790500000000,
       CreateStaffShiftAssignments1790600000000,
+      AddReportApprovals1790300000000,
+      CreateDoctorReviews1790586000000,
     ],
   });
 }

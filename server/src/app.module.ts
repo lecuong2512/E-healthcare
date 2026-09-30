@@ -14,6 +14,7 @@ import { QueueModule } from "./modules/queue/queue.module";
 import { NotificationModule } from "./modules/notification/notification.module";
 import { ReceptionModule } from "./modules/reception/reception.module";
 import { StaffAdminModule } from './modules/admin/staff-admin.module';
+import { AdminDashboardModule } from './modules/admin/admin-dashboard.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { StaffAdminModule } from './modules/admin/staff-admin.module';
     ClinicalModule,
     ReceptionModule,
     StaffAdminModule,
+    AdminDashboardModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
   ],
   providers: [

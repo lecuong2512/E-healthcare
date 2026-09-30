@@ -1,0 +1,42 @@
+<main>
+  <section>
+    <h1>Bảng điều hành & KPI vận hành</h1><small>SRS-ADM-03</small>
+    <div class="toolbar"><nav><button (click)="select(1)">Hôm nay</button><button class="active" (click)="select(7)">7 ngày qua</button><button (click)="select(30)">Tháng này</button></nav><div><button (click)="download('xlsx')">⇩ Xuất Excel .xlsx</button><button (click)="download('pdf')">⇩ Xuất PDF</button></div></div>
+    <div class="metrics">
+      <article><span>Tổng lượt khám</span><b>{{kpi().visits | number}}</b><em><mark [class.negative]="isNegative(kpi().comparison?.visits)">{{deltaText(kpi().comparison?.visits)}}</mark> <small>vs tuần trước</small></em></article>
+      <article><span>Tổng doanh thu</span><b>{{kpi().revenue | number}} VND</b><em><mark [class.negative]="isNegative(kpi().comparison?.revenue)">{{deltaText(kpi().comparison?.revenue)}}</mark> <small>vs tuần trước</small></em></article>
+      <article><span>Tỷ lệ hoàn thành</span><b>{{kpi().completionRate}}%</b><em><mark [class.negative]="kpi().completionRate < 90">{{kpi().completionRate >= 90 ? '↑ Mục tiêu ≥ 90%' : '↓ Mục tiêu ≥ 90%'}}</mark> <small>{{kpi().completionRate >= 90 ? 'Đạt chỉ tiêu' : 'Cần cải thiện'}}</small></em></article>
+      <article><span>No-Show / Hủy</span><b>{{kpi().noShowRate}}% / {{kpi().cancellationRate}}%</b><em><mark class="negative" [class.neutral]="!isNegative(serviceQualityChange())">{{deltaText(serviceQualityChange())}}</mark> <small>vs tuần trước</small></em></article>
+    </div>
+    <div class="charts">
+      <article class="trend-card">
+        <div class="chart-heading"><h2>Doanh thu & lượt khám theo tuần</h2><div class="legend"><span class="revenue-key"></span>Doanh thu <span class="visit-key"></span>Lượt khám</div></div>
+        @if(kpi().trend.length){
+          <svg class="weekly-chart" viewBox="0 0 665 228" role="img" aria-label="Biểu đồ doanh thu và lượt khám">
+            <g class="grid"><line x1="52" x2="595" y1="38" y2="38"/><line x1="52" x2="595" y1="107" y2="107"/><line x1="52" x2="595" y1="176" y2="176"/></g>
+            <g class="axis-label"><text x="17" y="42">{{revenueAxisLabel(1)}}</text><text x="17" y="111">{{revenueAxisLabel(.5)}}</text><text x="39" y="180">0</text><text x="618" y="42">{{visitAxisLabel(1)}}</text><text x="618" y="111">{{visitAxisLabel(.5)}}</text><text x="618" y="180">0</text></g>
+            @for(point of kpi().trend; track point.day; let index = $index){
+              <rect class="revenue-bar" [attr.x]="chartX(index)-19" [attr.y]="revenueY(point.revenue)" width="38" [attr.height]="revenueHeight(point.revenue)"><title>{{ chartDay(point.day) }}: {{ point.revenue | number }} VND</title></rect>
+              <text class="day-label" [attr.x]="chartX(index)" y="211">{{chartDay(point.day)}}</text>
+            }
+            <polyline class="visit-line" [attr.points]="visitLine()"/>
+            @for(point of kpi().trend; track point.day; let index = $index){<circle class="visit-dot" [attr.cx]="chartX(index)" [attr.cy]="visitY(point.visits)" r="4"><title>{{ chartDay(point.day) }}: {{ point.visits }} lượt</title></circle>}
+          </svg>
+        } @else {<div class="chart-empty">Chưa có dữ liệu trong kỳ đã chọn.</div>}
+      </article>
+      <article class="payment-card"><h2>Phân loại thanh toán</h2>
+        @if(paymentSlices().length){
+          <div class="payment-content">
+            <svg class="payment-donut" viewBox="0 0 170 170" role="img" aria-label="Phân loại phương thức thanh toán">
+              <circle class="donut-track" cx="85" cy="85" r="53"/>
+              @for(slice of paymentSlices();track slice.method){<circle class="donut-slice" cx="85" cy="85" r="53" pathLength="100" [attr.stroke]="slice.color" [attr.stroke-dasharray]="slice.percentage + ' ' + (100-slice.percentage)" [attr.stroke-dashoffset]="-slice.offset"/>}
+              <text class="donut-total-label" x="85" y="80">Tổng</text><text class="donut-total-value" x="85" y="99">{{revenueMillions()}}</text>
+            </svg>
+            <div class="payment-legend">@for(slice of paymentSlices();track slice.method){<div><span [style.background]="slice.color"></span><label>{{paymentName(slice.method)}}</label><b>{{slice.percentage | number:'1.0-0'}}%</b></div>}</div>
+          </div>
+        } @else {<div class="payment-empty">Chưa có thanh toán trong kỳ.</div>}
+      </article>
+    </div>
+    <article class="performance"><h2>Hiệu suất bác sĩ</h2><table><thead><tr><th>Bác sĩ</th><th>Chuyên khoa</th><th>Ca hoàn thành</th><th>Thời gian TB</th><th>Điểm đánh giá</th></tr></thead><tbody>@for(doctor of kpi().doctorPerformance;track doctor.name){<tr><td>{{doctor.name}}</td><td><span class="specialty-badge">{{doctor.specialty}}</span></td><td class="completed-cases">{{doctor.completedCases}}</td><td class="average-minutes">{{doctor.averageMinutes}} phút</td><td><span class="rating"><i><b [style.width.%]="doctor.rating * 20"></b></i><em>★</em>{{doctor.rating}}</span></td></tr>} @empty {<tr><td colspan="5">Chưa có dữ liệu hiệu suất trong kỳ.</td></tr>}</tbody></table></article>
+  </section>
+</main>

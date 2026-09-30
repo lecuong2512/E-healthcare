@@ -73,16 +73,23 @@ export class DoctorCacheService implements OnModuleInit, OnApplicationShutdown {
 
   async invalidateDoctorData(doctorId: string): Promise<void> {
     if (!this.client.isReady) return;
-    const keys: string[] = [];
-    for await (const entry of this.client.scanIterator({
-      MATCH: `${CACHE_PREFIX}list:*`,
-      COUNT: 100,
-    })) {
-      if (Array.isArray(entry)) keys.push(...entry);
-      else keys.push(entry);
+    try {
+      const keys: string[] = [];
+      for await (const entry of this.client.scanIterator({
+        MATCH: `${CACHE_PREFIX}list:*`,
+        COUNT: 100,
+      })) {
+        if (Array.isArray(entry)) keys.push(...entry);
+        else keys.push(entry);
+      }
+      keys.push(this.key("detail", doctorId));
+      if (keys.length > 0) await this.client.del(keys);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Could not invalidate doctor data in Redis cache: ${message}`,
+      );
     }
-    keys.push(this.key("detail", doctorId));
-    if (keys.length > 0) await this.client.del(keys);
   }
 
   stats(): { hits: number; misses: number; hitRate: number } {
