@@ -49,6 +49,12 @@ import { DoctorSpecialtyEntity } from './entities/doctor-specialty.entity';
 import { AddDoctorSpecialties1790310000000 } from './migrations/1790310000000-add-doctor-specialties';
 import { DoctorRecurringShiftEntity } from './entities/doctor-recurring-shift.entity';
 import { AddDoctorRecurringShifts1790313600000 } from './migrations/1790313600000-add-doctor-recurring-shifts';
+import { ClinicRoomEntity } from './entities/clinic-room.entity';
+import { CreateClinicRooms1790400000000 } from './migrations/1790400000000-create-clinic-rooms';
+import { BackfillDoctorUserRoles1790730000000 } from './migrations/1790730000000-backfill-doctor-user-roles';
+import { AddClinicRoomDetails1790500000000 } from './migrations/1790500000000-add-clinic-room-details';
+import { StaffShiftAssignmentEntity } from './entities/staff-shift-assignment.entity';
+import { CreateStaffShiftAssignments1790600000000 } from './migrations/1790600000000-create-staff-shift-assignments';
 export function createDataSource(url: string): DataSource {
   return new DataSource({
     type: "postgres",
@@ -68,6 +74,8 @@ export function createDataSource(url: string): DataSource {
       DoctorEntity,
       DoctorSpecialtyEntity,
       DoctorRecurringShiftEntity,
+      ClinicRoomEntity,
+      StaffShiftAssignmentEntity,
       DoctorScheduleEntity,
       AppointmentEntity,
       VoucherEntity,
@@ -106,6 +114,10 @@ export function createDataSource(url: string): DataSource {
       AddAppointmentConsent1790151600000,
       AddDoctorSpecialties1790310000000,
       AddDoctorRecurringShifts1790313600000,
+      BackfillDoctorUserRoles1790730000000,
+      CreateClinicRooms1790400000000,
+      AddClinicRoomDetails1790500000000,
+      CreateStaffShiftAssignments1790600000000,
     ],
   });
 }
