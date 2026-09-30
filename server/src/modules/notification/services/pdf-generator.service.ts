@@ -1,12 +1,12 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import PDFDocument from 'pdfkit';
 import { toBuffer as qrToBuffer } from 'qrcode';
 import {
   PrescriptionPdfPayload,
   MedicalRecordPdfPayload,
 } from '@shared/interfaces';
-import { environment } from '../../../config/environment';
 
 export const PRESCRIPTION_PDF_VERIFICATION_FOOTER =
   'Quét mã để đối chiếu đơn thuốc gốc tại hệ thống E-Healthcare Portal';
@@ -16,9 +16,9 @@ export class PdfGeneratorService {
   private readonly logger = new Logger(PdfGeneratorService.name);
 
   async generatePrescriptionPdf(payload: PrescriptionPdfPayload): Promise<Buffer> {
-    const fontPath = environment.PDF_FONT_PATH;
-    if (!fontPath || !existsSync(fontPath)) {
-      throw new ServiceUnavailableException('Prescription PDF font is not configured.');
+    const fontPath = resolve(__dirname, '../../../assets/fonts/NotoSans-VF.ttf');
+    if (!existsSync(fontPath)) {
+      throw new ServiceUnavailableException('Bundled prescription PDF font is missing.');
     }
     if (!/^https:\/\//i.test(payload.verificationUrl) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i.test(payload.verificationUrl)) {
       throw new ServiceUnavailableException('Prescription verification URL must use HTTPS.');

@@ -159,10 +159,6 @@ describe('Prescription PDF export and verification', () => {
   });
 
   it('generates a valid PDF buffer with the configured Vietnamese font', async () => {
-    const fontPath = environment.PDF_FONT_PATH ||
-      (process.platform === 'win32' ? 'C:\\Windows\\Fonts\\arial.ttf' : undefined);
-    if (!fontPath) throw new Error('Set PDF_FONT_PATH to a Vietnamese-capable TTF font to run this test.');
-    environment.PDF_FONT_PATH = fontPath;
     const pdf = new PdfGeneratorService();
     const buffer = await pdf.generatePrescriptionPdf({
       prescriptionCode: 'RX-1',

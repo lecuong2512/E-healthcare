@@ -16,7 +16,7 @@ Hash canonical được tạo từ `prescriptionCode|doctorId|createdAt.toISOStr
 Cấu hình cần triển khai:
 
 - `PRESCRIPTION_VERIFICATION_BASE_URL`: origin public dùng HTTPS, không hard-code domain.
-- `PDF_FONT_PATH`: đường dẫn tới TTF hỗ trợ tiếng Việt để nhúng vào PDF.
+- Font Noto Sans hỗ trợ tiếng Việt được đóng gói trong server theo SIL Open Font License; build tự chép font vào `dist`.
 
 Không tìm thấy digital-signature provider/certificate hoặc clinic electronic seal trong repo; PDF không tuyên bố có chữ ký số/seal. Cần tích hợp chứng thư/provider và asset seal thật nếu yêu cầu pháp lý đòi hỏi.
 

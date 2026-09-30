@@ -8,7 +8,6 @@ import { EmailSenderService } from '../src/modules/notification/services/email-s
 import { SmsSenderService } from '../src/modules/notification/services/sms-sender.service';
 import { PdfGeneratorService } from '../src/modules/notification/services/pdf-generator.service';
 import { AppointmentReminderDeliveryService } from '../src/modules/notification/services/appointment-reminder-delivery.service';
-import { environment } from '../src/config/environment';
 
 describe('Notification Queue Processors (Workers)', () => {
   let emailProcessor: EmailProcessor;
@@ -17,12 +16,6 @@ describe('Notification Queue Processors (Workers)', () => {
   let emailSenderService: EmailSenderService;
   let smsSenderService: SmsSenderService;
   let pdfGeneratorService: PdfGeneratorService;
-
-  beforeAll(() => {
-    if (!environment.PDF_FONT_PATH && process.platform === 'win32') {
-      environment.PDF_FONT_PATH = 'C:\\Windows\\Fonts\\arial.ttf';
-    }
-  });
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
