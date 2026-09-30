@@ -67,8 +67,57 @@ export class PaymentFinalizerService {
     return finalized.outcome;
   }
 
-  async cancelPending(appointmentId: string, patientId: string): Promise<CancelPendingPaymentResponse> {
+  async resolveAppointmentId(identifier: string, manager?: EntityManager): Promise<string> {
+    const trimmed = identifier?.trim();
+    if (!trimmed) {
+      throw new NotFoundException('Không tìm thấy lịch hẹn hoặc giao dịch thanh toán.');
+    }
+    const appointmentRepo = manager
+      ? manager.getRepository(AppointmentEntity)
+      : this.dataSource?.getRepository ? this.dataSource.getRepository(AppointmentEntity) : null;
+    const paymentRepo = manager
+      ? manager.getRepository(PaymentTransactionEntity)
+      : this.dataSource?.getRepository ? this.dataSource.getRepository(PaymentTransactionEntity) : null;
+
+    if (this.isUuid(trimmed)) {
+      if (appointmentRepo?.findOne) {
+        const appointment = await appointmentRepo.findOne({
+          where: { id: trimmed },
+          select: ['id'],
+        });
+        if (appointment) return appointment.id;
+      }
+
+      if (paymentRepo?.findOne) {
+        const transaction = await paymentRepo.findOne({
+          where: [{ id: trimmed }, { merchantTransactionId: trimmed }],
+          select: ['appointmentId'],
+        });
+        if (transaction?.appointmentId) return transaction.appointmentId;
+      }
+      return trimmed;
+    } else {
+      if (paymentRepo?.findOne) {
+        const transaction = await paymentRepo.findOne({
+          where: { merchantTransactionId: trimmed },
+          select: ['appointmentId'],
+        });
+        if (transaction?.appointmentId) return transaction.appointmentId;
+      }
+    }
+
+    throw new NotFoundException('Không tìm thấy lịch hẹn hoặc giao dịch thanh toán.');
+  }
+
+  private isUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    );
+  }
+
+  async cancelPending(identifier: string, patientId: string): Promise<CancelPendingPaymentResponse> {
     const cancelled = await this.dataSource.transaction(async (manager) => {
+      const appointmentId = await this.resolveAppointmentId(identifier, manager);
       // Same lock order as initiation and callbacks: appointment, payment, schedule.
       const appointment = await manager.getRepository(AppointmentEntity)
         .createQueryBuilder('appointment').setLock('pessimistic_write')
@@ -131,8 +180,9 @@ export class PaymentFinalizerService {
     return cancelled.response;
   }
 
-  async fallbackToClinic(appointmentId: string, patientId: string) {
+  async fallbackToClinic(identifier: string, patientId: string) {
     const changed = await this.dataSource.transaction(async (manager) => {
+      const appointmentId = await this.resolveAppointmentId(identifier, manager);
       const appointment = await manager.getRepository(AppointmentEntity)
         .createQueryBuilder('appointment').setLock('pessimistic_write')
         .where('appointment.id = :id', { id: appointmentId }).getOne();

@@ -564,4 +564,88 @@ describe('BookingStepperPage payment flow', () => {
     expect(component.patientForm.value.fullName).toBe('Lê Văn Cường');
     expect(component.patientForm.value.phone).toBe('0987654321');
   });
+
+  describe('BUG-NEW-12: returning to booking stepper unlocks form state', () => {
+    it('allows navigating steps via goToStep even when recoveryActive is true', () => {
+      reloadCheckout();
+      component.retryPendingPayment();
+      expect(component.recoveryActive()).toBeTrue();
+      expect(component.step()).toBe(4);
+
+      // Patient navigates back to step 3 (hồ sơ)
+      component.goToStep(3);
+      expect(component.step()).toBe(3);
+
+      // Patient navigates back to step 1 (chọn bác sĩ)
+      component.goToStep(1);
+      expect(component.step()).toBe(1);
+    });
+
+    it('allows patient to change doctor after confirmation which cancels pending payment', () => {
+      reloadCheckout();
+      component.retryPendingPayment();
+      expect(component.recoveryActive()).toBeTrue();
+
+      const newDoctor: any = {
+        ...doctor,
+        id: '99999999-9999-4999-8999-999999999999',
+        fullName: 'Trần Thị B',
+      };
+      component.selectDoctor(newDoctor);
+
+      expect(modal.confirm).toHaveBeenCalled();
+      acceptModal();
+
+      expect(api.cancelPendingPayment).toHaveBeenCalledWith(appointmentId);
+      expect(component.pendingPaymentContext()).toBeNull();
+      expect(component.recoveryActive()).toBeFalse();
+      expect(component.selectedDoctorId()).toBe(newDoctor.id);
+    });
+
+    it('allows patient to change slot after confirmation which cancels pending payment', () => {
+      reloadCheckout();
+      component.retryPendingPayment();
+      expect(component.recoveryActive()).toBeTrue();
+
+      component.morningSlots = [{
+        id: 'new-slot-id',
+        time: '09:00',
+        status: 'available',
+      }];
+      component.selectedDoctorId.set(doctorId);
+      component.chooseSlot(component.morningSlots[0]);
+
+      expect(modal.confirm).toHaveBeenCalled();
+      acceptModal();
+
+      expect(api.cancelPendingPayment).toHaveBeenCalledWith(appointmentId);
+      expect(component.pendingPaymentContext()).toBeNull();
+      expect(component.recoveryActive()).toBeFalse();
+    });
+
+    it('stores pendingPaymentAppointmentId in sessionStorage when confirmBooking succeeds', fakeAsync(() => {
+      component.selectDoctorAndContinue(component.doctors()[0]);
+      component.chooseSlot(component.morningSlots[0]);
+      tick(1_000);
+
+      component.step.set(3);
+      component.patientForm.patchValue({
+        fullName: 'Nguyễn Văn Test',
+        phone: '0901234567',
+        dob: '1990-01-01',
+        gender: 'male',
+        reason: 'Khám kiểm tra',
+      });
+      component.consentAccepted = true;
+      component.step.set(4);
+      component.selectPayment(PaymentMethod.VNPAY);
+
+      component.submitBooking();
+
+      expect(api.confirmBooking).toHaveBeenCalled();
+      expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBe(appointmentId);
+      component.ngOnDestroy();
+      discardPeriodicTasks();
+    }));
+  });
 });

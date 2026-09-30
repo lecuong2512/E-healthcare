@@ -321,4 +321,43 @@ describe('PaymentService initiation and status', () => {
     });
     expect(result.transactionStatus).toBe(PaymentTransactionStatus.SUCCESS);
   });
+
+  it('resolves merchantTransactionId in status to the underlying appointment', async () => {
+    const merchantTxnId = 'PAY20261001ABCDEF';
+    const txn = {
+      id: 'txn-uuid-1',
+      appointmentId,
+      merchantTransactionId: merchantTxnId,
+      provider: PaymentMethod.VNPAY,
+      status: PaymentTransactionStatus.PENDING,
+      expiresAt: new Date(Date.now() + 60000),
+      paidAt: null,
+    } as PaymentTransactionEntity;
+    (dataSource.getRepository as jest.Mock).mockImplementation((entity) =>
+      entity === AppointmentEntity
+        ? { findOne: jest.fn().mockResolvedValue(appointment) }
+        : {
+            findOne: jest.fn(async (args) => {
+              if (args?.where?.merchantTransactionId === merchantTxnId) return txn;
+              return txn;
+            }),
+            find: jest.fn().mockResolvedValue([txn]),
+          },
+    );
+
+    const result = await service.status(merchantTxnId, patientId);
+    expect(result.appointmentId).toBe(appointmentId);
+  });
+
+  it('throws NotFoundException when an identifier does not match any appointment or transaction', async () => {
+    (dataSource.getRepository as jest.Mock).mockImplementation((entity) =>
+      entity === AppointmentEntity
+        ? { findOne: jest.fn().mockResolvedValue(null) }
+        : { findOne: jest.fn().mockResolvedValue(null), find: jest.fn().mockResolvedValue([]) },
+    );
+
+    await expect(service.status('UNKNOWN_TXN', patientId)).rejects.toThrow(
+      'Không tìm thấy lịch hẹn hoặc giao dịch thanh toán.',
+    );
+  });
 });

@@ -11,7 +11,7 @@ import { NzSpinModule } from 'ng-zorro-antd/spin';
 import { EMPTY, catchError, finalize, switchMap, takeWhile, timer } from 'rxjs';
 import { PatientBookingApiService } from '../../data-access/patient-booking-api.service';
 
-type ResultState = 'loading' | 'success' | 'warning' | 'recoverable' | 'error';
+type ResultState = 'loading' | 'success' | 'warning' | 'recoverable' | 'cancelled' | 'error';
 
 @Component({
   selector: 'app-payment-result-page',
@@ -43,8 +43,10 @@ type ResultState = 'loading' | 'success' | 'warning' | 'recoverable' | 'error';
         } @else if (state() === 'warning') {
           <nz-result
             nzStatus="warning"
-            nzTitle="Giao dịch đang được đối soát"
-            nzSubTitle="Không thanh toán lại. Bộ phận hỗ trợ sẽ xử lý nếu cổng thanh toán đã ghi nhận tiền."
+            [nzTitle]="isGatewaySuccess() ? 'Giao dịch đã thanh toán, hệ thống đang đồng bộ' : 'Giao dịch đang được đối soát'"
+            [nzSubTitle]="isGatewaySuccess()
+              ? 'Cổng thanh toán đã ghi nhận giao dịch thành công. Hệ thống đang đồng bộ xác nhận lịch khám, vui lòng không thanh toán lại.'
+              : 'Không thanh toán lại. Bộ phận hỗ trợ sẽ xử lý nếu cổng thanh toán đã ghi nhận tiền.'"
           >
             <div nz-result-extra>
               <button nz-button nzType="primary" (click)="refresh()">Kiểm tra lại</button>
@@ -60,7 +62,7 @@ type ResultState = 'loading' | 'success' | 'warning' | 'recoverable' | 'error';
               : 'Lịch hẹn vẫn đang được giữ. Bạn có thể thử lại, đổi cổng hoặc chuyển sang thanh toán tại viện nếu hệ thống cho phép.'"
           >
             <div nz-result-extra class="flex flex-wrap justify-center gap-3">
-              <a nz-button nzType="primary" routerLink="/patient/booking" [queryParams]="{ appointmentId: appointmentId }">
+              <a nz-button nzType="primary" routerLink="/patient/booking" [queryParams]="{ appointmentId: resolvedAppointmentId() || appointmentId }">
                 Thử lại thanh toán / Chọn phương thức khác
               </a>
               @if (status()?.canFallbackToClinic) {
@@ -72,6 +74,17 @@ type ResultState = 'loading' | 'success' | 'warning' | 'recoverable' | 'error';
                 Hủy giữ chỗ lịch hẹn
               </button>
               <button nz-button (click)="refresh()">Kiểm tra lại</button>
+            </div>
+          </nz-result>
+        } @else if (state() === 'cancelled') {
+          <nz-result
+            nzStatus="info"
+            nzTitle="Đã hủy giữ chỗ lịch hẹn thành công"
+            nzSubTitle="Khung giờ khám và mã ưu đãi (nếu có) đã được giải phóng an toàn. Bạn có thể tiến hành đặt lịch mới."
+          >
+            <div nz-result-extra class="flex flex-wrap justify-center gap-3">
+              <a nz-button nzType="primary" routerLink="/patient/doctor-search">Đặt lịch khám mới</a>
+              <a nz-button routerLink="/patient/history">Xem lịch sử</a>
             </div>
           </nz-result>
         } @else {
@@ -112,9 +125,12 @@ export class PaymentResultPage {
     this.route.snapshot.queryParamMap.get('vnp_TxnRef') ||
     sessionStorage.getItem('pendingPaymentAppointmentId');
 
+  readonly resolvedAppointmentId = signal<string | null>(null);
   readonly status = signal<PaymentStatusResponse | null>(null);
   readonly errorMessage = signal<string | null>(null);
   readonly isUserCancelled = signal(false);
+  readonly isGatewaySuccess = signal(false);
+  readonly isCancelled = signal(false);
   readonly isSubmitting = signal(false);
   private readonly pollCount = signal(0);
 
@@ -124,6 +140,10 @@ export class PaymentResultPage {
     const query = this.route.snapshot.queryParamMap;
     const resultCode = query.get('resultCode');
     const vnpResponseCode = query.get('vnp_ResponseCode');
+
+    if (vnpResponseCode === '00' || resultCode === '0') {
+      this.isGatewaySuccess.set(true);
+    }
 
     if (resultCode === '1006' || vnpResponseCode === '24') {
       this.isUserCancelled.set(true);
@@ -137,43 +157,82 @@ export class PaymentResultPage {
   }
 
   refresh(): void {
-    if (!this.appointmentId) return;
+    const id = this.resolvedAppointmentId() || this.appointmentId;
+    if (!id) return;
     this.errorMessage.set(null);
-    this.api.getPaymentStatus(this.appointmentId).subscribe({
+    this.api.getPaymentStatus(id).subscribe({
       next: (status) => this.acceptStatus(status),
       error: () => this.errorMessage.set('Không thể tải trạng thái thanh toán.'),
     });
   }
 
   fallbackToClinic(): void {
-    if (!this.appointmentId || this.isSubmitting()) return;
+    const id = this.resolvedAppointmentId() || this.appointmentId;
+    if (!id || this.isSubmitting()) return;
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
-    this.api.fallbackToClinic(this.appointmentId).pipe(
+    this.api.fallbackToClinic(id).pipe(
       finalize(() => this.isSubmitting.set(false)),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe({
-      next: () => this.refresh(),
-      error: () => this.errorMessage.set('Không thể chuyển sang thanh toán tại viện. Vui lòng thử lại.'),
+      next: (response) => {
+        if (response?.appointmentId) {
+          this.resolvedAppointmentId.set(response.appointmentId);
+        }
+        this.refresh();
+      },
+      error: (err) => {
+        const msg = err?.error?.message || 'Không thể chuyển sang thanh toán tại viện. Vui lòng thử lại.';
+        this.errorMessage.set(Array.isArray(msg) ? msg.join(' ') : msg);
+      },
     });
   }
 
   cancelPendingPayment(): void {
-    if (!this.appointmentId || this.isSubmitting()) return;
+    const id = this.resolvedAppointmentId() || this.appointmentId;
+    if (!id || this.isSubmitting()) return;
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
-    this.api.cancelPendingPayment(this.appointmentId).pipe(
+    this.api.cancelPendingPayment(id).pipe(
       finalize(() => this.isSubmitting.set(false)),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe({
-      next: () => this.refresh(),
-      error: () => this.errorMessage.set('Không thể hủy giữ chỗ lịch hẹn. Vui lòng thử lại.'),
+      next: (response) => {
+        const pendingApptId = sessionStorage.getItem('pendingPaymentAppointmentId');
+        if (pendingApptId === id || pendingApptId === this.appointmentId) {
+          sessionStorage.removeItem('pendingPaymentAppointmentId');
+        }
+        try {
+          const context = JSON.parse(sessionStorage.getItem('pendingPaymentContext') || 'null');
+          if (context?.appointmentId === id || context?.appointmentId === this.appointmentId) {
+            sessionStorage.removeItem('pendingPaymentContext');
+          }
+        } catch { }
+
+        this.isCancelled.set(true);
+        if (response?.appointmentId) {
+          this.resolvedAppointmentId.set(response.appointmentId);
+        }
+        this.status.update((prev) => prev ? {
+          ...prev,
+          appointmentStatus: AppointmentStatus.CANCELLED,
+          paymentStatus: PaymentStatus.FAILED,
+          transactionStatus: PaymentTransactionStatus.SUPERSEDED,
+          canRetry: false,
+          canFallbackToClinic: false,
+        } : null);
+      },
+      error: (err) => {
+        const msg = err?.error?.message || 'Không thể hủy giữ chỗ lịch hẹn. Vui lòng thử lại.';
+        this.errorMessage.set(Array.isArray(msg) ? msg.join(' ') : msg);
+      },
     });
   }
 
   private poll(): void {
+    const id = this.resolvedAppointmentId() || this.appointmentId!;
     if (this.isUserCancelled()) {
-      this.api.getPaymentStatus(this.appointmentId!).pipe(
+      this.api.getPaymentStatus(id).pipe(
         catchError(() => {
           this.errorMessage.set('Không thể tải trạng thái thanh toán. Vui lòng thử lại.');
           return EMPTY;
@@ -188,13 +247,20 @@ export class PaymentResultPage {
     timer(0, 2_000).pipe(
       switchMap(() => {
         this.pollCount.update((count) => count + 1);
-        return this.api.getPaymentStatus(this.appointmentId!);
+        const pollId = this.resolvedAppointmentId() || this.appointmentId!;
+        return this.api.getPaymentStatus(pollId).pipe(
+          catchError(() => {
+            if (this.isGatewaySuccess() && this.pollCount() < 10) {
+              return EMPTY;
+            }
+            this.errorMessage.set(this.isGatewaySuccess()
+              ? 'Giao dịch đã được ghi nhận tại cổng thanh toán. Hệ thống đang đồng bộ cập nhật trạng thái.'
+              : 'Không thể tải trạng thái thanh toán. Vui lòng thử lại.');
+            return EMPTY;
+          }),
+        );
       }),
       takeWhile((status) => this.toState(status) === 'loading', true),
-      catchError(() => {
-        this.errorMessage.set('Không thể tải trạng thái thanh toán. Vui lòng thử lại.');
-        return EMPTY;
-      }),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((status) => {
       this.acceptStatus(status);
@@ -202,10 +268,14 @@ export class PaymentResultPage {
   }
 
   private toState(status: PaymentStatusResponse | null): ResultState {
+    if (this.isCancelled()) return 'cancelled';
     if (!status) {
       if (this.isUserCancelled()) return 'recoverable';
+      if (this.isGatewaySuccess() && this.pollCount() < 10) return 'loading';
+      if (this.isGatewaySuccess() && this.errorMessage()) return 'warning';
       return this.errorMessage() ? 'error' : 'loading';
     }
+    if (status.appointmentStatus === AppointmentStatus.CANCELLED && this.isCancelled()) return 'cancelled';
     if (status.provider === PaymentMethod.PAY_AT_CLINIC && status.appointmentStatus === AppointmentStatus.CONFIRMED && status.paymentStatus === PaymentStatus.UNPAID) return 'success';
     if (
       status.transactionStatus === PaymentTransactionStatus.SUCCESS &&
@@ -223,9 +293,12 @@ export class PaymentResultPage {
       (
         [PaymentTransactionStatus.FAILED, PaymentTransactionStatus.TIMEOUT].includes(status.transactionStatus as PaymentTransactionStatus) ||
         this.isUserCancelled() ||
-        (this.pollCount() >= 3 && status.transactionStatus === PaymentTransactionStatus.PENDING)
+        (!this.isGatewaySuccess() && this.pollCount() >= 3 && status.transactionStatus === PaymentTransactionStatus.PENDING)
       )
     ) return 'recoverable';
+    if (this.isGatewaySuccess() && this.pollCount() >= 10 && status.transactionStatus === PaymentTransactionStatus.PENDING) {
+      return 'warning';
+    }
     if (
       [PaymentTransactionStatus.FAILED, PaymentTransactionStatus.TIMEOUT].includes(
         status.transactionStatus as PaymentTransactionStatus,
@@ -237,6 +310,9 @@ export class PaymentResultPage {
 
   private acceptStatus(status: PaymentStatusResponse): void {
     this.status.set(status);
+    if (status.appointmentId) {
+      this.resolvedAppointmentId.set(status.appointmentId);
+    }
     if (status.appointmentStatus === AppointmentStatus.PENDING_PAYMENT) return;
     // Viewing an older result must never clear a newer checkout's pointer.
     if (sessionStorage.getItem('pendingPaymentAppointmentId') === status.appointmentId) sessionStorage.removeItem('pendingPaymentAppointmentId');

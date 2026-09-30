@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   INestApplication,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { APP_GUARD, Reflector } from '@nestjs/core';
@@ -63,8 +64,14 @@ describe('Payment HTTP authorization and DTO contract', () => {
       expiresAt: new Date().toISOString(),
     }),
     status: jest.fn().mockResolvedValue({}),
-    cancelPending: jest.fn().mockResolvedValue({ appointmentId, appointmentStatus: 'CANCELLED' }),
-    fallbackToClinic: jest.fn().mockResolvedValue({ appointmentId, appointmentStatus: 'CONFIRMED' }),
+    cancelPending: jest.fn().mockImplementation((id: string) => {
+      if (id === 'invalid') throw new NotFoundException('Không tìm thấy lịch hẹn hoặc giao dịch thanh toán.');
+      return Promise.resolve({ appointmentId, appointmentStatus: 'CANCELLED' });
+    }),
+    fallbackToClinic: jest.fn().mockImplementation((id: string) => {
+      if (id === 'invalid') throw new NotFoundException('Không tìm thấy lịch hẹn hoặc giao dịch thanh toán.');
+      return Promise.resolve({ appointmentId, appointmentStatus: 'CONFIRMED' });
+    }),
     handleVnpayIpn: jest.fn().mockResolvedValue('SUCCESS'),
     handleMomoIpn: jest.fn().mockResolvedValue('SUCCESS'),
     pendingRefunds: jest.fn().mockResolvedValue([]),
@@ -166,22 +173,27 @@ describe('Payment HTTP authorization and DTO contract', () => {
       .expect(200);
   });
 
-  it('restricts pending checkout cancellation to authenticated patients with a valid appointment ID', async () => {
+  it('restricts pending checkout cancellation to authenticated patients with a valid appointment ID or transaction ID', async () => {
     const endpoint = `/api/v1/payments/${appointmentId}/cancel-pending`;
     await request(app.getHttpServer()).post(endpoint).send({}).expect(401);
     await request(app.getHttpServer()).post(endpoint).set('x-test-role', Role.DOCTOR).send({}).expect(403);
-    await request(app.getHttpServer()).post('/api/v1/payments/invalid/cancel-pending').set('x-test-role', Role.PATIENT).send({}).expect(400);
+    await request(app.getHttpServer()).post('/api/v1/payments/invalid/cancel-pending').set('x-test-role', Role.PATIENT).send({}).expect(404);
     await request(app.getHttpServer()).post(endpoint).set('x-test-role', Role.PATIENT).send({}).expect(200);
     expect(payments.cancelPending).toHaveBeenCalledWith(appointmentId, 'patient-id');
+    await request(app.getHttpServer()).post('/api/v1/payments/PAY01/cancel-pending').set('x-test-role', Role.PATIENT).send({}).expect(200);
+    expect(payments.cancelPending).toHaveBeenCalledWith('PAY01', 'patient-id');
   });
 
-  it('restricts clinic fallback to authenticated patients with valid appointment IDs', async () => {
+  it('restricts clinic fallback to authenticated patients with valid appointment IDs or transaction IDs', async () => {
     const endpoint = `/api/v1/payments/${appointmentId}/fallback-to-clinic`;
     await request(app.getHttpServer()).post(endpoint).send({}).expect(401);
     await request(app.getHttpServer()).post(endpoint).set('x-test-role', Role.DOCTOR).send({}).expect(403);
-    await request(app.getHttpServer()).post('/api/v1/payments/invalid/fallback-to-clinic').set('x-test-role', Role.PATIENT).send({}).expect(400);
+    await request(app.getHttpServer()).post('/api/v1/payments/invalid/fallback-to-clinic').set('x-test-role', Role.PATIENT).send({}).expect(404);
     await request(app.getHttpServer()).post(endpoint).set('x-test-role', Role.PATIENT).send({}).expect(200);
     expect(payments.fallbackToClinic).toHaveBeenCalledWith(appointmentId, 'patient-id');
+    await request(app.getHttpServer()).post('/api/v1/payments/PAY01/fallback-to-clinic').set('x-test-role', Role.PATIENT).send({}).expect(200);
+    expect(payments.fallbackToClinic).toHaveBeenCalledWith('PAY01', 'patient-id');
+    await request(app.getHttpServer()).post('/api/v1/payments/PAY01/fallback-clinic').set('x-test-role', Role.PATIENT).send({}).expect(200);
   });
 
   it('restricts reconciliation operations and validates controlled outcomes', async () => {

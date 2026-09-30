@@ -254,4 +254,117 @@ describe('PaymentResultPage', () => {
     expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBeNull();
     expect(sessionStorage.getItem('pendingPaymentContext')).toBeNull();
   }));
+
+  it('handles VNPAY success with merchantTransactionId (vnp_TxnRef) without dropping to error', fakeAsync(() => {
+    const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['getPaymentStatus']);
+    api.getPaymentStatus.and.returnValues(
+      // First poll: still PENDING
+      of({
+        appointmentId: 'resolved-uuid-123',
+        appointmentStatus: AppointmentStatus.PENDING_PAYMENT,
+        paymentStatus: PaymentStatus.PENDING,
+        provider: PaymentMethod.VNPAY,
+        transactionStatus: PaymentTransactionStatus.PENDING,
+        canRetry: true,
+        canFallbackToClinic: true,
+        expiresAt: null,
+        paidAt: null,
+      }),
+      // Second poll: IPN finalized -> SUCCESS
+      of({
+        appointmentId: 'resolved-uuid-123',
+        appointmentStatus: AppointmentStatus.CONFIRMED,
+        paymentStatus: PaymentStatus.PAID,
+        provider: PaymentMethod.VNPAY,
+        transactionStatus: PaymentTransactionStatus.SUCCESS,
+        expiresAt: null,
+        paidAt: new Date().toISOString(),
+      }),
+    );
+    TestBed.configureTestingModule({
+      imports: [PaymentResultPage, NoopAnimationsModule],
+      providers: [
+        { provide: PatientBookingApiService, useValue: api },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: {
+                get: (key: string) => {
+                  if (key === 'vnp_ResponseCode') return '00';
+                  if (key === 'vnp_TxnRef') return 'PAY20261001ABCDEF';
+                  return null;
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PaymentResultPage);
+    tick(0);
+    expect(fixture.componentInstance.isGatewaySuccess()).toBeTrue();
+    expect(fixture.componentInstance.state()).toBe('loading');
+
+    // Poll 2 at 2000ms
+    tick(2000);
+    expect(fixture.componentInstance.state()).toBe('success');
+    expect(fixture.componentInstance.resolvedAppointmentId()).toBe('resolved-uuid-123');
+    fixture.destroy();
+  }));
+
+  it('transitions to cancelled state when cancelPendingPayment succeeds for orderId PAY...', fakeAsync(() => {
+    const api = jasmine.createSpyObj<PatientBookingApiService>('PatientBookingApiService', ['getPaymentStatus', 'cancelPendingPayment']);
+    api.getPaymentStatus.and.returnValue(of({
+      appointmentId: 'resolved-uuid-momo',
+      appointmentStatus: AppointmentStatus.PENDING_PAYMENT,
+      paymentStatus: PaymentStatus.PENDING,
+      provider: PaymentMethod.MOMO,
+      transactionStatus: PaymentTransactionStatus.PENDING,
+      canRetry: true,
+      canFallbackToClinic: true,
+      expiresAt: null,
+      paidAt: null,
+    }));
+    api.cancelPendingPayment.and.returnValue(of({
+      appointmentId: 'resolved-uuid-momo',
+      appointmentStatus: AppointmentStatus.CANCELLED,
+      paymentStatus: PaymentStatus.FAILED,
+    }));
+
+    TestBed.configureTestingModule({
+      imports: [PaymentResultPage, NoopAnimationsModule],
+      providers: [
+        { provide: PatientBookingApiService, useValue: api },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: {
+                get: (key: string) => {
+                  if (key === 'resultCode') return '1006';
+                  if (key === 'orderId') return 'PAY20261001MOMO';
+                  return null;
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    sessionStorage.setItem('pendingPaymentAppointmentId', 'PAY20261001MOMO');
+    const fixture = TestBed.createComponent(PaymentResultPage);
+    tick(0);
+    expect(fixture.componentInstance.isUserCancelled()).toBeTrue();
+    expect(fixture.componentInstance.state()).toBe('recoverable');
+
+    fixture.componentInstance.cancelPendingPayment();
+    tick();
+    expect(api.cancelPendingPayment).toHaveBeenCalledWith('resolved-uuid-momo');
+    expect(fixture.componentInstance.state()).toBe('cancelled');
+    expect(sessionStorage.getItem('pendingPaymentAppointmentId')).toBeNull();
+    fixture.destroy();
+  }));
 });

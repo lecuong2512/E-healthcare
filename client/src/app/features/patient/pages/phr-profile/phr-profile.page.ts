@@ -1,6 +1,8 @@
+import { Location } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 
 import {
   PhrProfile,
@@ -22,6 +24,8 @@ import { PhrService } from '../../../../core/services/phr.service';
 export class PhrProfilePage implements OnInit {
   private readonly phrService = inject(PhrService);
   private readonly http = inject(HttpClient, { optional: true });
+  private readonly router = inject(Router, { optional: true });
+  private readonly location = inject(Location, { optional: true });
 
   protected readonly Gender = Gender;
 
@@ -93,10 +97,20 @@ export class PhrProfilePage implements OnInit {
 
   protected cancelChanges(): void {
     this.form = { ...this.savedForm };
+    this.avatarPreview = this.resolveAvatarUrl(this.savedForm.avatarUrl);
+    this.selectedAvatarFile = null;
+    this.avatarUploadError = '';
+    this.avatarUploadSuccess = false;
     this.isSaved = false;
     this.errorMessage = '';
     this.consentAccepted = false;
     this.consentError = false;
+
+    if (this.location && typeof window !== 'undefined' && window.history.length > 1) {
+      this.location.back();
+    } else if (this.router) {
+      void this.router.navigate(['/patient/doctor-search']);
+    }
   }
 
   protected onAvatarFileSelected(event: Event): void {
