@@ -10,6 +10,7 @@ import { DoctorScheduleEntity } from "../../database/entities/doctor-schedule.en
 import { SpecialtyEntity } from "../../database/entities/specialty.entity";
 import { DoctorCacheService } from "./doctor-cache.service";
 import { SearchDoctorDto } from "./dto/search-doctor.dto";
+import { BOOKABLE_SCHEDULE_SQL, bookingEarliestStart, isBookableStart } from '../booking/booking-slot-time';
 
 interface DoctorView {
   id: string;
@@ -111,8 +112,9 @@ export class DoctorSearchService {
           WHERE schedule.doctor_id = doctor.id
             AND schedule.date = :date
             AND schedule.status = :available
+            AND ${BOOKABLE_SCHEDULE_SQL}
         )`,
-        { date: normalized.date, available: SlotStatus.AVAILABLE },
+        { date: normalized.date, available: SlotStatus.AVAILABLE, earliestStart: bookingEarliestStart() },
       );
     }
 
@@ -137,9 +139,9 @@ export class DoctorSearchService {
   }
 
   async findOne(doctorId: string) {
-    const cacheKey = this.cache.key("detail", doctorId);
-    const cached = await this.cache.getJson<unknown>(cacheKey);
-    if (cached) return cached;
+    const cacheKey = this.cache.key("detail-v2", doctorId);
+    const cached = await this.cache.getJson<DoctorView & { availableSchedules: DoctorScheduleEntity[] }>(cacheKey);
+    if (cached) return { ...cached, availableSchedules: cached.availableSchedules.filter((slot) => isBookableStart(slot.date, slot.startTime)) };
 
     const doctor = await this.dataSource
       .getRepository(DoctorEntity)
@@ -157,7 +159,7 @@ export class DoctorSearchService {
       .createQueryBuilder("schedule")
       .where("schedule.doctor_id = :doctorId", { doctorId })
       .andWhere("schedule.status = :status", { status: SlotStatus.AVAILABLE })
-      .andWhere("schedule.date >= CURRENT_DATE")
+      .andWhere(BOOKABLE_SCHEDULE_SQL, { earliestStart: bookingEarliestStart() })
       .orderBy("schedule.date", "ASC")
       .addOrderBy("schedule.start_time", "ASC")
       .take(100)

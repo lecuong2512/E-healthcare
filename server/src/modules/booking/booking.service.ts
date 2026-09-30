@@ -27,6 +27,7 @@ import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.en
 import { VoucherEntity } from '../../database/entities/voucher.entity';
 import { ConfirmBookingDto, ReleaseSlotDto, ReserveSlotDto } from './dto';
 import { paymentTimeoutSeconds } from '../payment/payment-timeout';
+import { isBookableStart } from './booking-slot-time';
 
 interface ReservationMetadata {
   reservationId: string;
@@ -65,6 +66,9 @@ export class BookingService {
       });
       if (!slot) {
         throw new NotFoundException('Không tìm thấy khung giờ khám.');
+      }
+      if (!isBookableStart(slot.date, slot.startTime)) {
+        throw new HttpException('Khung giờ đã qua hoặc không đủ thời gian đặt trước.', HttpStatus.CONFLICT);
       }
       if (
         [SlotStatus.HOLDING, SlotStatus.BOOKED, SlotStatus.OFF].includes(slot.status)
@@ -187,6 +191,9 @@ export class BookingService {
         })
         .getOne();
       if (!slot) throw new NotFoundException('Không tìm thấy khung giờ khám.');
+      if (!isBookableStart(slot.date, slot.startTime)) {
+        throw new HttpException('Khung giờ đã qua hoặc không đủ thời gian đặt trước.', HttpStatus.CONFLICT);
+      }
       const currentReservation = await this.loadReservation(dto.reservationId);
       if (!currentReservation) {
         throw new HttpException('Reservation đã hết hạn.', HttpStatus.CONFLICT);
