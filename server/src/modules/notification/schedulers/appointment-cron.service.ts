@@ -196,8 +196,10 @@ export class AppointmentCronService {
       const remainingTtl = await this.redisService.ttl(lockKey);
 
       // Nếu không còn key hoặc TTL âm (đã hết hạn)
-      if (!lockHolder || remainingTtl <= 0) {
-        slot.status = SlotStatus.AVAILABLE;
+        if (!lockHolder || remainingTtl <= 0) {
+          // Payment owns checkout expiry, even if Redis is unavailable/expired.
+          if (await this.appointmentRepo?.existsBy({ scheduleId: slot.id, status: AppointmentStatus.PENDING_PAYMENT })) continue;
+          slot.status = SlotStatus.AVAILABLE;
         await this.scheduleRepo.save(slot);
         restoredCount++;
         this.logger.warn(

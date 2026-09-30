@@ -142,6 +142,7 @@ describe('PaymentReconciliationService', () => {
     expect(finalizer.expireReservationForReconciliation).toHaveBeenCalledWith(
       PaymentMethod.VNPAY,
       transaction.merchantTransactionId,
+      expect.any(Date),
     );
     expect(finalizer.scheduleReconciliationRetry).toHaveBeenCalledWith(
       PaymentMethod.VNPAY,
@@ -160,6 +161,7 @@ describe('PaymentReconciliationService', () => {
     expect(finalizer.expireReservationForReconciliation).toHaveBeenCalledWith(
       PaymentMethod.VNPAY,
       transaction.merchantTransactionId,
+      expect.any(Date),
     );
     expect(finalizer.scheduleReconciliationRetry).toHaveBeenCalledWith(
       PaymentMethod.VNPAY,

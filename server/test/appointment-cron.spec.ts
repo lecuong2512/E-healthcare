@@ -48,6 +48,7 @@ describe('AppointmentCronService Schedulers (Section 5.2, Section 7.1, SRS-PAT-0
     };
 
     mockAppointmentRepo = {
+      existsBy: jest.fn().mockResolvedValue(false),
       find: jest.fn(),
       save: jest.fn().mockImplementation(async (entity) => entity),
     };
@@ -179,6 +180,14 @@ describe('AppointmentCronService Schedulers (Section 5.2, Section 7.1, SRS-PAT-0
   });
 
   describe('Cron 2: Quét dọn dẹp các slot giữ chỗ mồ côi (Orphaned Holding Slots)', () => {
+    it('does not release a pending checkout slot merely because Redis expired', async () => {
+      const slot = { id: 'payment-slot', doctorId: 'doc-1', status: SlotStatus.HOLDING };
+      (mockScheduleRepo.find as jest.Mock).mockResolvedValue([slot]);
+      mockAppointmentRepo.existsBy = jest.fn().mockResolvedValue(true);
+      expect(await cronService.cleanupOrphanedHoldingSlots()).toBe(0);
+      expect(slot.status).toBe(SlotStatus.HOLDING);
+      expect(mockScheduleRepo.save).not.toHaveBeenCalled();
+    });
     it('should restore HOLDING slots to AVAILABLE if Redis lock has expired or is absent', async () => {
       const holdingSlots = [
         // Slot 1: lock key expired (mock store does not have key) -> Orphaned, restore to AVAILABLE

@@ -169,6 +169,8 @@ export class PaymentReconciliationService {
       await this.finalizer.expireReservationForReconciliation(
         snapshot.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
         snapshot.merchantTransactionId,
+        new Date(),
+        true,
       );
       return this.dataSource.transaction(async (manager) => {
         const transaction = await manager.getRepository(PaymentTransactionEntity)
@@ -201,6 +203,12 @@ export class PaymentReconciliationService {
     }
 
     const refund = await this.dataSource.transaction(async (manager) => {
+      // Match cancellation/callback lock order to avoid cross-domain deadlocks.
+      const appointment = await manager.getRepository(AppointmentEntity)
+        .createQueryBuilder('appointment')
+        .setLock('pessimistic_write')
+        .where('appointment.id = :appointmentId', { appointmentId: snapshot.appointmentId })
+        .getOneOrFail();
       const transaction = await manager.getRepository(PaymentTransactionEntity)
         .createQueryBuilder('payment')
         .setLock('pessimistic_write')
@@ -211,11 +219,6 @@ export class PaymentReconciliationService {
         transaction.status !== PaymentTransactionStatus.RECONCILIATION_REQUIRED ||
         !transaction.reconciliationManualReview
       ) throw new ConflictException('Transaction is not awaiting manual review.');
-      const appointment = await manager.getRepository(AppointmentEntity)
-        .createQueryBuilder('appointment')
-        .setLock('pessimistic_write')
-        .where('appointment.id = :appointmentId', { appointmentId: transaction.appointmentId })
-        .getOneOrFail();
       const repository = manager.getRepository(RefundRequestEntity);
       const existing = await repository.findOne({
         where: { paymentTransactionId: transaction.id },
@@ -318,6 +321,7 @@ export class PaymentReconciliationService {
           await this.finalizer.expireReservationForReconciliation(
             transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
             transaction.merchantTransactionId,
+            now,
           );
         }
         await this.finalizer.scheduleReconciliationRetry(
@@ -336,6 +340,7 @@ export class PaymentReconciliationService {
         await this.finalizer.expireReservationForReconciliation(
           transaction.provider as PaymentMethod.VNPAY | PaymentMethod.MOMO,
           transaction.merchantTransactionId,
+          now,
         );
       }
       await this.finalizer.scheduleReconciliationRetry(

@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -7,10 +9,12 @@ import {
 import { DataSource, EntityManager } from 'typeorm';
 import {
   AppointmentStatus,
+  PaymentMethod,
   PaymentStatus,
   PaymentTransactionStatus,
   SlotStatus,
 } from '@shared/enums';
+import { CancelPendingPaymentResponse } from '@shared/interfaces';
 import { RedisService } from '../../common/redis/redis.service';
 import { AppointmentEntity } from '../../database/entities/appointment.entity';
 import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
@@ -37,6 +41,7 @@ interface ReservationRelease {
 interface FinalizeTransactionResult {
   outcome: PaymentFinalizeOutcome;
   release?: ReservationRelease;
+  event?: Record<string, unknown>;
 }
 
 @Injectable()
@@ -54,34 +59,113 @@ export class PaymentFinalizerService {
     const finalized = await this.dataSource.transaction((manager) =>
       this.finalizeWithin(manager, result),
     );
+    if (finalized.event) this.logger.log(JSON.stringify(finalized.event));
     if (finalized.release) {
       await this.cleanupReservation(finalized.release, 'Payment committed');
     }
     return finalized.outcome;
   }
 
+  async cancelPending(appointmentId: string, patientId: string): Promise<CancelPendingPaymentResponse> {
+    const cancelled = await this.dataSource.transaction(async (manager) => {
+      // Same lock order as initiation and callbacks: appointment, payment, schedule.
+      const appointment = await manager.getRepository(AppointmentEntity)
+        .createQueryBuilder('appointment').setLock('pessimistic_write')
+        .where('appointment.id = :id', { id: appointmentId }).getOne();
+      if (!appointment) throw new NotFoundException('Appointment not found.');
+      if (appointment.patientId !== patientId) {
+        throw new ForbiddenException('Bạn chỉ có thể hủy giao dịch của chính mình.');
+      }
+      if (appointment.canonicalPaymentTransactionId ||
+        [PaymentStatus.PAID, PaymentStatus.REFUND_PENDING, PaymentStatus.REFUNDED].includes(appointment.paymentStatus)) {
+        throw new ConflictException('Giao dịch đã ghi nhận thanh toán. Vui lòng kiểm tra trạng thái lịch hẹn.');
+      }
+      const replay = appointment.status === AppointmentStatus.CANCELLED &&
+        appointment.cancellationReason === 'PATIENT_CANCELLED_PAYMENT';
+      if (!replay && appointment.status !== AppointmentStatus.PENDING_PAYMENT) {
+        throw new ConflictException('Lịch hẹn không ở trạng thái chờ thanh toán.');
+      }
+      const payments = await manager.getRepository(PaymentTransactionEntity)
+        .createQueryBuilder('payment').setLock('pessimistic_write')
+        .where('payment.appointment_id = :appointmentId', { appointmentId }).getMany();
+      if (payments.some((payment) => [PaymentTransactionStatus.SUCCESS, PaymentTransactionStatus.LATE_SUCCESS].includes(payment.status))) {
+        throw new ConflictException('Giao dịch đã ghi nhận thanh toán. Không thể hủy giao dịch chờ.');
+      }
+      if (!replay) {
+        const schedule = await manager.getRepository(DoctorScheduleEntity)
+          .createQueryBuilder('schedule').setLock('pessimistic_write')
+          .where('schedule.id = :id', { id: appointment.scheduleId }).getOneOrFail();
+        for (const payment of payments) {
+          if ([PaymentTransactionStatus.PENDING, PaymentTransactionStatus.RECONCILIATION_REQUIRED].includes(payment.status)) {
+            payment.status = PaymentTransactionStatus.SUPERSEDED;
+            payment.nextReconcileAt = null;
+            payment.reconciliationManualReview = false;
+            await manager.save(payment);
+          }
+        }
+        appointment.status = AppointmentStatus.CANCELLED;
+        appointment.paymentStatus = PaymentStatus.FAILED;
+        appointment.cancelledAt = new Date();
+        appointment.cancelledBy = patientId;
+        appointment.cancellationReason = 'PATIENT_CANCELLED_PAYMENT';
+        if (schedule.status === SlotStatus.HOLDING) {
+          schedule.status = SlotStatus.AVAILABLE;
+          await manager.save(schedule);
+        }
+        await this.releaseVoucherWithin(manager, appointment);
+        await manager.save(appointment);
+      }
+      return {
+        response: { appointmentId, appointmentStatus: AppointmentStatus.CANCELLED as const, paymentStatus: appointment.paymentStatus },
+        release: appointment.reservationId ? this.reservationRelease(appointment, appointment.reservationId) : undefined,
+      };
+    });
+    if (cancelled.release) await this.cleanupReservation(cancelled.release, 'Patient cancelled checkout');
+    return cancelled.response;
+  }
+
+  async fallbackToClinic(appointmentId: string, patientId: string) {
+    const changed = await this.dataSource.transaction(async (manager) => {
+      const appointment = await manager.getRepository(AppointmentEntity)
+        .createQueryBuilder('appointment').setLock('pessimistic_write')
+        .where('appointment.id = :id', { id: appointmentId }).getOne();
+      if (!appointment) throw new NotFoundException('Appointment not found.');
+      if (appointment.patientId !== patientId) throw new ForbiddenException('Checkout owner mismatch.');
+      if (appointment.status !== AppointmentStatus.PENDING_PAYMENT || !appointment.reservationExpiresAt ||
+        appointment.reservationExpiresAt.getTime() <= Date.now() ||
+        [PaymentStatus.PAID, PaymentStatus.REFUND_PENDING, PaymentStatus.REFUNDED].includes(appointment.paymentStatus)) {
+        throw new ConflictException('Checkout is no longer recoverable.');
+      }
+      const payments = await manager.getRepository(PaymentTransactionEntity)
+        .createQueryBuilder('payment').setLock('pessimistic_write')
+        .where('payment.appointment_id = :appointmentId', { appointmentId }).getMany();
+      if (payments.some((payment) => ![PaymentTransactionStatus.FAILED, PaymentTransactionStatus.TIMEOUT].includes(payment.status))) {
+        throw new ConflictException('An online payment is still unresolved. Cannot switch to clinic payment.');
+      }
+      const schedule = await manager.getRepository(DoctorScheduleEntity)
+        .createQueryBuilder('schedule').setLock('pessimistic_write')
+        .where('schedule.id = :id', { id: appointment.scheduleId }).getOneOrFail();
+      if (schedule.status !== SlotStatus.HOLDING) throw new ConflictException('Checkout no longer owns its slot.');
+      appointment.status = AppointmentStatus.CONFIRMED;
+      appointment.paymentStatus = PaymentStatus.UNPAID;
+      appointment.paymentMethod = PaymentMethod.PAY_AT_CLINIC;
+      schedule.status = SlotStatus.BOOKED;
+      await manager.save(appointment);
+      await manager.save(schedule);
+      return { appointmentId, release: appointment.reservationId ? this.reservationRelease(appointment, appointment.reservationId) : undefined };
+    });
+    if (changed.release) await this.cleanupReservation(changed.release, 'Clinic fallback committed');
+    return { appointmentId: changed.appointmentId, appointmentStatus: AppointmentStatus.CONFIRMED, paymentStatus: PaymentStatus.UNPAID };
+  }
+
   async expireReservationForReconciliation(
     provider: VerifiedPaymentResult['provider'],
     merchantTransactionId: string,
+    now = new Date(),
+    force = false,
   ): Promise<void> {
     const finalized = await this.dataSource.transaction(async (manager) => {
-      const payment = await manager
-        .getRepository(PaymentTransactionEntity)
-        .createQueryBuilder('payment')
-        .setLock('pessimistic_write')
-        .where('payment.provider = :provider', { provider })
-        .andWhere('payment.merchant_transaction_id = :merchantTransactionId', {
-          merchantTransactionId,
-        })
-        .getOne();
-      if (!payment) throw new NotFoundException('Payment transaction not found.');
-
-      const appointment = await manager
-        .getRepository(AppointmentEntity)
-        .createQueryBuilder('appointment')
-        .setLock('pessimistic_write')
-        .where('appointment.id = :id', { id: payment.appointmentId })
-        .getOneOrFail();
+      const { payment, appointment } = await this.lockPaymentContext(manager, provider, merchantTransactionId);
       const schedule = await manager
         .getRepository(DoctorScheduleEntity)
         .createQueryBuilder('schedule')
@@ -98,10 +182,11 @@ export class PaymentFinalizerService {
       ) {
         return {};
       }
+      if (!force && (!appointment.reservationExpiresAt || appointment.reservationExpiresAt > now)) return {};
 
       payment.status = PaymentTransactionStatus.RECONCILIATION_REQUIRED;
       appointment.status = AppointmentStatus.CANCELLED;
-      appointment.cancelledAt = new Date();
+      appointment.cancelledAt = now;
       appointment.cancellationReason = 'PAYMENT_TIMEOUT';
       if (schedule.status === SlotStatus.HOLDING) {
         schedule.status = SlotStatus.AVAILABLE;
@@ -234,23 +319,8 @@ export class PaymentFinalizerService {
     manager: EntityManager,
     result: VerifiedPaymentResult,
   ): Promise<FinalizeTransactionResult> {
-    const payment = await manager
-      .getRepository(PaymentTransactionEntity)
-      .createQueryBuilder('payment')
-      .setLock('pessimistic_write')
-      .where('payment.provider = :provider', { provider: result.provider })
-      .andWhere('payment.merchant_transaction_id = :merchantTransactionId', {
-        merchantTransactionId: result.merchantTransactionId,
-      })
-      .getOne();
-    if (!payment) throw new NotFoundException('Payment transaction not found.');
-
-    const appointment = await manager
-      .getRepository(AppointmentEntity)
-      .createQueryBuilder('appointment')
-      .setLock('pessimistic_write')
-      .where('appointment.id = :id', { id: payment.appointmentId })
-      .getOneOrFail();
+    const { payment, appointment } = await this.lockPaymentContext(manager, result.provider, result.merchantTransactionId);
+    const previousStatus = payment.status;
     const schedule = await manager
       .getRepository(DoctorScheduleEntity)
       .createQueryBuilder('schedule')
@@ -337,7 +407,7 @@ export class PaymentFinalizerService {
       await manager.save(payment);
       await manager.save(appointment);
       await this.createLateSuccessRefundWithin(manager, appointment, payment);
-      return { outcome: 'LATE_SUCCESS' };
+      return { outcome: 'LATE_SUCCESS', event: this.stateEvent(payment, appointment, previousStatus, 'LATE_CALLBACK') };
     }
     if (payment.status === PaymentTransactionStatus.FAILED) {
       await manager.save(payment);
@@ -354,7 +424,7 @@ export class PaymentFinalizerService {
         await manager.save(appointment);
         await manager.save(payment);
         await this.createLateSuccessRefundWithin(manager, appointment, payment);
-        return { outcome: 'LATE_SUCCESS' };
+        return { outcome: 'LATE_SUCCESS', event: this.stateEvent(payment, appointment, previousStatus, 'CLOSED_CHECKOUT_CALLBACK') };
       }
       payment.status = PaymentTransactionStatus.FAILED;
       appointment.paymentStatus = PaymentStatus.FAILED;
@@ -363,7 +433,21 @@ export class PaymentFinalizerService {
       return { outcome: 'FAILED' };
     }
 
-    if (result.state === 'SUCCESS') {
+    const reservationExpired = !!appointment.reservationExpiresAt && appointment.reservationExpiresAt.getTime() <= Date.now();
+    if (reservationExpired) {
+      appointment.status = AppointmentStatus.CANCELLED;
+      appointment.cancelledAt = new Date();
+      appointment.cancellationReason = 'PAYMENT_TIMEOUT';
+      appointment.paymentStatus = result.state === 'SUCCESS' ? PaymentStatus.REFUND_PENDING : PaymentStatus.FAILED;
+      payment.status = result.state === 'SUCCESS' ? PaymentTransactionStatus.LATE_SUCCESS : PaymentTransactionStatus.FAILED;
+      if (result.state === 'SUCCESS') {
+        payment.paidAt = new Date();
+        appointment.paidAt = payment.paidAt;
+        await this.createLateSuccessRefundWithin(manager, appointment, payment);
+      }
+      if (schedule.status === SlotStatus.HOLDING) schedule.status = SlotStatus.AVAILABLE;
+      await this.releaseVoucherWithin(manager, appointment);
+    } else if (result.state === 'SUCCESS') {
       payment.status = PaymentTransactionStatus.SUCCESS;
       payment.paidAt = new Date();
       appointment.status = AppointmentStatus.CONFIRMED;
@@ -373,20 +457,17 @@ export class PaymentFinalizerService {
       schedule.status = SlotStatus.BOOKED;
     } else {
       payment.status = PaymentTransactionStatus.FAILED;
-      appointment.status = AppointmentStatus.CANCELLED;
       appointment.paymentStatus = PaymentStatus.FAILED;
-      appointment.cancelledAt = new Date();
-      appointment.cancellationReason = 'ONLINE_PAYMENT_FAILED';
-      schedule.status = SlotStatus.AVAILABLE;
-      await this.releaseVoucherWithin(manager, appointment);
+      // A failed attempt does not close a checkout while its reservation is valid.
     }
 
     await manager.save(payment);
     await manager.save(appointment);
     await manager.save(schedule);
     return {
-      outcome: result.state === 'SUCCESS' ? 'SUCCESS' : 'FAILED',
-      release: this.reservationRelease(appointment, payment.reservationId),
+      outcome: result.state === 'SUCCESS' ? (reservationExpired ? 'LATE_SUCCESS' : 'SUCCESS') : 'FAILED',
+      release: result.state === 'SUCCESS' || reservationExpired ? this.reservationRelease(appointment, payment.reservationId) : undefined,
+      event: this.stateEvent(payment, appointment, previousStatus, reservationExpired ? 'RESERVATION_EXPIRED' : result.state),
     };
   }
 
@@ -402,6 +483,25 @@ export class PaymentFinalizerService {
       metadataKey: BookingService.formatReservationKey(reservationId),
       reservationId,
     };
+  }
+
+  private stateEvent(payment: PaymentTransactionEntity, appointment: AppointmentEntity, fromTransactionStatus: PaymentTransactionStatus, reason: string) {
+    return { event: 'payment.state_changed', appointmentId: appointment.id, transactionId: payment.id,
+      merchantTransactionId: payment.merchantTransactionId, requestId: payment.requestId, provider: payment.provider,
+      fromTransactionStatus, toTransactionStatus: payment.status, appointmentStatus: appointment.status,
+      reservationExpiresAt: appointment.reservationExpiresAt, reason };
+  }
+
+  private async lockPaymentContext(manager: EntityManager, provider: VerifiedPaymentResult['provider'], merchantTransactionId: string) {
+    const repository = manager.getRepository(PaymentTransactionEntity);
+    const snapshot = await repository.findOne({ where: { provider, merchantTransactionId } });
+    if (!snapshot) throw new NotFoundException('Payment transaction not found.');
+    const appointment = await manager.getRepository(AppointmentEntity)
+      .createQueryBuilder('appointment').setLock('pessimistic_write')
+      .where('appointment.id = :id', { id: snapshot.appointmentId }).getOneOrFail();
+    const payment = await repository.createQueryBuilder('payment').setLock('pessimistic_write')
+      .where('payment.id = :id', { id: snapshot.id }).getOneOrFail();
+    return { payment, appointment };
   }
 
   private async releaseVoucherWithin(
