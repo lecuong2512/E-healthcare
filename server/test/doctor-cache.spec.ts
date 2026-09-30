@@ -61,6 +61,7 @@ describe("DoctorCacheService", () => {
       "ehealth:doctor:list:first",
       "ehealth:doctor:list:second",
       detailKey,
+      cache.key("detail-v2", "doctor-id"),
     ]);
   });
 });

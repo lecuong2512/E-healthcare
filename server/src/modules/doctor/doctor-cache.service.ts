@@ -83,6 +83,7 @@ export class DoctorCacheService implements OnModuleInit, OnApplicationShutdown {
         else keys.push(entry);
       }
       keys.push(this.key("detail", doctorId));
+      keys.push(this.key("detail-v2", doctorId));
       if (keys.length > 0) await this.client.del(keys);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
