@@ -246,7 +246,7 @@ try {
   report.checks.push({ scenario: 'cancellation errors keep context; acknowledged new booking clears it', pass: true });
 
   status = { ...status, appointmentStatus: 'PENDING_PAYMENT', paymentStatus: 'FAILED', provider: 'VNPAY',
-    transactionStatus: 'FAILED', canRetry: true, canSwitchProvider: true, canFallbackToClinic: true };
+    transactionStatus: 'FAILED', canRetry: true, canSwitchProvider: true, canFallbackToClinic: false };
   await evaluate(`sessionStorage.setItem('pendingPaymentContext', JSON.stringify({appointmentId:${JSON.stringify(id)}}))`);
   await navigate();
   assert(await evaluate('!!sessionStorage.getItem("pendingPaymentContext")'));
@@ -259,7 +259,7 @@ try {
   assert.equal(calls.confirm.length, 0);
   await send('Page.reload', {}, page);
   await waitFor('document.body.innerText.includes("Lịch khám đã được xác nhận") && document.body.innerText.includes("UNPAID")');
-  report.checks.push({ scenario: 'FAILED remains recoverable; clinic fallback confirms same appointment and survives reload', pass: true });
+  report.checks.push({ scenario: 'FAILED with stale fallback flag allows clinic selection; backend confirms same appointment and survives reload', pass: true });
 
   status = { ...status, appointmentStatus: 'PENDING_PAYMENT', provider: 'VNPAY', paymentStatus: 'PENDING',
     transactionStatus: 'RECONCILIATION_REQUIRED', canRetry: false, canSwitchProvider: false, canFallbackToClinic: false };

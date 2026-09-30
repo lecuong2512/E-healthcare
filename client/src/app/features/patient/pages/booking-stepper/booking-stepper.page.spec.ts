@@ -319,10 +319,72 @@ describe('BookingStepperPage payment flow', () => {
     expect(component.selectedSlotLabel()).toBe('');
   });
 
+  it('allows clinic payment for a recoverable checkout after confirmation', () => {
+    api.getPaymentStatus.and.returnValue(of({
+      appointmentId, appointmentStatus: AppointmentStatus.PENDING_PAYMENT, paymentStatus: PaymentStatus.PENDING,
+      provider: PaymentMethod.MOMO, transactionStatus: PaymentTransactionStatus.PENDING,
+      canRetry: true, canSwitchProvider: true, canFallbackToClinic: true, expiresAt: null, paidAt: null,
+    }));
+    reloadCheckout();
+    component.retryPendingPayment();
+    component.selectPayment(PaymentMethod.PAY_AT_CLINIC);
+    expect(component.paymentMethod()).toBe(PaymentMethod.PAY_AT_CLINIC);
+    component.submitBooking();
+    expect(api.fallbackToClinic).not.toHaveBeenCalled();
+    acceptModal();
+    expect(api.fallbackToClinic).toHaveBeenCalledWith(appointmentId);
+    expect(api.confirmBooking).not.toHaveBeenCalled();
+    expect(component.pendingPaymentContext()).toBeNull();
+  });
+
   it('clears the previous error when changing booking step', () => {
     component.errorMessage.set('Lỗi ở bước trước');
     component.goToStep(2);
     expect(component.errorMessage()).toBeNull();
+  });
+
+  [false, undefined].forEach(canFallbackToClinic => {
+    it(`lets the patient select clinic payment after failure with fallback flag ${canFallbackToClinic}`, () => {
+      api.getPaymentStatus.and.returnValue(of({
+        appointmentId, appointmentStatus: AppointmentStatus.PENDING_PAYMENT, paymentStatus: PaymentStatus.FAILED,
+        provider: PaymentMethod.MOMO, transactionStatus: PaymentTransactionStatus.FAILED,
+        canRetry: true, canSwitchProvider: true, canFallbackToClinic, expiresAt: null, paidAt: null,
+      }));
+      reloadCheckout();
+      component.retryPendingPayment();
+      fixture.detectChanges();
+      const clinicButton = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
+        .find(button => button.textContent?.trim() === 'Thanh toán tại viện')!;
+      expect(clinicButton.disabled).toBeFalse();
+      clinicButton.click();
+      fixture.detectChanges();
+      expect(component.paymentMethod()).toBe(PaymentMethod.PAY_AT_CLINIC);
+      const confirmButton = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
+        .find(button => button.textContent?.trim() === 'Xác nhận thanh toán tại viện')!;
+      expect(confirmButton.disabled).toBeFalse();
+      confirmButton.click();
+      expect(api.fallbackToClinic).not.toHaveBeenCalled();
+      acceptModal();
+      expect(api.fallbackToClinic).toHaveBeenCalledWith(appointmentId);
+      expect(api.confirmBooking).not.toHaveBeenCalled();
+      expect(component.pendingPaymentContext()).toBeNull();
+    });
+  });
+
+  it('keeps the existing checkout and explains a backend refusal to switch to clinic', () => {
+    reloadCheckout();
+    component.retryPendingPayment();
+    api.fallbackToClinic.and.returnValue(throwError(() => new HttpErrorResponse({
+      status: 409, error: { message: 'An online payment is still unresolved. Cannot switch to clinic payment.' },
+    })));
+    component.selectPayment(PaymentMethod.PAY_AT_CLINIC);
+    component.submitBooking();
+    acceptModal();
+    expect(component.paymentMethod()).toBe(PaymentMethod.PAY_AT_CLINIC);
+    expect(component.pendingPaymentContext()?.appointmentId).toBe(appointmentId);
+    expect(component.errorMessage()).toContain('Chưa thể chuyển sang thanh toán tại viện');
+    expect(api.confirmBooking).not.toHaveBeenCalled();
+    expect(router.navigate).not.toHaveBeenCalled();
   });
 
   it('shows a configuration message and keeps clinic recovery after MoMo code 13', () => {

@@ -279,7 +279,9 @@ export class BookingStepperPage implements OnDestroy {
   }
 
   selectPayment(method: PaymentMethod): void {
-    if (this.recoveryActive() && method === PaymentMethod.PAY_AT_CLINIC && !this.canFallback()) return;
+    if (this.loading()) return;
+    if (this.recoveryActive() && method !== PaymentMethod.PAY_AT_CLINIC && !this.canPay()) return;
+    this.errorMessage.set(null);
     this.paymentMethod.set(method);
   }
 
@@ -441,10 +443,10 @@ export class BookingStepperPage implements OnDestroy {
 
   fallbackPendingToClinic(): void {
     const context = this.pendingPaymentContext();
-    if (!context || this.loading() || !this.canFallback()) return;
+    if (!context || this.loading()) return;
     this.confirm({
       nzTitle: 'Thanh toán tại viện cho lịch hẹn này?',
-      nzContent: 'Không tạo lịch hẹn mới. Hệ thống sẽ xác nhận lại chỗ giữ và trạng thái giao dịch trước khi chuyển.',
+      nzContent: 'Lịch hẹn này sẽ được xác nhận để thanh toán tại viện. Giao dịch online đang chờ sẽ bị thay thế; khoản tiền online đến muộn sẽ được xử lý hoàn tiền.',
       nzOkText: 'Xác nhận', nzCancelText: 'Quay lại',
       nzOnOk: () => {
         this.loading.set(true);
@@ -711,6 +713,12 @@ export class BookingStepperPage implements OnDestroy {
       if (messages[error.error?.code]) return messages[error.error.code];
       if (error.status === 0) return 'Mất kết nối. Checkout vẫn được giữ; hãy thử kiểm tra trạng thái khi có mạng.';
       const message = error.error?.message;
+      if (message === 'An online payment is still unresolved. Cannot switch to clinic payment.') {
+        return 'Giao dịch online đang được đối soát hoặc đã ghi nhận tiền. Chưa thể chuyển sang thanh toán tại viện; vui lòng kiểm tra lại trạng thái.';
+      }
+      if (message === 'Checkout is no longer recoverable.' || message === 'Checkout no longer owns its slot.') {
+        return 'Chỗ giữ đã hết hạn hoặc lịch hẹn không còn chờ thanh toán. Vui lòng kiểm tra trạng thái hoặc bắt đầu đặt lịch mới.';
+      }
       return Array.isArray(message) ? message.join(' ') : message || 'Không thể xử lý yêu cầu.';
     }
     return 'Không thể xử lý yêu cầu.';
