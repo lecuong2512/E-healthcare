@@ -60,12 +60,12 @@ echo "==> [7/7] Khởi chạy dịch vụ..."
 if command -v pm2 > /dev/null 2>&1; then
   echo "==> Quản lý process Backend bằng PM2..."
   pm2 delete ehealth-api 2>/dev/null || true
-  pm2 start dist/server/src/main.js --name "ehealth-api"
+  pm2 start "npm run start:dev --workspace=@ehealth/server" --name "ehealth-api"
   pm2 save
   echo "✓ Backend API đã chạy trên PM2 (port 3000)."
 else
   echo "⚠️ PM2 chưa được cài đặt toàn cục. Khởi động backend trong background..."
-  nohup node dist/server/src/main.js > server.log 2>&1 &
+  nohup npm run start:dev --workspace=@ehealth/server > server.log 2>&1 &
   echo "✓ Backend API đã chạy background (PID: $!)."
 fi
 
