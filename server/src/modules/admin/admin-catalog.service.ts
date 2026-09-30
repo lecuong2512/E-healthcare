@@ -28,7 +28,7 @@ export class CatalogAdminService {
     const extensions: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' };
     const extension = extensions[file.mimetype];
     if (!extension) throw new BadRequestException('Tệp biểu tượng phải là ảnh PNG, JPG hoặc WebP.');
-    if (file.size > 2 * 1024 * 1024) throw new BadRequestException('Ảnh biểu tượng không được vượt quá 2MB.');
+    if (file.size > 10 * 1024 * 1024) throw new BadRequestException('Ảnh biểu tượng không được vượt quá 10MB.');
 
     const directory = join(process.cwd(), 'uploads', 'specialty-icons');
     const filename = `${randomUUID()}${extension}`;

@@ -118,7 +118,7 @@
               for="fullName"
               class="block text-xs font-medium text-slate-900"
             >
-              Họ và tên
+              Họ và tên <span class="text-red-500">*</span>
             </label>
 
             <input
@@ -126,9 +126,19 @@
               name="fullName"
               type="text"
               [(ngModel)]="form.fullName"
+              (input)="validateFullName()"
               placeholder="Nhập họ và tên"
-              class="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              class="mt-2 h-12 w-full rounded-md border bg-white px-3 text-sm text-slate-700 outline-none transition focus:ring-1"
+              [class.border-red-500]="fieldErrors['fullName']"
+              [class.focus:border-red-500]="fieldErrors['fullName']"
+              [class.focus:ring-red-500]="fieldErrors['fullName']"
+              [class.border-slate-300]="!fieldErrors['fullName']"
+              [class.focus:border-sky-500]="!fieldErrors['fullName']"
+              [class.focus:ring-sky-500]="!fieldErrors['fullName']"
             />
+            @if (fieldErrors['fullName']) {
+              <span class="mt-1 block text-xs font-medium text-red-600">{{ fieldErrors['fullName'] }}</span>
+            }
 
           </div>
 
@@ -139,17 +149,28 @@
               for="citizenId"
               class="block text-xs font-medium text-slate-900"
             >
-              CCCD/CMND
+              CCCD/CMND (9 hoặc 12 số)
             </label>
 
             <input
               id="citizenId"
               name="citizenId"
               type="text"
+              maxlength="12"
               [(ngModel)]="form.citizenId"
+              (input)="validateCitizenId()"
               placeholder="Nhập số CCCD/CMND"
-              class="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              class="mt-2 h-12 w-full rounded-md border bg-white px-3 text-sm text-slate-700 outline-none transition focus:ring-1"
+              [class.border-red-500]="fieldErrors['citizenId']"
+              [class.focus:border-red-500]="fieldErrors['citizenId']"
+              [class.focus:ring-red-500]="fieldErrors['citizenId']"
+              [class.border-slate-300]="!fieldErrors['citizenId']"
+              [class.focus:border-sky-500]="!fieldErrors['citizenId']"
+              [class.focus:ring-sky-500]="!fieldErrors['citizenId']"
             />
+            @if (fieldErrors['citizenId']) {
+              <span class="mt-1 block text-xs font-medium text-red-600">{{ fieldErrors['citizenId'] }}</span>
+            }
 
           </div>
 
@@ -160,7 +181,7 @@
               for="dateOfBirth"
               class="block text-xs font-medium text-slate-900"
             >
-              Ngày sinh
+              Ngày sinh <span class="text-red-500">*</span>
             </label>
 
             <input
@@ -168,8 +189,18 @@
               name="dateOfBirth"
               type="date"
               [(ngModel)]="form.dateOfBirth"
-              class="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              (change)="validateDateOfBirth()"
+              class="mt-2 h-12 w-full rounded-md border bg-white px-3 text-sm text-slate-700 outline-none transition focus:ring-1"
+              [class.border-red-500]="fieldErrors['dateOfBirth']"
+              [class.focus:border-red-500]="fieldErrors['dateOfBirth']"
+              [class.focus:ring-red-500]="fieldErrors['dateOfBirth']"
+              [class.border-slate-300]="!fieldErrors['dateOfBirth']"
+              [class.focus:border-sky-500]="!fieldErrors['dateOfBirth']"
+              [class.focus:ring-sky-500]="!fieldErrors['dateOfBirth']"
             />
+            @if (fieldErrors['dateOfBirth']) {
+              <span class="mt-1 block text-xs font-medium text-red-600">{{ fieldErrors['dateOfBirth'] }}</span>
+            }
 
           </div>
 
@@ -224,17 +255,28 @@
               for="healthInsurance"
               class="block text-xs font-medium text-slate-900"
             >
-              Mã BHYT
+              Mã BHYT (15 ký tự chuẩn Việt Nam)
             </label>
 
             <input
               id="healthInsurance"
               name="healthInsurance"
               type="text"
+              maxlength="15"
               [(ngModel)]="form.healthInsurance"
-              placeholder="Nhập mã BHYT"
-              class="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              (input)="validateHealthInsurance()"
+              placeholder="Ví dụ: DN4010123456789"
+              class="mt-2 h-12 w-full rounded-md border bg-white px-3 text-sm text-slate-700 outline-none transition uppercase focus:ring-1"
+              [class.border-red-500]="fieldErrors['healthInsurance']"
+              [class.focus:border-red-500]="fieldErrors['healthInsurance']"
+              [class.focus:ring-red-500]="fieldErrors['healthInsurance']"
+              [class.border-slate-300]="!fieldErrors['healthInsurance']"
+              [class.focus:border-sky-500]="!fieldErrors['healthInsurance']"
+              [class.focus:ring-sky-500]="!fieldErrors['healthInsurance']"
             />
+            @if (fieldErrors['healthInsurance']) {
+              <span class="mt-1 block text-xs font-medium text-red-600">{{ fieldErrors['healthInsurance'] }}</span>
+            }
 
           </div>
 

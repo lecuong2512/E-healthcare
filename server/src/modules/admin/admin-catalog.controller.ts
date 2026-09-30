@@ -15,7 +15,7 @@ export class CatalogAdminController {
   @Get('summary') summary() { return this.service.summary(); }
 
   @Post('specialties/icon')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 2 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   uploadSpecialtyIcon(@UploadedFile() file?: { mimetype: string; buffer: Buffer; originalname: string; size: number }) {
     return this.service.storeSpecialtyIcon(file);
   }

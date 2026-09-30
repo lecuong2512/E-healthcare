@@ -523,7 +523,9 @@
               <input type="date" formControlName="dob"
                      class="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 transition"/>
               @if (patientForm.get('dob')?.invalid && patientForm.get('dob')?.touched) {
-                <p class="text-[11px] text-red-500 mt-1">Vui lòng chọn ngày sinh</p>
+                <p class="text-[11px] text-red-500 mt-1">
+                  {{ patientForm.get('dob')?.hasError('futureDate') ? 'Ngày sinh không thể ở thời điểm tương lai' : 'Vui lòng chọn ngày sinh' }}
+                </p>
               }
             </div>
           </div>

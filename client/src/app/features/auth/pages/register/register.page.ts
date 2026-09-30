@@ -152,6 +152,23 @@ export class RegisterPage implements OnDestroy {
     return;
   }
 
+  const phoneClean = phoneNumber.replace(/\D/g, '');
+  if (phoneClean.length !== 10 || !/^0[35789]\d{8}$/.test(phoneClean)) {
+    this.errorMessage.set('Số điện thoại không hợp lệ. Vui lòng nhập số di động 10 chữ số tại Việt Nam (VD: 0912345678).');
+    return;
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    this.errorMessage.set('Địa chỉ email không đúng định dạng (VD: example@gmail.com).');
+    return;
+  }
+
+  if (new Date(this.dateOfBirth) > new Date()) {
+    this.errorMessage.set('Ngày sinh không thể ở thời điểm tương lai.');
+    return;
+  }
+
   if (this.confirmPassword && this.password !== this.confirmPassword) {
     this.errorMessage.set('Mật khẩu nhập lại không khớp.');
     return;
@@ -205,10 +222,11 @@ export class RegisterPage implements OnDestroy {
 
       error: (error: HttpErrorResponse) => {
         this.loading.set(false);
-
+        const msg = error.error?.message;
         this.errorMessage.set(
-          error.error?.message ??
-            'Không thể gửi mã OTP. Vui lòng thử lại.',
+          Array.isArray(msg)
+            ? msg.join(', ')
+            : (typeof msg === 'string' ? msg : 'Không thể gửi mã OTP. Vui lòng thử lại.'),
         );
       },
     });

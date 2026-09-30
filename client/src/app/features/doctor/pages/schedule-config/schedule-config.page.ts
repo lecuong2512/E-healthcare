@@ -44,7 +44,7 @@ export class ScheduleConfigPage implements OnInit {
   readonly shifts: ShiftId[] = ['MORNING', 'AFTERNOON'];
   readonly weekdays = WEEKDAYS;
   readonly durations: Array<15 | 30> = [15, 30];
-  roomOptions = ['204', '205', '301', '302'];
+  roomOptions: string[] = ['P.101', 'P.102', 'P.103', 'P.104', 'P.105'];
 
   viewMode: ViewMode = 'week';
   anchor = new Date();
@@ -56,7 +56,7 @@ export class ScheduleConfigPage implements OnInit {
   selectedShift: ShiftId = 'MORNING';
   slotDuration: 15 | 30 = 15;
   maxPatients = 16;
-  roomNumber = '204';
+  roomNumber = 'P.101';
   formMessage = '';
   editingSlot: ScheduleSlot | null = null;
   editDate = '';
@@ -67,7 +67,26 @@ export class ScheduleConfigPage implements OnInit {
   scheduleSlots: ScheduleSlot[] = [];
 
   ngOnInit(): void {
+    this.loadClinicRooms();
     this.loadSchedules();
+  }
+
+  loadClinicRooms(): void {
+    this.scheduleService.getClinicRooms().subscribe({
+      next: (rooms) => {
+        if (rooms && rooms.length > 0) {
+          this.roomOptions = rooms.map((r) => r.roomNumber);
+          if (this.roomNumber && !this.roomOptions.includes(this.roomNumber)) {
+            this.roomOptions.unshift(this.roomNumber);
+          } else if (!this.roomNumber && this.roomOptions.length > 0) {
+            this.roomNumber = this.roomOptions[0];
+          }
+        }
+      },
+      error: () => {
+        // Giữ fallback chuẩn P.101 - P.105 nếu offline
+      },
+    });
   }
 
   loadSchedules(): void {
@@ -416,7 +435,7 @@ export class ScheduleConfigPage implements OnInit {
       startTime: slot.startTime.length > 5 ? slot.startTime.slice(0, 5) : slot.startTime,
       endTime: slot.endTime.length > 5 ? slot.endTime.slice(0, 5) : slot.endTime,
       duration,
-      roomNumber: defaultRoom || this.roomNumber || '204',
+      roomNumber: defaultRoom || this.roomNumber || 'P.101',
       maxPatients: 1,
       bookedPatients: isBooked ? 1 : 0,
       status: slot.status,

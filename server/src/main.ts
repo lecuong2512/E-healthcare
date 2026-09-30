@@ -8,10 +8,29 @@ import { RedisIoAdapter } from "./modules/realtime/redis-io.adapter";
 import express from 'express';
 import { join } from 'node:path';
 
+import { existsSync, mkdirSync } from 'node:fs';
+
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   configureApp(app);
-  app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
+
+  const uploadDirs = [
+    join(process.cwd(), 'uploads'),
+    join(process.cwd(), 'server', 'uploads'),
+    join(__dirname, '..', '..', 'uploads'),
+  ];
+  for (const dir of uploadDirs) {
+    if (existsSync(dir)) {
+      app.use('/uploads', express.static(dir));
+    }
+  }
+  const defaultUploads = join(process.cwd(), 'uploads');
+  if (!existsSync(defaultUploads)) {
+    mkdirSync(defaultUploads, { recursive: true });
+  }
+  mkdirSync(join(defaultUploads, 'avatars'), { recursive: true });
+  mkdirSync(join(defaultUploads, 'specialty-icons'), { recursive: true });
+  app.use('/uploads', express.static(defaultUploads));
   if (environment.QUEUE_REDIS_ADAPTER_ENABLED === 'true') {
     const adapter = new RedisIoAdapter(app, app.get(RedisService));
     await adapter.connectToRedis();

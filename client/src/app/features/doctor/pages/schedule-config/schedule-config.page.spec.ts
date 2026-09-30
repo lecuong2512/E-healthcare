@@ -14,7 +14,7 @@ describe('ScheduleConfigPage (BUG-NEW-07: Doctor Schedule PostgreSQL Integration
 
   const mockScheduleResult: DoctorScheduleResult = {
     doctorId: 'doc-123',
-    roomNumber: '204',
+    roomNumber: 'P.101',
     slots: [
       {
         id: 'slot-1',
@@ -42,8 +42,15 @@ describe('ScheduleConfigPage (BUG-NEW-07: Doctor Schedule PostgreSQL Integration
       'getMySchedules',
       'createSchedule',
       'deleteSchedule',
+      'getClinicRooms',
     ]);
 
+    scheduleService.getClinicRooms.and.returnValue(
+      of([
+        { id: '1', roomNumber: 'P.101', roomName: 'Phòng khám Tim Mạch' },
+        { id: '2', roomNumber: 'P.102', roomName: 'Phòng khám Da liễu' },
+      ]),
+    );
     scheduleService.getMySchedules.and.returnValue(of(mockScheduleResult));
     scheduleService.createSchedule.and.returnValue(of(mockScheduleResult));
     scheduleService.deleteSchedule.and.returnValue(of(undefined));
@@ -63,7 +70,8 @@ describe('ScheduleConfigPage (BUG-NEW-07: Doctor Schedule PostgreSQL Integration
   it('TC-SCHEDULE-01: should create component and load real schedules from PostgreSQL via service', () => {
     expect(component).toBeTruthy();
     expect(scheduleService.getMySchedules).toHaveBeenCalled();
-    expect(component.roomNumber).toBe('204');
+    expect(scheduleService.getClinicRooms).toHaveBeenCalled();
+    expect(component.roomNumber).toBe('P.101');
     expect(component.scheduleSlots.length).toBe(2);
     expect(component.scheduleSlots[0].id).toBe('slot-1');
     expect(component.scheduleSlots[0].bookedPatients).toBe(0);
