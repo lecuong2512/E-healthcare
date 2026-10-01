@@ -346,4 +346,4 @@ npm run build --workspaces --if-present
 Dự án được phân phối dưới giấy phép mã nguồn mở **MIT License**. Xem chi tiết tại tệp [LICENSE](LICENSE).
 
 ---
-*© 2026 E-Healthcare Development Team. Được phát triển và hoàn thiện bởi Lê Việt Cường.*
+*© 2026 E-Healthcare Development Team.*
