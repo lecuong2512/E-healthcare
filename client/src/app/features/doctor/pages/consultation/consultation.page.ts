@@ -243,6 +243,22 @@ export class ConsultationPage {
     });
   }
 
+  loadPatientPhr(appointmentId: string) {
+    if (!appointmentId) return;
+    this.clinical.getPatientPhrByAppointment(appointmentId).subscribe({
+      next: (p) => {
+        if (p.fullName) this.patientName = p.fullName;
+        if (p.gender) this.patientGender = p.gender === 'FEMALE' ? 'Nữ' : p.gender === 'MALE' ? 'Nam' : p.gender;
+        if (p.dateOfBirth) this.patientYear = new Date(p.dateOfBirth).getFullYear();
+        this.bloodType = p.bloodType || 'Chưa có';
+        this.allergies = p.allergies || 'Chưa ghi nhận';
+        this.chronicDiseases = p.chronicDiseases || 'Chưa ghi nhận';
+        this.surgeryHistory = p.surgeryHistory || 'Chưa ghi nhận';
+      },
+      error: () => {},
+    });
+  }
+
   loadCatalogs() {
     this.clinical.searchMedicines('', 100).subscribe({
       next: (items) => {

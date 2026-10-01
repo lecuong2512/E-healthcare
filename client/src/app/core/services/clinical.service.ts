@@ -10,6 +10,7 @@ import {
   MedicalRecordDetailResponse,
   MedicineCatalogItem,
   PatientSummaryResponse,
+  PhrProfile,
   UpdateMedicalRecordRequest,
 } from '@shared/interfaces';
 import { TokenStoreService } from './token-store.service';
@@ -118,6 +119,15 @@ export class ClinicalService {
   getPatientSummary(appointmentId: string): Observable<PatientSummaryResponse> {
     return this.http.get<PatientSummaryResponse>(
       `${API_BASE}/appointments/${encodeURIComponent(appointmentId)}/patient-summary`,
+      { headers: this.authHeaders() },
+    );
+  }
+
+  getPatientPhrByAppointment(
+    appointmentId: string,
+  ): Observable<PhrProfile> {
+    return this.http.get<PhrProfile>(
+      `${API_BASE}/appointments/${encodeURIComponent(appointmentId)}/patient-phr`,
       { headers: this.authHeaders() },
     );
   }

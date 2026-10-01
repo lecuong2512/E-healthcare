@@ -74,11 +74,13 @@ describe('ConsultationPage (SRS-DOC-03, SRS-DOC-04 & Section 5.4)', () => {
       'completeConsultation',
       'downloadPrescriptionPdf',
       'getPatientSummary',
+      'getPatientPhrByAppointment',
       'searchMedicines',
       'searchIcd10',
     ]);
 
     phrService.getMyPhr.and.returnValue(of(mockPhr));
+    clinicalService.getPatientPhrByAppointment.and.returnValue(of(mockPhr));
     clinicalService.getPatientSummary.and.returnValue(
       of({
         patient: {
@@ -314,5 +316,12 @@ describe('ConsultationPage (SRS-DOC-03, SRS-DOC-04 & Section 5.4)', () => {
     component.downloadPrescription();
 
     expect(clinicalService.downloadPrescriptionPdf).toHaveBeenCalledWith('app-123');
+  });
+
+  it('TC-PHR-005-UI: should support loading patient PHR profile via appointment context', () => {
+    component.loadPatientPhr('app-123');
+    expect(clinicalService.getPatientPhrByAppointment).toHaveBeenCalledWith('app-123');
+    expect(component.bloodType).toBe('A+');
+    expect(component.allergies).toBe('Penicillin, Aspirin');
   });
 });

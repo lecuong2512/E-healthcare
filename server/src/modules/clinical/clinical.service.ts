@@ -19,6 +19,7 @@ import {
   EmrAddendumData,
   EmrHistoryResponse,
   PatientSummaryResponse,
+  PhrProfile,
 } from '@shared/interfaces';
 
 import { MedicalRecordEntity } from '../../database/entities/medical-record.entity';
@@ -598,6 +599,85 @@ export class ClinicalService {
         chronicDiseases: phr?.chronicDiseases ?? null,
         surgeryHistory: phr?.surgeryHistory ?? null,
       },
+    };
+  }
+
+  /**
+   * Get patient's PHR for assigned Doctor during consultation of a specific appointment.
+   * [TC-PHR-005] Enforces:
+   * 1. User must be a Doctor with an active profile.
+   * 2. Appointment must exist.
+   * 3. Doctor must be assigned to this appointment (UNAUTHORIZED_DOCTOR -> 403).
+   * 4. Patient PHR is retrieved based strictly on appointment.patientId (patient isolation).
+   */
+  public async getPatientPhrByAppointment(
+    userId: string,
+    appointmentId: string,
+    auditContext?: AuditContext,
+  ): Promise<PhrProfile> {
+    const doctor = await this.getDoctorByUserId(userId);
+    const appointment = await this.appointmentRepo.findOne({
+      where: { id: appointmentId },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException({
+        code: 'APPOINTMENT_NOT_FOUND',
+        message: 'Không tìm thấy ca khám.',
+      });
+    }
+
+    if (appointment.doctorId !== doctor.id) {
+      await this.auditDeniedOrFail(auditContext, {
+        action: AuditAction.VIEW_EMR,
+        resourceType: 'APPOINTMENT',
+        resourceId: appointmentId,
+      });
+      throw new ForbiddenException({
+        code: 'UNAUTHORIZED_DOCTOR',
+        message: 'Bác sĩ không được phân công phụ trách ca khám này.',
+      });
+    }
+
+    const userRepo = this.dataSource.getRepository(UserEntity);
+    const patient = await userRepo.findOne({
+      where: { id: appointment.patientId },
+    });
+
+    if (!patient) {
+      throw new NotFoundException({
+        code: 'PATIENT_NOT_FOUND',
+        message: 'Không tìm thấy hồ sơ người bệnh.',
+      });
+    }
+
+    const phr = await this.phrRepo.findOne({
+      where: { userId: appointment.patientId },
+    });
+
+    if (auditContext && this.audit) {
+      await this.dataSource.transaction((manager) =>
+        this.auditOrFail(manager, auditContext, {
+          action: AuditAction.VIEW_EMR,
+          resourceType: 'APPOINTMENT',
+          resourceId: appointmentId,
+          metadata: { view: 'PATIENT_PHR' },
+        }),
+      );
+    }
+
+    return {
+      fullName: patient.fullName,
+      citizenId: phr?.citizenId ?? null,
+      gender: patient.gender,
+      dateOfBirth: patient.dateOfBirth,
+      dateOfBirthPrecision: patient.dateOfBirthPrecision,
+      address: phr?.address ?? null,
+      healthInsurance: phr?.healthInsurance ?? null,
+      bloodType: phr?.bloodType ?? null,
+      allergies: phr?.allergies ?? null,
+      chronicDiseases: phr?.chronicDiseases ?? null,
+      surgeryHistory: phr?.surgeryHistory ?? null,
     };
   }
 
