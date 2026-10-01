@@ -135,14 +135,21 @@ Tài liệu này được lập ra nhằm đóng gói toàn bộ:
 | **Card 3.12** | Section 7.1, PAT-05 | Hạ tầng BullMQ Message Queue & Cron Schedulers | Lê Việt Cường | **Hoàn thành** | PR #18, #20 đã merge |
 | **Card 3.13** | SRS-ADM-04 | Giao diện Quản trị Tra cứu Nhật ký Kiểm toán | Trần Trọng Hoàn | **Hoàn thành** | PR #31, #33 đã merge (`/admin/audit-logs`) |
 | **Card 3.14** | SRS-PAT-01, Table 7 | Tính năng Đánh giá 1-5 Sao & Phản hồi Bác sĩ | Nguyễn Mạnh Thi | **Hoàn thành** | PR #34 đã merge |
-| **Card 4.1** | SRS-PAT-03, Sec 3.3 | Backend Cổng Thanh toán VNPAY / MoMo Sandbox | Nguyễn Mạnh Thi | **Đang triển khai** | Đang test chữ ký HMAC & Webhook IPN |
-| **Card 4.7** | SRS-PAT-03 | UI Đón Kết quả Thanh toán VNPAY/MoMo & Hóa đơn QR | Trần Văn Tiến | **Đang triển khai** | Chờ tích hợp IPN từ Card 4.1 |
-| **Card 4.2** | SRS-PAT-04 & 05 | Lịch sử Khám, Xuất Đơn thuốc PDF & Cron Nhắc lịch | Trần Văn Tiến | **Chờ merge PR #40** | QA ĐÃ PASS 100%, sẵn sàng merge develop |
-| **Card 4.3** | NFR-SEC, SRS-ADM-04 | Mã hóa Y tế AES-256 & Append-only Audit Logs | Trần Trọng Hoàn | **Đang hoàn thiện PR** | Code đã xong; chờ sửa Description & rebase |
+| **Card 4.1** | SRS-PAT-03, Sec 3.3 | Backend Cổng Thanh toán VNPAY / MoMo Sandbox | Nguyễn Mạnh Thi | **Hoàn thành** | Đã kết nối VNPAY TMN_CODE & MoMo IPN Webhook |
+| **Card 4.7** | SRS-PAT-03 | UI Đón Kết quả Thanh toán VNPAY/MoMo & Hóa đơn QR | Trần Văn Tiến | **Hoàn thành** | Đã tích hợp trang `/patient/payment-result` & in hóa đơn |
+| **Card 4.2** | SRS-PAT-04 & 05 | Lịch sử Khám, Xuất Đơn thuốc PDF & Cron Nhắc lịch | Trần Văn Tiến | **Hoàn thành** | PR #40 đã merge vào `develop`, PDFKit + QR Code |
+| **Card 4.3** | NFR-SEC, SRS-ADM-04 | Mã hóa Y tế AES-256 & Append-only Audit Logs | Trần Trọng Hoàn | **Hoàn thành** | PR #38 đã merge, pgp_sym_encrypt & Audit Logs UI |
 | **Card 4.4** | SRS-ADM-01..03 | Quản trị: Danh mục Y tế, Bác sĩ & Dashboard KPI | Đồng Văn Tú | **Hoàn thành** | ĐÃ MERGE XONG CẢ 3 PR (#35, #36, #39) |
 | **Card 4.8** | NFR-AVAIL, NFR-SEC | Diễn tập Phục hồi Thảm họa (RTO/RPO) & Audit OWASP | Tùng & Cường | **Đang triển khai** | Chuẩn bị kịch bản pgBackRest & Pentest |
 | **Card 4.5** | Section 7 & 8 | Kiểm thử Toàn diện Hệ thống & Nghiệm thu RTM | Nguyễn Văn Tùng | **Đang triển khai** | Tiến hành đo SLA hiệu năng & rà soát RTM |
-| **Card 4.6** | Section 1.1 | Đóng gói Release v1.0.0 & Slide Báo cáo Demo | Toàn bộ nhóm | **Chưa bắt đầu** | Mốc cuối cùng Sprint 4 (01/10/2026) |
+| **Card 4.6** | Section 1.1 | Đóng gói Release v1.0.0 & Slide Báo cáo Demo | Toàn bộ nhóm | **Đang triển khai** | Mốc cuối cùng Sprint 4 (01/10/2026) |
+| **Card 4.9** | UI/UX Shell | Hệ thống Điều hướng Role-based & Xóa bỏ trùng Header | Lê Việt Cường | **Hoàn thành** | Đã merge develop, xóa 2 header và đồng bộ 4 roles |
+| **Card 4.10** | Auth & Layout | Nâng cấp Avatar góc phải, Dropdown Menu & Đăng xuất | Lê Việt Cường | **Hoàn thành** | Đã merge develop, hiển thị tên thật & dynamic initials |
+| **Card 4.11** | Reception UX | Điều hướng 2 chiều cho Bảng gọi số sảnh chờ Smart TV | Lê Việt Cường | **Hoàn thành** | Đã merge develop, bổ sung lối vào & lối thoát TV |
+| **Card 4.12** | Fullstack | Upload Avatar (User/Doctor) & Web Push Notifications | Lê Việt Cường | **Hoàn thành** | Đã merge develop, Multer avatar & VAPID Web Push |
+| **Card 4.13** | QA / Hotfix | Xử lý 15 Lỗi Tích hợp & Seed 625 Slots Khám 3 ca/ngày | Lê Việt Cường | **Hoàn thành** | Đã fix BUG-01..15, EMR realtime, xóa 100% mock |
+| **Card 4.14** | QA / Hotfix | Khắc phục Nghiệp vụ Admin Staff & Bác sĩ (Thi.docx) | Lê Việt Cường | **Hoàn thành** | Bắt lỗi trùng SĐT, đồng bộ staff, doctor schedule CSDL |
+| **Card 4.15** | Payment & Auth | Chu trình VNPAY/MoMo, Đặt cho Người khác & Header Login | Lê Việt Cường | **Hoàn thành** | Fix lỗi 400 VNPAY/MoMo, bookingFor other, fix header login |
 
 ---
 
