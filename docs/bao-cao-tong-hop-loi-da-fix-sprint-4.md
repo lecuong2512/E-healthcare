@@ -51,6 +51,26 @@ Mục tiêu của đợt xử lý này là: **Loại bỏ 100% dữ liệu mock 
 
 ---
 
+
+---
+
+## 2.1. BẢNG TỔNG HỢP CÁC LỖI NGHIỆP VỤ & TỐI ƯU HỆ THỐNG GIAI ĐOẠN 2 (BUG-16 ĐẾN BUG-26)
+*(Căn cứ theo tài liệu rà soát Thi.docx, Thi (1).docx, kiểm thử chu trình thanh toán VNPAY/MoMo và phản hồi người dùng)*
+
+| Mã Lỗi | Phân Hệ | Mô Tả Lỗi Ban Đầu & Nguyên Nhân Gốc | Giải Pháp Kỹ Thuật Đã Triển Khai | Kết Quả Nghiệm Thu |
+| :---: | :---: | :--- | :--- | :---: |
+| **BUG-16** | Backend (Admin) | Khi thêm nhân sự mới với số điện thoại đã tồn tại trong CSDL, hệ thống ném ngoại lệ database không xử lý (`uq_users_login_phone_number`), trả về HTTP 500 hoặc crash. | Trong `staff-admin.service.ts`: Bắt mã lỗi PostgreSQL `23505` (unique_violation), ném `ConflictException` với thông báo tiếng Việt: *"Số điện thoại này đã được sử dụng bởi một tài khoản khác trong hệ thống"*. | ✅ Đã kiểm thử & phản hồi HTTP 409 chuẩn |
+| **BUG-17** | Backend (Admin) | Thêm nhân sự mới (Bác sĩ/Lễ tân) báo thành công nhưng khi tải lại trang (`F5`) danh sách bị mất do chỉ lưu bảng `users` mà thiếu bản ghi trong bảng `doctors` hoặc `receptionists`. | Trong `staff-admin.service.ts`: Đảm bảo transaction đồng bộ tạo `DoctorEntity` (với chuyên khoa, phòng khám) hoặc `ReceptionistEntity` ngay sau khi tạo `UserEntity`. | ✅ Đã test hiển thị bền vững sau F5 |
+| **BUG-18** | Fullstack (Doctor) | Trang cấu hình ca trực bác sĩ (`/doctor/schedule`) dùng dữ liệu mock cục bộ, không lưu ca trực vào PostgreSQL và không hiển thị ca trực thật. | Xây dựng API `GET /api/v1/doctor/schedules` và `POST /api/v1/doctor/schedules`. Refactor `schedule-config.page.ts` gọi service lưu trực tiếp vào bảng `doctor_schedules`. | ✅ Đã kiểm thử live trên DB VPS |
+| **BUG-19** | Fullstack (Admin/Doctor) | Không có trường cấu hình Giá khám bệnh (`consultationFee`) cho bác sĩ khiến thông tin viện phí hiển thị mặc định 0 VNĐ trên web. | Thêm trường `consultationFee` trong form thêm/sửa bác sĩ (`staff-mgmt.page.html`), cập nhật migration/entity và hiển thị giá khám định dạng tiền tệ VNĐ trên `doctor-search.page.html` và `booking-stepper`. | ✅ Hiển thị giá khám chuẩn xác |
+| **BUG-20** | Frontend (Patient) | Tìm kiếm bác sĩ chuyên khoa Nhi không ra kết quả khi lọc thẻ chuyên khoa hoặc gõ từ khóa "nhi". | Chuẩn hóa ánh xạ ID chuyên khoa và chuỗi tìm kiếm không phân biệt dấu tiếng Việt trong `doctor-search.page.ts`. | ✅ Đã pass unit tests |
+| **BUG-21** | Fullstack (EMR) | Buồng khám bác sĩ kê đơn và chẩn đoán sử dụng 2 mảng tĩnh `DRUGS` và `ICD`, không cập nhật theo danh mục thuốc thực tế của phòng khám. | Đấu nối API `GET /api/v1/admin/catalogs/medicines` và `GET /api/v1/clinical/icd10/search` đọc dữ liệu động từ bảng `medicines` và `icd10_catalogs` trong PostgreSQL, giữ fallback khi offline. | ✅ Danh mục nạp trực tiếp từ DB |
+| **BUG-22** | Backend (Clinical) | Bác sĩ khám bệnh bấm xem thông tin tiền sử bệnh PHR của bệnh nhân bị hệ thống chặn bằng lỗi HTTP 403 Forbidden (do gọi nhầm `/api/v1/phr/me` vốn chỉ cho bệnh nhân). | Tạo endpoint chuyên dụng `@Get('appointments/:appointmentId/patient-summary')` với `@Roles(Role.DOCTOR)` trả về tóm tắt PHR, nhóm máu, dị ứng và bệnh mạn tính của bệnh nhân trong ca khám. | ✅ Bác sĩ xem PHR mượt mà |
+| **BUG-23** | Backend (Payment) | Khi VNPAY chuyển hướng thành công về web hoặc khi hủy trên MoMo, URL trả về mã `vnp_TxnRef` hoặc `orderId` dạng `PAY...`. Controller chặn bằng `ParseUUIDPipe` gây lỗi HTTP 400 Bad Request khiến trang kết quả báo lỗi oan và nút Hủy giữ chỗ bị liệt. | Tại các endpoint `GET :appointmentId/status`, `POST :appointmentId/cancel-pending`, `POST :appointmentId/fallback-clinic`: Bỏ `ParseUUIDPipe` cứng, viết helper tự động phân giải: nếu là UUID thì tìm theo ID, nếu là mã `PAY...` thì tìm theo `merchantTransactionId`. | ✅ VNPAY về báo thành công ngay; nút hủy MoMo chạy hoàn hảo |
+| **BUG-24** | Fullstack (Booking) | Bệnh nhân đặt lịch cho người thân nhưng hệ thống chỉ lưu ID người đặt, không tạo hồ sơ bệnh nhân thực tế và người đặt không xem lại được lịch của người thân. | Mở rộng DTO `bookingFor: other`, backend tự động tạo user/PHR cho bệnh nhân phụ thuộc (`patientId = targetPatientId`, `createdBy = authenticatedUserId`), và `listForPatient()` cho phép xem tất cả lịch do mình tạo. | ✅ Đã pass unit tests |
+| **BUG-25** | Fullstack (Auth) | Thiếu tính năng Quên mật khẩu (nút trên giao diện không có action) và trang Đăng ký thiếu ô "Nhập lại mật khẩu" (Confirm Password). | Xây dựng trọn vẹn màn hình `/forgot-password` (3 bước: nhập email/SĐT -> xác thực OTP 6 số -> đổi mật khẩu mới). Bổ sung ô input và toggle Hiện/Ẩn cho "Nhập lại mật khẩu" tại `/register`. | ✅ Đã pass unit tests |
+| **BUG-26** | Frontend (Auth/Layout) | Khi người dùng chưa đăng nhập hoặc đã đăng xuất truy cập vào trang Đăng nhập (`/login`), Header vẫn hiển thị tên Quản trị viên và thanh menu Admin. | Trong `header.component.ts`: Thêm computed `isAuthRoute` tự động ẩn toàn bộ menu và avatar trên các route xác thực (`/login`, `/register`, `/forgot-password`). Trong `token-store.service.ts`: Xóa bỏ việc tự nạp `currentUser` từ `localStorage` khi chưa có access token hợp lệ. Trong `login.page.ts`: Tự động gọi `tokenStore.clear()` khi khởi tạo. | ✅ Đã nghiệm thu chụp screenshot thực tế trên Live |
+
 ## 3. CHI TIẾT CÁC CÔNG VIỆC NÂNG CẤP KỸ THUẬT
 
 ### 3.1. Làm Giàu Dữ Liệu Seed (`seed-qa.ts`)
