@@ -32,3 +32,29 @@ uploads/
 *.swo
 .DS_Store
 Thumbs.db
+
+# Local project report (DO NOT COMMIT)
+BAO-CAO-DU-AN-E-HEALTHCARE-2026.docx
+
+# Local presentation and temp files (DO NOT COMMIT)
+~$*.docx
+*.tmp
+docs/Slide-Bao-Cao-Du-An-E-Healthcare-2026.pdf
+docs/Slide-Bao-Cao-Du-An-E-Healthcare-2026.pptx
+
+docs/Slide-Bao-Cao-Do-An-E-Healthcare-28-Slides.pdf
+docs/Slide-Bao-Cao-Do-An-E-Healthcare-28-Slides.pptx
+docs/*.pdf
+docs/*.pptx
+
+# Individual report (DO NOT COMMIT)
+BAO-CAO-CA-NHAN-LE-VIET-CUONG.docx
+docs/bao-cao-ca-nhan-le-viet-cuong.md
+*CA-NHAN*
+~$*CA-NHAN*.docx
+
+# Excluded documentation directories (DO NOT COMMIT)
+docs/extracted/
+docs/runbooks/
+docs/superpowers/
+

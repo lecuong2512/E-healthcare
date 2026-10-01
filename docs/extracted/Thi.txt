@@ -1,6 +1,0 @@
-=== CONTENT OF D:\Downloads\Thi.docx ===
-Images: ['word/media/image2.png', 'word/media/image3.png', 'word/media/image1.png']
-
-[1] UI khi đăng ký thêm người - không ẩn hiện mật khẩu
-[2] Điền không đủ thông tin, không bấm thêm được và không có thông báo gì
-[3] Tạo mới đối tượng auto gán mã nhân viên 1 ở UI, đẩy hết ds phía sau lên 1 số

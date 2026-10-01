@@ -1,7 +1,0 @@
-=== CONTENT OF D:\Downloads\Thi (1).docx ===
-Images: ['word/media/image2.png', 'word/media/image3.png', 'word/media/image1.png']
-
-[1] Bác sĩ không chọn được ca cụ thể
-[2] Không có chỗ setup tiền khám bác sĩ, trong admin chọn nhiều khoa cho bác sĩ được mà bên ngoài chỉ hiện 1 khoa
-[3] Lọc khoa nhi thì không có kết quả (khoa khác có hiện kq)
-[4] Dữ liệu bác sĩ vẫn chưa đồng bộ qua cho patient : không thấy ca đặt trên hệ thống
