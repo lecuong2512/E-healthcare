@@ -20,6 +20,7 @@ export interface PatientDoctorSummary {
   fullName: string;
   academicTitle: string | null;
   specialty: { id: string; name: string };
+  specialties?: Array<{ id: string; name: string }>;
   consultationFee: number;
   bioDescription: string | null;
   roomNumber: string;

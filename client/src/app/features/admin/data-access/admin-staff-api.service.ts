@@ -3,10 +3,10 @@ import { Injectable, inject } from '@angular/core';
 import { Role } from '@shared/enums';
 
 export interface StaffRow {
-  id: string; fullName: string; email: string | null; status: string; role: Role;
+  id: string; code?: string; fullName: string; email: string | null; status: string; role: Role;
   phoneNumber?: string | null; gender?: string; dateOfBirth?: string;
   licenseNumber?: string | null; academicTitle?: string | null;
-  yearsExperience?: number | null; roomNumber?: string | null; specialtyIds?: string[];
+  yearsExperience?: number | null; consultationFee?: number | null; roomNumber?: string | null; specialtyIds?: string[];
   avatarUrl?: string | null;
 }
 export interface SpecialtyOption { id: string; name: string; }

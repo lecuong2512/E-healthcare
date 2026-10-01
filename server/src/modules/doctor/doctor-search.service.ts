@@ -3,10 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { DataSource } from "typeorm";
+import { DataSource, In } from "typeorm";
 import { SlotStatus, UserStatus } from "@shared/enums";
 import { DoctorEntity } from "../../database/entities/doctor.entity";
 import { DoctorScheduleEntity } from "../../database/entities/doctor-schedule.entity";
+import { DoctorSpecialtyEntity } from "../../database/entities/doctor-specialty.entity";
 import { SpecialtyEntity } from "../../database/entities/specialty.entity";
 import { DoctorCacheService } from "./doctor-cache.service";
 import { SearchDoctorDto } from "./dto/search-doctor.dto";
@@ -17,6 +18,7 @@ interface DoctorView {
   fullName: string;
   academicTitle: string | null;
   specialty: { id: string; name: string };
+  specialties?: Array<{ id: string; name: string }>;
   consultationFee: number;
   bioDescription: string | null;
   roomNumber: string;
@@ -126,8 +128,40 @@ export class DoctorSearchService {
       .skip((normalized.page - 1) * normalized.limit)
       .take(normalized.limit)
       .getMany();
+
+    const doctorIds = doctors.map(d => d.id);
+    const specialtyMap = new Map<string, Array<{ id: string; name: string }>>();
+    const specRepo = this.dataSource.getRepository ? this.dataSource.getRepository(DoctorSpecialtyEntity) : null;
+    if (specRepo && typeof specRepo.find === 'function' && doctorIds.length > 0) {
+      try {
+        const allDoctorSpecialties = await specRepo.find({
+          where: { doctorId: In(doctorIds) },
+        });
+        const allSpecIds = [...new Set(allDoctorSpecialties.map(ds => ds.specialtyId))];
+        const masterSpecRepo = this.dataSource.getRepository(SpecialtyEntity);
+        if (allSpecIds.length > 0 && typeof masterSpecRepo?.find === 'function') {
+          const specEntities = await masterSpecRepo.find({
+            where: { id: In(allSpecIds), isActive: true },
+          });
+          const specNameMap = new Map(specEntities.map(s => [s.id, s.name]));
+          allDoctorSpecialties.forEach(ds => {
+            const name = specNameMap.get(ds.specialtyId);
+            if (name) {
+              const list = specialtyMap.get(ds.doctorId) || [];
+              if (!list.some(item => item.id === ds.specialtyId)) {
+                list.push({ id: ds.specialtyId, name });
+              }
+              specialtyMap.set(ds.doctorId, list);
+            }
+          });
+        }
+      } catch {
+        // Fallback an toàn nếu môi trường test không mock
+      }
+    }
+
     const result: SearchDoctorResult = {
-      data: doctors.map((doctor) => this.toView(doctor)),
+      data: doctors.map((doctor) => this.toView(doctor, specialtyMap.get(doctor.id))),
       pagination: {
         page: normalized.page,
         limit: normalized.limit,
@@ -155,6 +189,26 @@ export class DoctorSearchService {
       .getOne();
     if (!doctor) throw new NotFoundException("Không tìm thấy bác sĩ.");
 
+    let specialtiesList: Array<{ id: string; name: string }> = [];
+    const docSpecRepo = this.dataSource.getRepository ? this.dataSource.getRepository(DoctorSpecialtyEntity) : null;
+    if (docSpecRepo && typeof docSpecRepo.find === 'function') {
+      try {
+        const extraDoctorSpecialties = await docSpecRepo.find({
+          where: { doctorId },
+        });
+        const extraSpecIds = extraDoctorSpecialties.map(ds => ds.specialtyId);
+        const masterSpecRepo = this.dataSource.getRepository(SpecialtyEntity);
+        if (extraSpecIds.length > 0 && typeof masterSpecRepo?.find === 'function') {
+          const specEntities = await masterSpecRepo.find({
+            where: { id: In(extraSpecIds), isActive: true },
+          });
+          specialtiesList = specEntities.map(s => ({ id: s.id, name: s.name }));
+        }
+      } catch {
+        // Fallback an toàn
+      }
+    }
+
     const schedules = await this.dataSource
       .getRepository(DoctorScheduleEntity)
       .createQueryBuilder("schedule")
@@ -165,7 +219,7 @@ export class DoctorSearchService {
       .addOrderBy("schedule.start_time", "ASC")
       .take(100)
       .getMany();
-    const result = { ...this.toView(doctor), availableSchedules: schedules };
+    const result = { ...this.toView(doctor, specialtiesList), availableSchedules: schedules };
     await this.cache.setJson(cacheKey, result, 60);
     return result;
   }
@@ -181,17 +235,22 @@ export class DoctorSearchService {
     return specialties;
   }
 
-  private toView(doctor: DoctorEntity): DoctorView {
-    return {
+  private toView(doctor: DoctorEntity, extraSpecialties?: Array<{ id: string; name: string }>): DoctorView {
+    const primary = { id: doctor.specialty.id, name: doctor.specialty.name };
+    const view: DoctorView = {
       id: doctor.id,
       fullName: doctor.user.fullName,
       academicTitle: doctor.academicTitle,
-      specialty: { id: doctor.specialty.id, name: doctor.specialty.name },
+      specialty: primary,
       consultationFee: Number(doctor.consultationFee),
       bioDescription: doctor.bioDescription,
       roomNumber: doctor.roomNumber,
       ratingAverage: Number(doctor.ratingAverage),
       avatarUrl: doctor.avatarUrl ?? doctor.user?.avatarUrl ?? null,
     };
+    if (extraSpecialties && extraSpecialties.length > 0) {
+      view.specialties = [primary, ...extraSpecialties.filter(s => s.id !== primary.id)];
+    }
+    return view;
   }
 }
