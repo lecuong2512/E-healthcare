@@ -1,5 +1,7 @@
 import { Component, HostListener, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { filter, map } from 'rxjs';
 import { NgClass } from '@angular/common';
 import { AuthService } from '../../../core/services/auth.service';
 import { TokenStoreService, UserProfileInfo } from '../../../core/services/token-store.service';
@@ -321,7 +323,7 @@ export function getInitials(name: string): string {
             </div>
           }
         </div>
-      } @else {
+      } @else if (!isAuthRoute()) {
         <a
           routerLink="/login"
           class="inline-flex items-center justify-center rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
@@ -452,11 +454,37 @@ export class NavbarComponent {
     return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
   }
 
+  private readonly currentUrl = toSignal(
+    this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+      map((e) => e.urlAfterRedirects || e.url),
+    ),
+    { initialValue: this.router.url },
+  );
+
+  readonly isAuthRoute = computed<boolean>(() => {
+    const url = this.currentUrl();
+    if (!url) return false;
+    const cleanUrl = url.split('?')[0].split('#')[0];
+    return (
+      cleanUrl === '/login' ||
+      cleanUrl === '/register' ||
+      cleanUrl === '/forgot-password'
+    );
+  });
+
+  readonly isAuthenticated = computed<boolean>(() => {
+    if (this.isAuthRoute()) return false;
+    return this.tokenStore.isAuthenticated();
+  });
+
   readonly currentRole = computed<Role | null>(() => {
-    return (this.tokenStore.userRole() as Role) || (this.tokenStore.currentUser()?.role as Role) || null;
+    if (!this.isAuthenticated()) return null;
+    return (this.tokenStore.userRole() as Role) || null;
   });
 
   readonly homeRoute = computed<string>(() => {
+    if (!this.isAuthenticated()) return '/login';
     switch (this.currentRole()) {
       case Role.PATIENT: return '/patient/doctor-search';
       case Role.DOCTOR: return '/doctor/queue';
@@ -466,24 +494,16 @@ export class NavbarComponent {
     }
   });
 
-  readonly isAuthenticated = computed<boolean>(() => {
-    return this.tokenStore.isAuthenticated() || !!this.currentRole();
-  });
-
   readonly currentUser = computed<UserProfileInfo>(() => {
+    if (!this.isAuthenticated()) {
+      return { fullName: '', role: Role.PATIENT };
+    }
     const storeUser = this.tokenStore.currentUser();
     if (storeUser && storeUser.fullName) return storeUser;
 
-    try {
-      const saved = localStorage.getItem('currentUser');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed?.fullName) return parsed;
-      }
-    } catch {}
-
-    const role = this.currentRole() ?? Role.PATIENT;
-    return DEFAULT_USERS[role] ?? DEFAULT_USERS[Role.PATIENT];
+    const role = this.currentRole();
+    if (role && DEFAULT_USERS[role]) return DEFAULT_USERS[role];
+    return DEFAULT_USERS[Role.PATIENT];
   });
 
   readonly userInitials = computed<string>(() => {

@@ -8,8 +8,8 @@ export type UserProfileInfo = CurrentUser & {
 @Injectable({ providedIn: 'root' })
 export class TokenStoreService {
   private readonly _accessToken = signal<string | null>(null);
-  private readonly _userRole = signal<string | null>(this.readSavedUser()?.role ?? null);
-  private readonly _currentUser = signal<UserProfileInfo | null>(this.readSavedUser());
+  private readonly _userRole = signal<string | null>(null);
+  private readonly _currentUser = signal<UserProfileInfo | null>(null);
 
   readonly accessToken = this._accessToken.asReadonly();
   readonly userRole = this._userRole.asReadonly();
@@ -27,11 +27,15 @@ export class TokenStoreService {
   setSession(accessToken: string, role: string, user?: UserProfileInfo): void {
     this._accessToken.set(accessToken);
     this._userRole.set(role);
-    if (user) {
-      this._currentUser.set(user);
+    const resolvedUser = user ?? this.readSavedUser();
+    if (resolvedUser) {
+      const userWithRole = { ...resolvedUser, role };
+      this._currentUser.set(userWithRole);
       try {
-        localStorage.setItem('currentUser', JSON.stringify(user));
+        localStorage.setItem('currentUser', JSON.stringify(userWithRole));
       } catch {}
+    } else {
+      this._currentUser.set(null);
     }
   }
 
