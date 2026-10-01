@@ -232,23 +232,62 @@ Khi bệnh nhân đặt lịch và chọn phương thức thanh toán **Ví MoMo
 
 ---
 
-### Cách 2: Kiểm thử VNPAY Sandbox qua Thẻ NCB Test (Giao dịch tức thì) ⭐ *Khuyên dùng toàn dự án*
+### Cách 2: Kiểm thử VNPAY Sandbox (Giao dịch tức thì trên trình duyệt) ⭐ *Khuyên dùng toàn dự án*
 
-VNPAY Sandbox hoạt động trực tiếp 100% trên trình duyệt web, không cần bất kỳ ứng dụng nào:
-1. Tại bước thanh toán, chọn phương thức **VNPAY**.
-2. Web chuyển hướng sang cổng VNPAY Sandbox tại `https://sandbox.vnpayment.vn/...`
-3. Chọn tab **"Thẻ nội địa / Tài khoản ngân hàng"**, chọn ngân hàng **NCB**.
-4. Nhập thông tin thẻ thử nghiệm miễn phí được VNPAY cấp sẵn:
-   - **Số thẻ:** `9704198526191432198`
-   - **Tên chủ thẻ:** `NGUYEN VAN A`
-   - **Ngày phát hành:** `07/15`
-   - **Mật khẩu OTP:** `123456`
-5. Bấm **Xác nhận**:
-   - VNPAY ghi nhận giao dịch thành công ngay lập tức.
-   - Bệnh nhân được tự động điều hướng về `/patient/payment-result` với trạng thái thành công và cấp số thứ tự khám tự động.
+VNPAY Sandbox hoạt động trực tiếp 100% trên trình duyệt web mà không cần cài đặt bất kỳ ứng dụng ngân hàng nào. Tham khảo tài liệu chính thức tại: [VNPAY Sandbox Demo & Danh sách thẻ Test](http://sandbox.vnpayment.vn/apis/vnpay-demo/).
+
+#### 1. Quy trình thực hiện thanh toán VNPAY:
+1. Tại bước thanh toán đặt lịch trên Portal, chọn phương thức **Thanh toán qua VNPAY**.
+2. Hệ thống chuyển hướng sang cổng thanh toán VNPAY Sandbox tại `https://sandbox.vnpayment.vn/...`
+3. Lựa chọn phương thức thanh toán phù hợp:
+   - **Thẻ nội địa & tài khoản ngân hàng**: Chọn ngân hàng **NCB** (hoặc Eximbank/NAPAS).
+   - **Thẻ thanh toán quốc tế**: Chọn VISA, MasterCard hoặc JCB.
+4. Nhập thông tin thẻ từ bảng danh sách bên dưới, bấm **Tiếp tục**.
+5. Nhập mã OTP xác thực (mặc định: **`123456`**), bấm **Xác nhận**.
+6. Cổng VNPAY xử lý giao dịch và tự động chuyển hướng bệnh nhân về trang kết quả `/patient/payment-result` với số thứ tự khám (STT) và mã biên lai thanh toán.
+
+---
+
+#### 2. Danh sách thông tin thẻ thử nghiệm (VNPAY Sandbox Test Cards):
+
+##### A. Thẻ ATM Nội địa - Ngân hàng Quốc Dân (NCB)
+
+> Ngân hàng **NCB** là ngân hàng thử nghiệm mặc định và ổn định nhất trên môi trường VNPAY Sandbox.
+
+| Kịch bản kiểm thử | Ngân hàng | Số thẻ thử nghiệm | Tên chủ thẻ | Ngày phát hành | Mật khẩu OTP | Kết quả kỳ vọng |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Thanh toán thành công** ⭐ | **NCB** | `9704198526191432198` | `NGUYEN VAN A` | `07/15` | `123456` | Giao dịch thành công, cấp STT khám |
+| **Thẻ không đủ số dư** | NCB | `9704195798459170488` | `NGUYEN VAN A` | `07/15` | `123456` | Báo lỗi không đủ số dư tài khoản |
+| **Thẻ chưa kích hoạt** | NCB | `9704192181368742` | `NGUYEN VAN A` | `07/15` | `123456` | Báo lỗi thẻ chưa kích hoạt |
+| **Thẻ bị khóa** | NCB | `9704193370791314` | `NGUYEN VAN A` | `07/15` | `123456` | Báo lỗi thẻ đã bị khóa |
+| **Thẻ bị hết hạn** | NCB | `9704194841945513` | `NGUYEN VAN A` | `07/15` | `123456` | Báo lỗi thẻ hết hạn sử dụng |
+
+##### B. Thẻ Thanh toán Quốc tế (VISA, MasterCard, JCB)
+
+| Loại thẻ | Kịch bản 3DS | Số thẻ thử nghiệm | CVC/CVV | Ngày hết hạn | Tên chủ thẻ | Kết quả |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **VISA** | No 3DS | `4456530000001005` | `123` | `12/26` | `NGUYEN VAN A` | Thành công |
+| **VISA** | 3D-Secure (3DS) | `4456530000001096` | `123` | `12/26` | `NGUYEN VAN A` | Thành công |
+| **MasterCard** | No 3DS | `5200000000001005` | `123` | `12/26` | `NGUYEN VAN A` | Thành công |
+| **MasterCard** | 3D-Secure (3DS) | `5200000000001096` | `123` | `12/26` | `NGUYEN VAN A` | Thành công |
+| **JCB** | No 3DS | `3337000000000008` | `123` | `12/26` | `NGUYEN VAN A` | Thành công |
+| **JCB** | 3D-Secure (3DS) | `3337000000200004` | `123` | `12/24` | `NGUYEN VAN A` | Thành công |
+
+> *Ghi chú bổ sung cho thẻ quốc tế:* Địa chỉ: `22 Lang Ha`, Thành phố: `Ha Noi`, Email: `test@gmail.com`.
+
+##### C. Thẻ ATM Nội địa qua NAPAS & Eximbank
+
+| Tổ chức phát hành | Số thẻ thử nghiệm | Tên chủ thẻ | Ngày phát hành / Hạn | Mật khẩu OTP | Kết quả |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Nhóm Bank qua NAPAS** | `9704000000000018`<br>`9704020000000016` | `NGUYEN VAN A` | `03/07` | `otp` | Thành công |
+| **Eximbank** | `9704310005819191` | `NGUYEN VAN A` | `10/26` | `123456` | Thành công |
+
+> [!NOTE]
+> - **Quy định môi trường Sandbox VNPAY:** Chỉ chấp nhận các số thẻ trong danh sách thử nghiệm chính thức ở trên. Các ngân hàng khác trên giao diện demo đã tạm đóng cổng kết nối thử nghiệm.
+> - **Kịch bản người dùng Hủy giao dịch:** Nếu người dùng bấm **Hủy thanh toán** trên giao diện VNPAY, hệ thống sẽ trả về mã phản hồi `vnp_ResponseCode=24`. E-Healthcare Portal sẽ đưa giao dịch về trạng thái giữ chỗ tạm thời (`PENDING_PAYMENT`), cho phép người bệnh bấm **"Thử lại / Chọn phương thức khác"** hoặc **"Hủy giữ chỗ lịch hẹn"** để giải phóng slot khám cho người khác.
 
 > [!TIP]
-> Cả 2 cách trên đều kích hoạt toàn bộ chu trình xử lý bảo mật của hệ thống: kiểm tra chữ ký HMAC-SHA512, khóa phân tán Redis chống đặt trùng slot, tạo biên lai thanh toán và gửi thông báo đẩy Web Push.
+> Cả 2 cổng thanh toán (MoMo & VNPAY) đều kích hoạt toàn bộ chu trình xử lý bảo mật của hệ thống: kiểm tra chữ ký HMAC-SHA512, khóa phân tán Redis chống đặt trùng slot, tạo biên lai thanh toán và gửi thông báo đẩy Web Push.
 
 ---
 
