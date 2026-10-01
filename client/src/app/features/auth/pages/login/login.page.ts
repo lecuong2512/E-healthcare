@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
@@ -20,7 +20,7 @@ import { Role } from '@shared/enums/role.enum';
   imports: [FormsModule, ButtonComponent, RouterLink],
   templateUrl: './login.page.html',
 })
-export class LoginPage {
+export class LoginPage implements OnInit {
   protected readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   private readonly tokenStore = inject(TokenStoreService);
@@ -49,6 +49,12 @@ export class LoginPage {
         this.errorMessage.set(
           'Không thể phục hồi phiên Google. Vui lòng thử lại trên HTTPS.',
         );
+    }
+  }
+
+  ngOnInit(): void {
+    if (!this.tokenStore.isAuthenticated()) {
+      this.tokenStore.clear();
     }
   }
 

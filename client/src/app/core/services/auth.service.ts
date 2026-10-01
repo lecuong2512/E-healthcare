@@ -66,7 +66,12 @@ export class AuthService {
    * không văng lỗi ra UI.
    */
   bootstrapSession(): Observable<RefreshResponse | null> {
-    return this.refreshToken().pipe(catchError(() => of(null)));
+    return this.refreshToken().pipe(
+      catchError(() => {
+        this.tokenStore.clear();
+        return of(null);
+      }),
+    );
   }
 
   requestRegisterOtp(
