@@ -9,6 +9,7 @@ interface StaffView {
   phoneNumber: string; gender: string; dateOfBirth: string;
   facility: string; status: string; licenseNumber: string; academicTitle: string;
   yearsExperience: number; roomNumber: string; specialtyIds: string[];
+  consultationFee?: number | null;
   avatarUrl?: string | null;
 }
 interface RoomCatalogView extends ClinicRoomRow {}
@@ -24,6 +25,7 @@ export class StaffMgmtPage {
   private readonly formBuilder = inject(FormBuilder);
   readonly Role = Role;
   readonly showForm = signal(false);
+  readonly showPassword = signal(false);
   readonly submitting = signal(false);
   readonly savingDetails = signal(false);
   readonly errorMessage = signal('');
@@ -92,6 +94,7 @@ export class StaffMgmtPage {
     licenseNumber: ['', [Validators.pattern(/^[A-Za-z0-9][A-Za-z0-9./-]{4,49}$/)]],
     roomNumber: [''], academicTitle: [''],
     yearsExperience: [0, [Validators.min(0)]],
+    consultationFee: [200000, [Validators.min(0)]],
   });
   readonly detailForm = this.formBuilder.nonNullable.group({
     fullName: ['', [Validators.required, Validators.maxLength(100)]],
@@ -99,6 +102,7 @@ export class StaffMgmtPage {
     licenseNumber: ['', [Validators.pattern(/^[A-Za-z0-9][A-Za-z0-9./-]{4,49}$/)]],
     roomNumber: [''], academicTitle: [''],
     yearsExperience: [0, [Validators.min(0)]],
+    consultationFee: [200000, [Validators.min(0)]],
   });
   readonly roomForm = this.formBuilder.nonNullable.group({ roomNumber: ['', Validators.required], roomName: [''], specialtyId: [''], roomType: ['CONSULTATION'], location: [''], notes: [''] });
   readonly roomEditForm = this.formBuilder.nonNullable.group({ roomName: [''], specialtyId: [''], roomType: ['CONSULTATION'], location: [''], notes: [''], isActive: [true] });
@@ -122,7 +126,7 @@ export class StaffMgmtPage {
     else if (type === 'room') this.roomPage.set(target);
     else this.shiftPage.set(target);
   }
-  openForm(): void { this.errorMessage.set(''); this.selectedCreateSpecialtyIds.set([]); this.showForm.set(true); }
+  openForm(): void { this.errorMessage.set(''); this.showPassword.set(false); this.selectedCreateSpecialtyIds.set([]); this.showForm.set(true); }
 
   toggleCreateSpecialty(id: string, checked: boolean): void {
     this.selectedCreateSpecialtyIds.update(values => checked ? [...values, id] : values.filter(value => value !== id));
@@ -147,7 +151,7 @@ export class StaffMgmtPage {
       if (this.staffForm.controls.licenseNumber.invalid) {
         this.errorMessage.set('Số CCHN không đúng định dạng: chỉ gồm chữ, số, dấu chấm, gạch chéo hoặc gạch ngang (tối thiểu 5 ký tự).');
       } else {
-        this.errorMessage.set('Vui lòng kiểm tra lại các trường thông tin bắt buộc.');
+        this.errorMessage.set('Vui lòng kiểm tra lại các trường thông tin bắt buộc (chữ đỏ).');
       }
       return;
     }
@@ -161,11 +165,12 @@ export class StaffMgmtPage {
     if (value.role === Role.DOCTOR && (!specialtyIds.length || !value.licenseNumber || !value.roomNumber || value.yearsExperience == null)) {
       this.errorMessage.set('Bác sĩ cần chuyên khoa, CCHN, kinh nghiệm và phòng khám.'); return;
     }
+    const consultationFee = value.role === Role.DOCTOR ? (Number(value.consultationFee) >= 0 ? Number(value.consultationFee) : 200000) : undefined;
     this.submitting.set(true); this.errorMessage.set('');
-    this.api.create({ ...value, specialtyIds }).subscribe({
+    this.api.create({ ...value, specialtyIds, consultationFee }).subscribe({
       next: () => {
         this.submitting.set(false); this.showForm.set(false); this.selectedCreateSpecialtyIds.set([]);
-        this.staffForm.reset({ role: Role.DOCTOR, gender: 'MALE', fullName: '', email: '', phoneNumber: '', password: '', dateOfBirth: '', specialtyId: '', licenseNumber: '', roomNumber: '', academicTitle: '', yearsExperience: 0 });
+        this.staffForm.reset({ role: Role.DOCTOR, gender: 'MALE', fullName: '', email: '', phoneNumber: '', password: '', dateOfBirth: '', specialtyId: '', licenseNumber: '', roomNumber: '', academicTitle: '', yearsExperience: 0, consultationFee: 200000 });
         this.loadStaff();
         this.loadRooms();
         this.loadRoomCatalog();
@@ -184,7 +189,7 @@ export class StaffMgmtPage {
     this.avatarUploadError.set('');
     this.avatarUploadSuccess.set('');
     this.selectedDetailSpecialtyIds.set([...person.specialtyIds]);
-    this.detailForm.reset({ fullName: person.name, phoneNumber: person.phoneNumber, gender: person.gender, dateOfBirth: person.dateOfBirth, licenseNumber: person.licenseNumber, roomNumber: person.roomNumber, academicTitle: person.academicTitle, yearsExperience: person.yearsExperience });
+    this.detailForm.reset({ fullName: person.name, phoneNumber: person.phoneNumber, gender: person.gender, dateOfBirth: person.dateOfBirth, licenseNumber: person.licenseNumber, roomNumber: person.roomNumber, academicTitle: person.academicTitle, yearsExperience: person.yearsExperience, consultationFee: person.consultationFee ?? 200000 });
     this.errorMessage.set('');
   }
 
@@ -227,6 +232,7 @@ export class StaffMgmtPage {
   saveDetails(): void {
     const person = this.selectedStaff();
     if (!person || this.detailForm.invalid) {
+      this.detailForm.markAllAsTouched();
       if (this.detailForm.controls.licenseNumber.invalid) {
         this.errorMessage.set('Số CCHN không đúng định dạng (tối thiểu 5 ký tự).');
       }
@@ -241,8 +247,9 @@ export class StaffMgmtPage {
     if (person.roleValue === Role.DOCTOR && !specialtyIds.length) {
       this.errorMessage.set('Bác sĩ phải thuộc ít nhất một chuyên khoa.'); return;
     }
+    const consultationFee = person.roleValue === Role.DOCTOR ? (Number(rawDetails.consultationFee) >= 0 ? Number(rawDetails.consultationFee) : 200000) : undefined;
     this.savingDetails.set(true); this.errorMessage.set('');
-    this.api.updateProfile(person.id, { ...this.detailForm.getRawValue(), specialtyIds }).subscribe({
+    this.api.updateProfile(person.id, { ...rawDetails, specialtyIds, consultationFee }).subscribe({
       next: () => { this.savingDetails.set(false); this.selectedStaff.set(null); this.loadStaff(); this.loadRooms(); this.loadRoomCatalog(); },
       error: (err) => {
         this.savingDetails.set(false);
@@ -321,13 +328,15 @@ export class StaffMgmtPage {
 
   private toView(person: StaffRow, index: number): StaffView {
     return {
-      id: person.id, code: `NV-${String(index + 1).padStart(5, '0')}`,
+      id: person.id,
+      code: person.code || `NV-${String(index + 1).padStart(5, '0')}`,
       name: person.fullName, email: person.email ?? '', phoneNumber: person.phoneNumber ?? '',
       gender: person.gender ?? 'MALE', dateOfBirth: person.dateOfBirth ?? '', role: this.roleLabel(person.role), roleValue: person.role,
       facility: person.roomNumber || 'Trung tâm',
       status: person.status === 'ACTIVE' ? 'Hoạt động' : person.status === 'BLOCKED' ? 'Đã khóa' : person.status === 'SUSPENDED' ? 'Tạm ngưng' : 'Chờ kích hoạt',
       licenseNumber: person.licenseNumber ?? '', academicTitle: person.academicTitle ?? '',
       yearsExperience: person.yearsExperience ?? 0, roomNumber: person.roomNumber ?? '',
+      consultationFee: person.consultationFee ?? null,
       specialtyIds: person.specialtyIds ?? [],
       avatarUrl: person.avatarUrl ?? null,
     };

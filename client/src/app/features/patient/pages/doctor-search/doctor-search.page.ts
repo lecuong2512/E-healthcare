@@ -11,6 +11,7 @@ export interface Doctor {
   degree: string;
   name: string;
   specialty: string;
+  specialties?: string[];
   hospital: string;
   experienceYears: number;
   tags: string[];
@@ -73,11 +74,30 @@ export class DoctorSearchPage {
         .some((value) => value.toLocaleLowerCase('vi').includes(query));
 
       const matchesSpecialty = !specialty || (() => {
-        const normSpecialty = normalize(specialty);
-        const normDocSpecialty = normalize(doctor.specialty || '');
-        return normDocSpecialty.includes(normSpecialty) ||
-          normSpecialty.includes(normDocSpecialty) ||
-          (doctor.tags && doctor.tags.some(tag => normalize(tag).includes(normSpecialty)));
+        const clean = (s: string) => normalize(s).replace(/\bkhoa\b/gi, '').trim();
+        const cleanSpec = clean(specialty);
+        if (!cleanSpec) return true;
+
+        const cleanDocSpec = clean(doctor.specialty || '');
+        if (cleanDocSpec.includes(cleanSpec) || cleanSpec.includes(cleanDocSpec)) {
+          return true;
+        }
+
+        if (doctor.specialties && doctor.specialties.some(sp => {
+          const c = clean(sp);
+          return c.includes(cleanSpec) || cleanSpec.includes(c);
+        })) {
+          return true;
+        }
+
+        if (doctor.tags && doctor.tags.some(tag => {
+          const c = clean(tag);
+          return c.includes(cleanSpec) || cleanSpec.includes(c);
+        })) {
+          return true;
+        }
+
+        return false;
       })();
 
       const matchesRating = !this.filterHighRating() || doctor.rating >= 4;
@@ -126,21 +146,28 @@ export class DoctorSearchPage {
       next: ({ response, available }) => {
         const availableIds = new Set(available?.data.map(doctor => doctor.id));
         this.availableDoctorIdsByDate.set(this.todayStr, availableIds);
-        this.doctors.set(response.data.map((doctor) => ({
-          id: doctor.id,
-          degree: doctor.academicTitle || 'Bác sĩ',
-          name: doctor.fullName,
-          specialty: doctor.specialty.name,
-          hospital: `Phòng khám ${doctor.roomNumber}`,
-          experienceYears: 0,
-          tags: [doctor.specialty.name],
-          services: [doctor.bioDescription || `Khám chuyên khoa ${doctor.specialty.name}`],
-          availableToday: availableIds.has(doctor.id),
-          price: Number(doctor.consultationFee),
-          rating: Number(doctor.ratingAverage),
-          reviewCount: 0,
-          avatarUrl: doctor.avatarUrl ?? null,
-        })));
+        this.doctors.set(response.data.map((doctor) => {
+          const allSpecs = doctor.specialties && doctor.specialties.length > 0
+            ? doctor.specialties.map(s => s.name)
+            : [doctor.specialty.name];
+          const fee = Number(doctor.consultationFee);
+          return {
+            id: doctor.id,
+            degree: doctor.academicTitle || 'Bác sĩ',
+            name: doctor.fullName,
+            specialty: doctor.specialty.name,
+            specialties: allSpecs,
+            hospital: `Phòng khám ${doctor.roomNumber}`,
+            experienceYears: 0,
+            tags: allSpecs,
+            services: [doctor.bioDescription || `Khám chuyên khoa ${doctor.specialty.name}`],
+            availableToday: availableIds.has(doctor.id),
+            price: fee > 0 ? fee : 200000,
+            rating: Number(doctor.ratingAverage),
+            reviewCount: 0,
+            avatarUrl: doctor.avatarUrl ?? null,
+          };
+        }));
         this.loading.set(false);
       },
       error: () => {

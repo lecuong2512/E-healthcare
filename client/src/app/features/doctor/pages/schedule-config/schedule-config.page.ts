@@ -11,7 +11,7 @@ import {
   DoctorScheduleSlot,
 } from '../../../../core/services/doctor-schedule.service';
 
-export type ShiftId = 'MORNING' | 'AFTERNOON';
+export type ShiftId = 'MORNING' | 'AFTERNOON' | 'EVENING';
 export type ViewMode = 'week' | 'month';
 export type ScheduleSlot = {
   id: string;
@@ -30,6 +30,7 @@ const WEEKDAYS = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sá
 const SHIFT_INFO: Record<ShiftId, { label: string; start: number; end: number }> = {
   MORNING: { label: 'Ca sáng', start: 8 * 60, end: 12 * 60 },
   AFTERNOON: { label: 'Ca chiều', start: 13 * 60 + 30, end: 17 * 60 + 30 },
+  EVENING: { label: 'Ca tối', start: 18 * 60, end: 21 * 60 },
 };
 
 @Component({
@@ -41,7 +42,7 @@ const SHIFT_INFO: Record<ShiftId, { label: string; start: number; end: number }>
 export class ScheduleConfigPage implements OnInit {
   private readonly scheduleService = inject(DoctorScheduleService);
 
-  readonly shifts: ShiftId[] = ['MORNING', 'AFTERNOON'];
+  readonly shifts: ShiftId[] = ['MORNING', 'AFTERNOON', 'EVENING'];
   readonly weekdays = WEEKDAYS;
   readonly durations: Array<15 | 30> = [15, 30];
   roomOptions: string[] = ['P.101', 'P.102', 'P.103', 'P.104', 'P.105'];
@@ -50,7 +51,7 @@ export class ScheduleConfigPage implements OnInit {
   anchor = new Date();
   isLoading = false;
   showRegistrationForm = false;
-  registrationMode: 'weekday' | 'date' = 'weekday';
+  registrationMode: 'weekday' | 'date' = 'date';
   selectedWeekday = 0;
   selectedDate = '';
   selectedShift: ShiftId = 'MORNING';
@@ -259,9 +260,20 @@ export class ScheduleConfigPage implements OnInit {
 
   openRegistration(): void {
     this.formMessage = '';
+    this.registrationMode = 'date';
     this.selectedWeekday = 0;
-    this.selectedDate = this.dateKey(this.addDays(this.nextMonday(), 0));
+    this.selectedDate = this.dateKey(new Date());
     this.selectedShift = 'MORNING';
+    this.slotDuration = 15;
+    this.maxPatients = this.maxAllowedPatients;
+    this.showRegistrationForm = true;
+  }
+
+  openQuickRegister(date: Date, shift: ShiftId): void {
+    this.formMessage = '';
+    this.registrationMode = 'date';
+    this.selectedDate = this.dateKey(date);
+    this.selectedShift = shift;
     this.slotDuration = 15;
     this.maxPatients = this.maxAllowedPatients;
     this.showRegistrationForm = true;
@@ -449,7 +461,9 @@ export class ScheduleConfigPage implements OnInit {
 
   private getShiftFromTime(startTime: string): ShiftId {
     const mins = this.toMinutes(startTime);
-    return mins < 13 * 60 ? 'MORNING' : 'AFTERNOON';
+    if (mins >= 17 * 60 + 30) return 'EVENING';
+    if (mins >= 12 * 60 + 30) return 'AFTERNOON';
+    return 'MORNING';
   }
 
   private startOfWeek(date: Date): Date {

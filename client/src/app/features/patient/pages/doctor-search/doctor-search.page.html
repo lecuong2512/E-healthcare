@@ -212,9 +212,18 @@
                   </div>
 
                   <!-- Badge chuyên khoa -->
-                  <span class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-[#E0F2FE] text-[#0284C7] whitespace-nowrap shrink-0">
-                    {{ doc.specialty }}
-                  </span>
+                  <div class="flex flex-col items-end gap-1 shrink-0">
+                    <span class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-[#E0F2FE] text-[#0284C7] whitespace-nowrap">
+                      {{ doc.specialty }}
+                    </span>
+                    @if (doc.specialties && doc.specialties.length > 1) {
+                      @for (extra of doc.specialties.slice(1); track extra) {
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 whitespace-nowrap">
+                          + {{ extra }}
+                        </span>
+                      }
+                    }
+                  </div>
                 </div>
 
                 <!-- Bằng cấp / Học vị -->

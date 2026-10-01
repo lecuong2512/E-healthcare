@@ -71,7 +71,7 @@
   </section>
 
   @if (showForm()) {
-    <div class="shade"><form [formGroup]="staffForm" (ngSubmit)="createStaff()">
+    <div class="shade"><form [formGroup]="staffForm" (ngSubmit)="createStaff()" novalidate>
       <header><div><h2>Thêm nhân sự</h2><p>Tạo tài khoản và hồ sơ chuyên môn.</p></div><button type="button" class="close" (click)="showForm.set(false)">×</button></header>
       @if (errorMessage()) {
         <div style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
@@ -79,19 +79,57 @@
         </div>
       }
       <div class="form-grid">
-        <label>Họ tên<input formControlName="fullName" required /></label><label>Email<input formControlName="email" type="email" required /></label>
-        <label>Số điện thoại<input formControlName="phoneNumber" type="tel" /></label><label>Giới tính<select formControlName="gender"><option value="MALE">Nam</option><option value="FEMALE">Nữ</option><option value="OTHER">Khác</option></select></label>
-        <label>Mật khẩu tạm thời<input formControlName="password" type="password" required /></label><label>Ngày sinh<input formControlName="dateOfBirth" type="date" required /></label>
+        <label>
+          Họ tên *
+          <input formControlName="fullName" placeholder="Nguyễn Văn A" />
+          @if (staffForm.controls.fullName.invalid && staffForm.controls.fullName.touched) {
+            <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Vui lòng nhập họ tên nhân sự.</span>
+          }
+        </label>
+        <label>
+          Email *
+          <input formControlName="email" type="email" placeholder="example@clinic.vn" />
+          @if (staffForm.controls.email.invalid && staffForm.controls.email.touched) {
+            <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Vui lòng nhập email hợp lệ.</span>
+          }
+        </label>
+        <label>
+          Số điện thoại
+          <input formControlName="phoneNumber" type="tel" placeholder="0901234567" />
+          @if (staffForm.controls.phoneNumber.touched && staffForm.controls.phoneNumber.value && !staffForm.controls.phoneNumber.valid) {
+            <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Số điện thoại gồm 10 số di động VN.</span>
+          }
+        </label>
+        <label>Giới tính<select formControlName="gender"><option value="MALE">Nam</option><option value="FEMALE">Nữ</option><option value="OTHER">Khác</option></select></label>
+        <label>
+          Mật khẩu tạm thời *
+          <div style="position: relative; display: flex; align-items: center;">
+            <input [type]="showPassword() ? 'text' : 'password'" formControlName="password" style="padding-right: 36px; width: 100%;" placeholder="Tối thiểu 8 ký tự" />
+            <button type="button" (click)="showPassword.set(!showPassword())" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; font-size: 16px; color: #64748b;" aria-label="Hiện/ẩn mật khẩu">
+              {{ showPassword() ? '👁️' : '🙈' }}
+            </button>
+          </div>
+          @if (staffForm.controls.password.invalid && staffForm.controls.password.touched) {
+            <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Mật khẩu tối thiểu 8 ký tự.</span>
+          }
+        </label>
+        <label>
+          Ngày sinh *
+          <input formControlName="dateOfBirth" type="date" />
+          @if (staffForm.controls.dateOfBirth.invalid && staffForm.controls.dateOfBirth.touched) {
+            <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Vui lòng chọn ngày sinh.</span>
+          }
+        </label>
         <label>Vai trò<select formControlName="role"><option [value]="Role.DOCTOR">Bác sĩ</option><option [value]="Role.RECEPTIONIST">Lễ tân</option><option [value]="Role.ADMIN">Quản trị</option></select></label>
         @if (staffForm.controls.role.value === Role.DOCTOR) {
           <label>
-            Số CCHN
+            Số CCHN *
             <input formControlName="licenseNumber" placeholder="Ví dụ: CCHN-00123" />
             @if (staffForm.controls.licenseNumber.invalid && staffForm.controls.licenseNumber.touched) {
               <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Tối thiểu 5 ký tự (chữ, số, ., /, -)</span>
             }
           </label>
-          <label>Phòng/Buồng khám
+          <label>Phòng/Buồng khám *
             <select formControlName="roomNumber" (change)="onRoomSelected($any($event.target).value)">
               <option value="">Chọn phòng/buồng</option>
               @for (room of availableRooms(); track room.roomNumber) {
@@ -99,8 +137,10 @@
               }
             </select>
           </label>
-          <label>Số năm kinh nghiệm<input formControlName="yearsExperience" type="number" min="0" /></label><label>Học hàm / học vị<input formControlName="academicTitle" /></label>
-          <fieldset class="specialties"><legend>Chuyên khoa (chọn một hoặc nhiều)</legend>@for (specialty of specialties(); track specialty.id) { <label><input type="checkbox" data-testid="create-specialty-option" [checked]="selectedCreateSpecialtyIds().includes(specialty.id)" (change)="toggleCreateSpecialty(specialty.id, $any($event.target).checked)" />{{ specialty.name }}</label> }</fieldset>
+          <label>Số năm kinh nghiệm<input formControlName="yearsExperience" type="number" min="0" /></label>
+          <label>Học hàm / học vị<input formControlName="academicTitle" placeholder="ThS.BS, BSCKII, ..." /></label>
+          <label>Tiền khám (VNĐ)<input formControlName="consultationFee" type="number" min="0" step="10000" placeholder="200000" /></label>
+          <fieldset class="specialties"><legend>Chuyên khoa (chọn một hoặc nhiều) *</legend>@for (specialty of specialties(); track specialty.id) { <label><input type="checkbox" data-testid="create-specialty-option" [checked]="selectedCreateSpecialtyIds().includes(specialty.id)" (change)="toggleCreateSpecialty(specialty.id, $any($event.target).checked)" />{{ specialty.name }}</label> }</fieldset>
         }
       </div>
       <footer><button type="button" (click)="showForm.set(false)">Hủy</button><button class="primary" [disabled]="submitting()" type="submit">{{ submitting() ? 'Đang tạo...' : 'Tạo tài khoản' }}</button></footer>
@@ -150,6 +190,7 @@
             }
           </label>
           <label>Số năm kinh nghiệm<input formControlName="yearsExperience" type="number" min="0" /></label>
+          <label>Tiền khám (VNĐ)<input formControlName="consultationFee" type="number" min="0" step="10000" /></label>
           <label>Phòng/Buồng khám
             <select formControlName="roomNumber">
               <option value="">Chọn phòng/buồng</option>

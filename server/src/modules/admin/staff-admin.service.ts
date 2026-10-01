@@ -1,9 +1,10 @@
 import { BadRequestException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
-import { DateOfBirthPrecision, Gender, Role, UserStatus } from '@shared/enums';
+import { DateOfBirthPrecision, Gender, Role, UserStatus, SlotStatus } from '@shared/enums';
 import { UserEntity } from '../../database/entities/user.entity';
 import { UserRoleEntity } from '../../database/entities/auth.entity';
 import { DoctorEntity } from '../../database/entities/doctor.entity';
+import { DoctorScheduleEntity } from '../../database/entities/doctor-schedule.entity';
 import { DoctorSpecialtyEntity } from '../../database/entities/doctor-specialty.entity';
 import { DoctorRecurringShiftEntity } from '../../database/entities/doctor-recurring-shift.entity';
 import { ClinicRoomEntity } from '../../database/entities/clinic-room.entity';
@@ -14,14 +15,14 @@ export interface CreateStaffInput {
   fullName: string; email: string; phoneNumber?: string; password: string; role: Role; gender: Gender;
   dateOfBirth: string; specialtyId?: string; specialtyIds?: string[];
   licenseNumber?: string; roomNumber?: string; academicTitle?: string;
-  yearsExperience?: number;
+  yearsExperience?: number; consultationFee?: number;
 }
 
 export interface UpdateStaffProfileInput {
   fullName?: string; phoneNumber?: string | null; gender?: Gender; dateOfBirth?: string;
   licenseNumber?: string; roomNumber?: string;
   academicTitle?: string | null; yearsExperience?: number; specialtyIds?: string[];
-  avatarUrl?: string | null;
+  avatarUrl?: string | null; consultationFee?: number;
 }
 
 @Injectable()
@@ -58,13 +59,26 @@ export class StaffAdminService {
       specialtyIdsByDoctorId.set(assignment.doctorId, values);
     }
 
+    const sorted = [...users].sort((a, b) => {
+      const tA = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0;
+      const tB = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0;
+      return tA - tB;
+    });
+    const codeMap = new Map<string, string>();
+    sorted.forEach((u, index) => {
+      codeMap.set(u.id, `NV-${String(index + 1).padStart(5, '0')}`);
+    });
+
     const data = users.map(user => {
       const doctor = doctorByUserId.get(user.id);
       return {
-        id: user.id, fullName: user.fullName, email: user.email, phoneNumber: user.phoneNumber,
+        id: user.id,
+        code: codeMap.get(user.id) || `NV-${user.id.slice(0, 5).toUpperCase()}`,
+        fullName: user.fullName, email: user.email, phoneNumber: user.phoneNumber,
         gender: user.gender, dateOfBirth: user.dateOfBirth, status: user.status,
         role: roleByUserId.get(user.id)!, licenseNumber: doctor?.licenseNumber ?? null,
         academicTitle: doctor?.academicTitle ?? null, yearsExperience: doctor?.yearsExperience ?? null,
+        consultationFee: doctor ? Number(doctor.consultationFee) : null,
         roomNumber: doctor?.roomNumber ?? null,
         specialtyIds: doctor ? (specialtyIdsByDoctorId.get(doctor.id) ?? [doctor.specialtyId]) : [],
         avatarUrl: doctor?.avatarUrl ?? user.avatarUrl ?? null,
@@ -168,7 +182,7 @@ export class StaffAdminService {
             licenseNumber: input.licenseNumber!.trim().toUpperCase(),
             academicTitle: input.academicTitle ?? null,
             yearsExperience: input.yearsExperience!,
-            consultationFee: 0,
+            consultationFee: input.consultationFee !== undefined && Number(input.consultationFee) >= 0 ? Number(input.consultationFee) : 200000,
             bioDescription: null,
             roomNumber: normRoom,
             ratingAverage: 5,
@@ -265,6 +279,9 @@ export class StaffAdminService {
             }
           }
           if (input.academicTitle !== undefined) doctor.academicTitle = input.academicTitle?.trim() || null;
+          if (input.consultationFee !== undefined && Number(input.consultationFee) >= 0) {
+            doctor.consultationFee = Number(input.consultationFee);
+          }
           if (input.yearsExperience !== undefined) {
             if (input.yearsExperience < 0) throw new BadRequestException('Số năm kinh nghiệm không hợp lệ.');
             doctor.yearsExperience = input.yearsExperience;
@@ -312,7 +329,55 @@ export class StaffAdminService {
   async createShiftAssignment(input: { userId: string; roomId: string; shiftDate: string; startTime: string; endTime: string; notes?: string }) {
     if (!input.userId || !input.roomId || !input.shiftDate || !input.startTime || !input.endTime || input.endTime <= input.startTime) throw new BadRequestException('Thông tin phân ca không hợp lệ.');
     const repository = this.dataSource.getRepository(StaffShiftAssignmentEntity);
-    return repository.save(repository.create({ ...input, notes: input.notes?.trim() || null, approvalStatus: 'PENDING', approvedBy: null, approvedAt: null }));
+    const saved = await repository.save(repository.create({ ...input, notes: input.notes?.trim() || null, approvalStatus: 'PENDING', approvedBy: null, approvedAt: null }));
+    
+    // Tự động đồng bộ ca khám cho Bác sĩ (DoctorScheduleEntity) để bệnh nhân có thể đặt lịch ngay
+    try {
+      const doctorRepo = this.dataSource.getRepository ? this.dataSource.getRepository(DoctorEntity) : null;
+      if (doctorRepo?.findOneBy) {
+        const doctor = await doctorRepo.findOneBy({ userId: input.userId });
+        if (doctor) {
+          await this.syncDoctorScheduleSlots(doctor.id, input.shiftDate, input.startTime, input.endTime);
+        }
+      }
+    } catch {
+      // Không chặn phân ca nội bộ nếu có lỗi phụ
+    }
+    return saved;
+  }
+
+  private async syncDoctorScheduleSlots(doctorId: string, date: string, startTime: string, endTime: string): Promise<void> {
+    const startParts = startTime.split(':').map(Number);
+    const endParts = endTime.split(':').map(Number);
+    let startMin = startParts[0] * 60 + (startParts[1] || 0);
+    const endMin = endParts[0] * 60 + (endParts[1] || 0);
+    const duration = 30; // 30 phút/slot
+    const scheduleRepo = this.dataSource.getRepository(DoctorScheduleEntity);
+
+    while (startMin + duration <= endMin) {
+      const sH = Math.floor(startMin / 60).toString().padStart(2, '0');
+      const sM = (startMin % 60).toString().padStart(2, '0');
+      const eH = Math.floor((startMin + duration) / 60).toString().padStart(2, '0');
+      const eM = ((startMin + duration) % 60).toString().padStart(2, '0');
+      const sTime = `${sH}:${sM}:00`;
+      const eTime = `${eH}:${eM}:00`;
+
+      const existing = await scheduleRepo.findOneBy({
+        doctorId,
+        date,
+        startTime: sTime,
+      });
+      if (!existing) {
+        await scheduleRepo.save(scheduleRepo.create({
+          doctorId,
+          date,
+          startTime: sTime,
+          endTime: eTime,
+          status: SlotStatus.AVAILABLE,
+        }));
+      }
+      startMin += duration;
+    }
   }
 
   async updateShiftAssignment(shiftId: string, input: Partial<{ shiftDate: string; startTime: string; endTime: string; roomId: string; notes: string; approvalStatus: ShiftApprovalStatus }>) {
