@@ -1,0 +1,436 @@
+import { HttpErrorResponse } from '@angular/common/http';
+import { signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { Subject, of, throwError } from 'rxjs';
+import { Socket } from 'socket.io-client';
+
+import {
+  AppointmentStatus,
+  CounterPaymentMethod,
+  DateOfBirthPrecision,
+  Gender,
+  PaymentMethod,
+  PaymentStatus,
+  QueueSource,
+} from '@shared/enums';
+import {
+  APPOINTMENT_STATUS_CHANGED_EVENT,
+  QUEUE_SNAPSHOT_EVENT,
+  QUEUE_SYNC_EVENT,
+} from '@shared/constants/queue-socket.constants';
+import { SocketService } from '../../../core/services/socket.service';
+import { AvailableWalkInDoctor } from '@shared/interfaces';
+import { ReceptionistApiService } from './receptionist-api.service';
+import { ReceptionistFacade } from './receptionist-facade.service';
+import { APPOINTMENT, CHECK_IN, RECEIPT } from '../testing/reception-print.fixtures';
+
+class FakeQueueSocket {
+  connected = true;
+  private readonly listeners = new Map<string, Set<(payload: any) => void>>();
+  readonly emitted: Array<{ event: string; payload?: unknown }> = [];
+
+  on(event: string, listener: (payload: any) => void): this {
+    const listeners = this.listeners.get(event) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(event, listeners);
+    return this;
+  }
+
+  off(event: string, listener: (payload: any) => void): this {
+    this.listeners.get(event)?.delete(listener);
+    return this;
+  }
+
+  emit(event: string, payload?: unknown): this {
+    this.emitted.push({ event, payload });
+    return this;
+  }
+
+  serverEmit(event: string, payload?: unknown): void {
+    for (const listener of this.listeners.get(event) ?? []) {
+      listener(payload);
+    }
+  }
+}
+
+describe('ReceptionistFacade', () => {
+  let facade: ReceptionistFacade;
+  let api: jasmine.SpyObj<ReceptionistApiService>;
+  let socket: FakeQueueSocket;
+  let socketService: {
+    connectionStates: ReturnType<typeof signal<Record<string, any>>>;
+    connect: jasmine.Spy;
+    disconnect: jasmine.Spy;
+  };
+
+  beforeEach(() => {
+    socket = new FakeQueueSocket();
+    api = jasmine.createSpyObj<ReceptionistApiService>(
+      'ReceptionistApiService',
+      [
+        'lookupAppointments',
+        'lookupQr',
+        'checkInByQr',
+        'checkIn',
+        'collectPayment',
+        'getReceipt',
+        'getClinicProfile',
+        'getWalkInDoctors',
+        'createWalkIn',
+        'getQueue',
+      ],
+    );
+    api.lookupAppointments.and.returnValue(of([]));
+    api.getWalkInDoctors.and.returnValue(of([]));
+    api.getClinicProfile.and.returnValue(of({ clinicName: 'Phòng khám kiểm thử', address: 'Địa chỉ kiểm thử' }));
+    api.getQueue.and.returnValue(
+      of({ scope: 'RECEPTION', date: '2026-09-24', items: [] }),
+    );
+
+    socketService = {
+      connectionStates: signal<Record<string, any>>({
+        '/queue': 'connected',
+      }),
+      connect: jasmine
+        .createSpy('connect')
+        .and.returnValue(socket as unknown as Socket),
+      disconnect: jasmine.createSpy('disconnect'),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        ReceptionistFacade,
+        { provide: ReceptionistApiService, useValue: api },
+        { provide: SocketService, useValue: socketService },
+      ],
+    });
+
+    facade = TestBed.inject(ReceptionistFacade);
+    TestBed.flushEffects();
+  });
+
+  it('maps a phone lookup response into selected presentation state', () => {
+    api.lookupAppointments.and.returnValue(
+      of([
+        {
+          id: 'appointment-1',
+          appointmentCode: 'APT-260924-0001',
+          status: AppointmentStatus.CONFIRMED,
+          patientId: 'patient-1',
+          patientName: 'Nguyễn Văn An',
+          patientPhone: '0912345678',
+          doctorId: 'doctor-1',
+          doctorName: 'Trần Minh Bình',
+          specialtyName: 'Tim mạch',
+          roomNumber: 'P.201',
+          date: '2026-09-24',
+          startTime: '09:00',
+          endTime: '09:30',
+          paymentStatus: PaymentStatus.PAID,
+          paymentMethod: PaymentMethod.PAY_AT_CLINIC,
+          totalAmount: 350_000,
+          queueNumber: null,
+          checkedInAt: null,
+          requiresPayment: false,
+          canCheckIn: true,
+          blockedReason: null,
+        },
+      ]),
+    );
+
+    facade.lookup({ kind: 'PHONE', value: '0912345678' });
+
+    expect(api.lookupAppointments).toHaveBeenCalledOnceWith({
+      phone: '0912345678',
+    });
+    expect(facade.selectedAppointment()?.id).toBe('appointment-1');
+    expect(facade.loading()).toBeFalse();
+  });
+
+  it('does not request a counter receipt for a paid online appointment', () => {
+    api.lookupAppointments.and.returnValue(of([{
+      id: 'appointment-online', appointmentCode: 'APT-ONLINE', status: AppointmentStatus.CONFIRMED,
+      patientId: 'patient-1', patientName: 'An', patientPhone: '0912345678',
+      doctorId: 'doctor-1', doctorName: 'Binh', specialtyName: 'Tim mach', roomNumber: '201',
+      date: '2026-09-24', startTime: '09:00', endTime: '09:30',
+      paymentStatus: PaymentStatus.PAID, paymentMethod: PaymentMethod.VNPAY,
+      totalAmount: 350_000, queueNumber: null, checkedInAt: null,
+      requiresPayment: false, canCheckIn: true, blockedReason: null,
+    }]));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: 'APT-ONLINE' });
+    facade.loadReceipt('appointment-online');
+    expect(api.getReceipt).not.toHaveBeenCalled();
+    expect(facade.printData()).toBeNull();
+  });
+
+  it('prepares K80 after check-in and reprints without another check-in request', () => {
+    api.lookupAppointments.and.returnValue(of([APPOINTMENT]));
+    api.checkIn.and.returnValue(of(CHECK_IN));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: APPOINTMENT.appointmentCode });
+    facade.checkIn(APPOINTMENT.id);
+    expect(facade.selectedAppointment()?.status).toBe(AppointmentStatus.CHECKED_IN);
+    expect(facade.printData()).toEqual(jasmine.objectContaining({
+      type: 'CHECKIN_TICKET', queueNumber: CHECK_IN.queueNumber,
+      qrValue: APPOINTMENT.appointmentCode,
+    }));
+    facade.prepareCheckinPrint(APPOINTMENT.id);
+    expect(api.checkIn).toHaveBeenCalledTimes(1);
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: APPOINTMENT.appointmentCode });
+    expect(facade.printData()).toBeNull();
+  });
+
+  it('keeps a completed check-in when clinic profile is unavailable', () => {
+    api.lookupAppointments.and.returnValue(of([APPOINTMENT]));
+    api.checkIn.and.returnValue(of(CHECK_IN));
+    api.getClinicProfile.and.returnValue(throwError(() => new HttpErrorResponse({ status: 503 })));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: APPOINTMENT.appointmentCode });
+    facade.checkIn(APPOINTMENT.id);
+    expect(facade.selectedAppointment()?.status).toBe(AppointmentStatus.CHECKED_IN);
+    expect(facade.printData()).toBeNull();
+    expect(facade.printError()).toContain('Chưa tải được thông tin phòng khám');
+  });
+
+  it('clears prepared print data when a Walk-in session starts and ends', () => {
+    api.lookupAppointments.and.returnValue(of([APPOINTMENT]));
+    api.checkIn.and.returnValue(of(CHECK_IN));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: APPOINTMENT.appointmentCode });
+    facade.checkIn(APPOINTMENT.id);
+    expect(facade.printData()?.type).toBe('CHECKIN_TICKET');
+
+    facade.beginWalkInSession();
+    expect(facade.printData()).toBeNull();
+
+    facade.prepareCheckinPrint(APPOINTMENT.id);
+    expect(facade.printData()?.type).toBe('CHECKIN_TICKET');
+    facade.endWalkInSession();
+    expect(facade.printData()).toBeNull();
+  });
+
+  it('does not publish a pending print after leaving a Walk-in session', () => {
+    const profile = new Subject<{ clinicName: string; address: string }>();
+    api.getClinicProfile.and.returnValue(profile);
+    api.lookupAppointments.and.returnValue(of([APPOINTMENT]));
+    api.checkIn.and.returnValue(of(CHECK_IN));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: APPOINTMENT.appointmentCode });
+    facade.checkIn(APPOINTMENT.id);
+
+    facade.endWalkInSession();
+    profile.next({ clinicName: 'Phòng khám kiểm thử', address: 'Địa chỉ kiểm thử' });
+    expect(facade.printData()).toBeNull();
+  });
+
+  it('uses an initialization message when clinic profile preload fails', () => {
+    api.getClinicProfile.and.returnValue(throwError(() => new HttpErrorResponse({ status: 503 })));
+    facade.loadClinicPrintInfo();
+    expect(facade.printError()).toBe('Chưa tải được thông tin phòng khám. Vui lòng thử tải lại trước khi in.');
+    facade.beginWalkInSession();
+    expect(facade.printError()).toBeNull();
+  });
+
+  it('ignores a clinic profile preload failure after the print session changes', () => {
+    const profile = new Subject<{ clinicName: string; address: string }>();
+    api.getClinicProfile.and.returnValue(profile);
+    facade.loadClinicPrintInfo();
+    facade.beginWalkInSession();
+
+    profile.error(new HttpErrorResponse({ status: 503 }));
+    expect(facade.printError()).toBeNull();
+  });
+
+  it('gets the authoritative A5 receipt when reprinting a paid counter appointment', () => {
+    api.lookupAppointments.and.returnValue(of([APPOINTMENT]));
+    api.getReceipt.and.returnValue(of(RECEIPT));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: APPOINTMENT.appointmentCode });
+    facade.loadReceipt(APPOINTMENT.id);
+    expect(api.getReceipt).toHaveBeenCalledOnceWith(APPOINTMENT.id);
+    expect(facade.printData()).toEqual(jasmine.objectContaining({
+      type: 'PAYMENT_RECEIPT', receiptCode: RECEIPT.receiptCode,
+    }));
+  });
+
+  it('retains the authoritative payment receipt after refreshing the appointment', () => {
+    const paidAppointment = {
+      id: 'appointment-1',
+      appointmentCode: 'APT-260924-0001',
+      status: AppointmentStatus.CONFIRMED,
+      patientId: 'patient-1',
+      patientName: 'Nguyễn Văn An',
+      patientPhone: '0912345678',
+      doctorId: 'doctor-1',
+      doctorName: 'Trần Minh Bình',
+      specialtyName: 'Tim mạch',
+      roomNumber: 'P.201',
+      date: '2026-09-24',
+      startTime: '09:00',
+      endTime: '09:30',
+      paymentStatus: PaymentStatus.PAID,
+      paymentMethod: PaymentMethod.PAY_AT_CLINIC,
+      totalAmount: 350_000,
+      queueNumber: null,
+      checkedInAt: null,
+      requiresPayment: false,
+      canCheckIn: true,
+      blockedReason: null,
+    };
+    const receipt = {
+      receiptCode: 'RCT-260924-0001',
+      transactionCode: 'TXN-260924-0001',
+      appointmentCode: paidAppointment.appointmentCode,
+      patientName: paidAppointment.patientName,
+      doctorName: paidAppointment.doctorName,
+      amount: 350_000,
+      amountTendered: 400_000,
+      changeAmount: 50_000,
+      paymentMethod: CounterPaymentMethod.CASH,
+      collectedBy: 'receptionist-1',
+      paidAt: '2026-09-24T02:00:00.000Z',
+    };
+
+    api.lookupAppointments.and.returnValues(
+      of([
+        {
+          ...paidAppointment,
+          paymentStatus: PaymentStatus.UNPAID,
+          requiresPayment: true,
+          canCheckIn: false,
+        },
+      ]),
+      of([paidAppointment]),
+    );
+    api.collectPayment.and.returnValue(of(receipt));
+
+    facade.lookup({
+      kind: 'APPOINTMENT_CODE',
+      value: paidAppointment.appointmentCode,
+    });
+    facade.collectPayment({
+      appointmentId: paidAppointment.id,
+      method: CounterPaymentMethod.CASH,
+      amountTendered: 400_000,
+    });
+
+    expect(facade.lastReceipt()).toEqual(receipt);
+    expect(facade.printData()).toEqual(jasmine.objectContaining({ type: 'PAYMENT_RECEIPT', receiptCode: receipt.receiptCode }));
+    expect(facade.selectedAppointment()?.paymentStatus).toBe(PaymentStatus.PAID);
+  });
+
+  it('keeps a committed receipt when the appointment refresh fails and prevents a second charge', () => {
+    const appointment = {
+      id: 'appointment-1', appointmentCode: 'APT-1', status: AppointmentStatus.CONFIRMED,
+      patientId: 'patient-1', patientName: 'An', patientPhone: '0912345678',
+      doctorId: 'doctor-1', doctorName: 'Binh', specialtyName: 'Tim mach', roomNumber: '201',
+      date: '2026-09-24', startTime: '09:00', endTime: '09:30',
+      paymentStatus: PaymentStatus.UNPAID, paymentMethod: PaymentMethod.PAY_AT_CLINIC,
+      totalAmount: 350_000, queueNumber: null, checkedInAt: null,
+      requiresPayment: true, canCheckIn: false, blockedReason: 'Chua thanh toan',
+    };
+    const receipt = {
+      receiptCode: 'RCT-1', transactionCode: 'TXN-1', appointmentCode: 'APT-1',
+      patientName: 'An', doctorName: 'Binh', amount: 350_000, amountTendered: 350_000,
+      changeAmount: 0, paymentMethod: CounterPaymentMethod.CASH,
+      collectedBy: 'receptionist-1', paidAt: '2026-09-24T02:00:00.000Z',
+    };
+    api.lookupAppointments.and.returnValues(of([appointment]), throwError(() => new HttpErrorResponse({ status: 503 })));
+    api.collectPayment.and.returnValue(of(receipt));
+    facade.lookup({ kind: 'APPOINTMENT_CODE', value: 'APT-1' });
+    const intent = { appointmentId: 'appointment-1', method: CounterPaymentMethod.CASH, amountTendered: 350_000 };
+    facade.collectPayment(intent);
+    expect(facade.lastReceipt()).toEqual(receipt);
+    expect(facade.printData()).toEqual(jasmine.objectContaining({ type: 'PAYMENT_RECEIPT', receiptCode: receipt.receiptCode }));
+    expect(facade.checkInError()).toContain('Đã thu tiền');
+    facade.collectPayment(intent);
+    expect(api.collectPayment).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps PATIENT_SELECTION_REQUIRED without treating it as slot conflict', () => {
+    api.createWalkIn.and.returnValue(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 409,
+            error: {
+              code: 'PATIENT_SELECTION_REQUIRED',
+              message: 'Chọn hồ sơ phù hợp',
+              candidates: [
+                {
+                  patientId: 'patient-1',
+                  fullName: 'Nguyễn Văn An',
+                  gender: Gender.MALE,
+                  dateOfBirth: '1990-01-01',
+                  dateOfBirthPrecision: DateOfBirthPrecision.YEAR,
+                },
+              ],
+            },
+          }),
+      ),
+    );
+
+    facade.createWalkIn({
+      idempotencyKey: '22222222-2222-4222-8222-222222222222',
+      scheduleId: '11111111-1111-4111-8111-111111111111',
+      fullName: 'Nguyễn Văn An',
+      phone: '0912345678',
+      citizenId: '',
+      birthYear: 1990,
+      gender: Gender.MALE,
+      reasonForVisit: 'Đau ngực',
+      paymentMethod: CounterPaymentMethod.CASH,
+      amountTendered: 400_000,
+    });
+
+    expect(facade.walkInCandidates()[0].maskedName).toBe('Nguyễn V. A.');
+    expect(facade.walkInSlotConflict()).toBeFalse();
+  });
+
+  it('keeps the newest doctor search result when an older request is still pending', () => {
+    const oldSearch = new Subject<AvailableWalkInDoctor[]>();
+    const newSearch = new Subject<AvailableWalkInDoctor[]>();
+    api.getWalkInDoctors.and.returnValues(oldSearch, newSearch);
+    facade.searchWalkInDoctors({ specialtyName: '', doctorName: 'old' });
+    facade.searchWalkInDoctors({ specialtyName: '', doctorName: 'new' });
+    oldSearch.next([{ doctorId: 'old', doctorName: 'Old', specialtyName: 'Tim mach', roomNumber: '1', consultationFee: 100, availableSlots: [] }]);
+    newSearch.next([{ doctorId: 'new', doctorName: 'New', specialtyName: 'Tim mach', roomNumber: '2', consultationFee: 100, availableSlots: [] }]);
+    expect(facade.walkInDoctors().map((doctor) => doctor.doctorId)).toEqual(['new']);
+  });
+
+  it('reconciles queue events and cleans up its socket listener', () => {
+    const release = facade.connectQueue();
+
+    socket.serverEmit(QUEUE_SNAPSHOT_EVENT, {
+      scope: 'RECEPTION',
+      date: '2026-09-24',
+      items: [],
+    });
+    socket.serverEmit(APPOINTMENT_STATUS_CHANGED_EVENT, {
+      appointmentId: 'appointment-1',
+      appointmentCode: 'APT-260924-0001',
+      doctorId: 'doctor-1',
+      previousStatus: AppointmentStatus.CONFIRMED,
+      status: AppointmentStatus.CHECKED_IN,
+      queueNumber: 12,
+      source: 'RECEPTION_CHECKIN',
+      occurredAt: '2026-09-24T01:00:00.000Z',
+      ticket: {
+        appointmentId: 'appointment-1',
+        appointmentCode: 'APT-260924-0001',
+        patientName: 'Nguyễn Văn An',
+        doctorId: 'doctor-1',
+        doctorName: 'Trần Minh Bình',
+        roomNumber: 'P.201',
+        status: AppointmentStatus.CHECKED_IN,
+        queueNumber: 12,
+        queueDate: '2026-09-24',
+        queueSource: QueueSource.APPOINTMENT,
+        checkedInAt: '2026-09-24T01:00:00.000Z',
+      },
+    });
+
+    expect(facade.queueSummary()?.waitingCount).toBe(1);
+    expect(
+      socket.emitted.some((event) => event.event === QUEUE_SYNC_EVENT),
+    ).toBeTrue();
+
+    release();
+    expect(socketService.disconnect).toHaveBeenCalledOnceWith('/queue');
+  });
+});

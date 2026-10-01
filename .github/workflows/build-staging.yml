@@ -1,0 +1,44 @@
+name: CD - Build Staging Docker Images
+
+'on':
+  push:
+    branches:
+      - 'release/**'
+      - staging
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - qc
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-staging:
+    name: Build & Package Staging Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Environment File
+        run: |
+          cp .env.example .env
+          echo "Created .env from .env.example for staging build"
+
+      - name: Validate Docker Compose Configuration
+        run: |
+          docker compose --env-file .env config
+
+      - name: Verify Infrastructure Images
+        run: |
+          echo "==> Pulling and validating Docker Compose images for Staging..."
+          docker compose --env-file .env pull
+          echo "Staging infrastructure images verified successfully."

@@ -1,0 +1,40 @@
+<div class="flex flex-col items-center justify-center min-h-[calc(100dvh-124px)] text-center px-4 bg-medical-surface">
+  <!-- Error Icon -->
+  <div class="w-24 h-24 rounded-3xl mb-6 flex items-center justify-center bg-red-100 shadow-sm">
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" stroke-width="1.5">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+    </svg>
+  </div>
+
+  <!-- Error Code -->
+  <p class="font-mono text-6xl font-bold mb-2 text-slate-200 select-none">
+    403
+  </p>
+
+  <!-- Title & Description -->
+  <h1 class="font-bold text-2xl mb-2 text-slate-900">
+    Không có quyền truy cập
+  </h1>
+  <p class="text-sm max-w-sm mb-8 text-slate-500 leading-relaxed">
+    Tài khoản của bạn không có quyền truy cập vào trang này. Vui lòng liên hệ quản trị viên nếu bạn cho rằng đây là nhầm lẫn.
+  </p>
+
+  <!-- Action Buttons (NFR-UX-02: min-h-[44px]) -->
+  <div class="flex gap-3 flex-wrap justify-center">
+    <button
+      type="button"
+      (click)="navigateToLogin()"
+      class="px-5 min-h-[44px] rounded-xl text-sm font-semibold text-white bg-sky-600 hover:bg-sky-700 transition"
+    >
+      Đăng nhập lại
+    </button>
+    <button
+      type="button"
+      (click)="goBack()"
+      class="px-5 min-h-[44px] rounded-xl border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-100 transition"
+    >
+      ← Quay lại
+    </button>
+  </div>
+</div>

@@ -1,0 +1,42 @@
+// Tiện ích ẩn thanh cuộn ngang của tab chuyên khoa nhưng vẫn giữ thao tác vuốt mượt mà
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+// Custom style nếu cần tinh chỉnh thêm cho Radio và Checkbox
+input[type='radio'],
+input[type='checkbox'] {
+  cursor: pointer;
+}
+
+.filter-panel {
+  display: none;
+}
+
+.filter-panel.filter-panel-open {
+  display: block;
+}
+
+@media (max-width: 1024px) {
+  .filter-panel.filter-panel-open {
+    position: static;
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+    border-radius: 1rem;
+  }
+
+  .filter-results-hidden {
+    display: none;
+  }
+}
+
+@media (min-width: 1025px) {
+  .filter-panel {
+    display: block;
+    position: static;
+  }
+}

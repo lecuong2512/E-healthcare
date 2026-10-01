@@ -1,0 +1,572 @@
+# ==================== FILE: D:\Downloads\RA_SOAT_BUG_BENH_NHAN.docx ====================
+Bệnh nhân
+Cannot PATCH /api/v1/phr/me
+Lỗi khi cập nhật thông tin cá nhân, BE trả về
+{"message":"Cannot PATCH /api/v1/phr/me","error":"Not Found","statusCode":404}
+Bộ lọc chuyên khoa không hoạt động
+Không hiển thị bác sĩ chuyên khoa, mặc dù 7 bác sĩ mặc định/label đã có tag
+
+Treo xác minh trạng thái thanh toán
+Thao tác gây lỗi:
+B1: Đặt lịch
+B2: Chọn phương thức thanh toán Momo
+B3: Không thanh toán (không quét QR) sau đó bấm hủy
+Kết quả: Backend kẹt, spam status
+
+
+Lỗi UI, không tương tác được với các nút khi trở về trang “đặt lịch khám” sau khi “hủy thanh toán”
+Thao tác gây lỗi:
+B1: Đặt lịch
+B2: Chọn phương thức thanh toán chuyển khoản
+B3: Không thanh toán (không quét QR) sau đó bấm hủy
+B4: Web kẹt trang status (như lỗi bên trên)
+B5: Bấm nút “Back” để trở về trang thanh toán
+B6: Bấm thay đổi phương thức thanh toán sang “Thanh toán tại bệnh viện” (hoặc 1 phương thức nào đó khác)
+Kết quả: Không tương tác được với các nút “Sửa hồ sơ”, “Chọn phương thức thanh toán khác” mà chỉ tương tác được nút “Xác nhận thanh toán tại bệnh viện”
+Chưa tối ưu điều hướng nút “Lịch sử khám bệnh”
+Nút “Lịch sử khám bệnh” nên route đến mục “Đã hoàn thành” thay vì chỉ dừng lại ở “Sắp tới”
+Bệnh nhân
+
+
+# ==================== FILE: D:\Downloads\Vấn đề mock data.docx ====================
+Mức | Khu vực | Phát hiện | Hậu quả tích hợp
+🔴 P0 | Doctor Queue FE | patient-queue.page.ts chứa nguyên mảng patients hardcode | Reception check-in DB thật nhưng Doctor không nhìn thấy dữ liệu đó
+🔴 P0 | Doctor Queue FE | startConsultation() chỉ đổi patient.status trong RAM | DB vẫn CHECKED_IN, FE hiển thị IN_CONSULTATION
+🔴 P0 | Doctor Queue → Clinical | FE truyền patient.code dạng APT-260907-8895 vào route :appointmentId | Backend Clinical dùng UUID appointment → request fail
+🔴 P0 | Consultation FE | Có sẵn patientName='Trần Văn A', bloodType='O+', allergies='Penicillin, Aspirin'... | Khi API fail UI vẫn trông như có dữ liệu thật
+🔴 P0 | Consultation PHR | Doctor gọi GET /phr/me | Endpoint chỉ cho ROLE_PATIENT; doctor nhận 403
+🔴 P0 | Consultation FE | Error của PHR và Medical Record bị nuốt bằng error:()=>{} | Không báo integration failure; dữ liệu mock mặc định tiếp tục hiển thị
+🔴 P0 | Clinical FE | saveDraft() không gọi API | EMR trên màn hình không được lưu DB
+🔴 P0 | Clinical FE | completeConsultation() chỉ router.navigate() | Appointment không chuyển COMPLETED, EMR không complete thật
+🔴 P0 | Doctor Schedule FE | seedMockSchedule() + array scheduleSlots local | Doctor sửa lịch nhưng Patient Booking đọc lịch khác từ PostgreSQL
+🔴 P0 | Catalog | Drug/ICD trong Consultation là constant hardcode | Admin cập nhật catalog DB nhưng Doctor vẫn thấy catalog cũ
+🟠 P1 | ICD backend | Icd10Service vẫn sử dụng BASELINE_ICD10_CATALOG in-memory | Ngay cả backend Clinical cũng chưa dùng icd10_catalogs của Admin
+🟠 P1 | QA Seed | Seed trực tiếp appointment CONFIRMED + PAID + VNPAY | Bỏ qua Payment workflow và có thể không có payment_transactions tương ứng
+🟠 P1 | QA Seed / Queue | Seed queueNumber, queueDate, queueSource nhưng không thấy checkedInAt được set | Patient thấy appointment nhưng /doctor/queue không lấy ra vì query yêu cầu checked_in_at IS NOT NULL
+🟠 P1 | Tests | clinical-workflow-e2e.spec.ts dùng mockDataSource | Tên E2E nhưng không kiểm tra PostgreSQL thật
+🟠 P1 | CI | Auth, Review, Queue, Reception, Payment chạy trên các DB test riêng biệt | Không kiểm tra dữ liệu đi xuyên suốt các module
+🟠 P1 | Browser QA | Payment QA intercept request và dựng syntheticApis | FE pass nhưng chưa chứng minh contract với backend thật
+🟡 P2 | Notification | Test env ép BULLMQ_MOCK=true | Không phát hiện lỗi Redis/BullMQ thực trong test thường
+🟡 P2 | Redis | RedisService dùng REDIS_HOST/PORT; DoctorCacheService ưu tiên REDIS_URL | Có nguy cơ module kết nối hai Redis khác nhau nếu env lệch
+
+
+# ==================== FILE: D:\Downloads\Đăng nhập.docx ====================
+Sự cố khởi tạo tài khoản qua Admin hoặc Google OAuth bị gán cố định thành người dùng khác
+Nguyên Nhân dễ thấy nhất là FE hard code data
+3. Nguyên nhân sâu hơn: backend login không trả thông tin user
+Backend:
+session.controller.ts
+có:
+return {
+  accessToken: session.accessToken,
+  role: session.role
+};
+Không trả:
+user: {
+  id,
+  fullName,
+  email,
+  phoneNumber,
+  role
+}
+Trong khi FE lại viết:
+tap((res) =>
+  this.tokenStore.setSession(
+    res.accessToken,
+    res.role,
+    res.user
+  )
+)
+Nhưng:
+res.user === undefined
+
+4. TokenStore lại giữ nguyên user cũ
+Đây là bug thứ hai rất quan trọng.
+Hiện:
+setSession(
+  accessToken: string,
+  role: string,
+  user?: UserProfileInfo
+): void {
+  this._accessToken.set(accessToken);
+  this._userRole.set(role);
+  if (user) {
+    this._currentUser.set(user);
+    localStorage.setItem(
+      'currentUser',
+      JSON.stringify(user)
+    );
+  }
+}
+Nếu login user mới nhưng backend không trả user:
+User A login
+↓
+currentUser = A
+↓
+logout không đúng / stale localStorage
+↓
+User B login
+↓
+res.user undefined
+↓
+setSession không thay currentUser
+↓
+currentUser vẫn A
+Nên còn có trường hợp tệ hơn:
+token = User B
+role = ROLE_DOCTOR
+profile UI = User A
+Đây chính xác là dạng “vào tài khoản khác nhưng vẫn bị fix thành account trước”.
+5. Google login cũng mắc đúng lỗi đó
+Google registration FE:
+tap((res) =>
+  this.tokenStore.setSession(
+    res.accessToken,
+    res.role
+  )
+);
+Không hề truyền user.
+Do vậy:
+Google login
+     ↓
+backend tạo session đúng
+     ↓
+accessToken đúng user
+     ↓
+role đúng
+     ↓
+FE không load user profile
+     ↓
+currentUser cũ hoặc DEFAULT_USERS
+
+6. Google redirect flow còn rõ hơn
+Luồng:
+Google
+ ↓
+/auth/google/callback
+ ↓
+backend set refresh cookie
+ ↓
+redirect /login?google=success
+Sau khi app khởi động:
+APP_INITIALIZER
+ ↓
+POST /auth/refresh
+Backend refresh cũng chỉ trả:
+{
+  "accessToken": "...",
+  "role": "ROLE_DOCTOR"
+}
+Không có user.
+FE:
+setSession(
+  res.accessToken,
+  res.role,
+  res.user // undefined
+)
+Sau đó navbar:
+không có currentUser
+      ↓
+DEFAULT_USERS[ROLE_DOCTOR]
+      ↓
+Trần Bình
+Vì vậy Google hiện tại gần như chắc chắn kích hoạt lỗi này.
+7. Admin tạo tài khoản backend thực ra đang tạo user đúng
+Phần:
+StaffAdminService.create()
+đang làm khá đúng:
+const user = await manager.save(
+  manager.create(UserEntity, {
+    fullName: input.fullName,
+    email: input.email,
+    ...
+  })
+);
+sau đó:
+await manager.save(
+  manager.create(UserRoleEntity, {
+    userId: user.id,
+    role: input.role
+  })
+);
+Nếu Doctor thì tiếp tục:
+DoctorEntity {
+  userId: user.id,
+  ...
+}
+Nên hiện tại mình chưa thấy bằng chứng Admin create đang gán tất cả account về cùng user_id.
+Ngược lại, backend session token cũng dùng đúng:
+userId
+role
+sid
+JWT:
+sub = userId
+Vì vậy vấn đề chính là:
+DB identity                UI identity
+DB identity                UI identity
+user UUID B ───────────────╮
+                           │
+JWT user B                 │
+                           ├─ nhưng Navbar → DEFAULT_USER
+ROLE_DOCTOR ───────────────┘              ↓
+                                      Trần Bình
+
+8. /auth/me hiện cũng chưa giải quyết được
+Backend có:
+GET /api/v1/auth/me
+nhưng chỉ trả:
+{
+  "userId": "...",
+  "role": "ROLE_DOCTOR"
+}
+Không trả:
+fullName
+email
+phoneNumber
+avatarUrl
+Do đó FE hiện không có API canonical để hydrate user hiện tại.
+9. Google account mới luôn là PATIENT
+Còn một điểm cần phân biệt.
+Trong:
+GoogleAuthService.complete()
+Google user mới hoàn toàn đang được cố định:
+INSERT INTO user_roles (user_id, role)
+VALUES ($1, Role.PATIENT)
+Tức:
+Google account mới
+        ↓
+ROLE_PATIENT
+Điều này về bảo mật thực ra hợp lý.
+Không nên cho người đăng ký Google tự chọn:
+DOCTOR
+ADMIN
+RECEPTIONIST
+vì nếu không ai cũng có thể tự đăng ký Admin.
+Đối với nhân viên:
+Admin tạo account trước
+        ↓
+email = doctor@gmail.com
+role = DOCTOR
+        ↓
+Doctor login Google
+        ↓
+backend tìm existing user bằng email
+        ↓
+link google_subject
+        ↓
+giữ ROLE_DOCTOR
+Code hiện tại đã có hướng xử lý này.
+Kiến trúc nên sửa thành
+Không dùng role để xác định identity nữa:
+Access Token
+   │
+   └── userId
+         │
+         ▼
+      users table
+         │
+         ├── fullName
+         ├── email
+         ├── phone
+         └── avatar
+         │
+         ▼
+      user_roles
+         │
+         ▼
+        role
+FE chỉ render dữ liệu này.
+Không tồn tại:
+ROLE_DOCTOR → Trần Bình
+mà phải là:
+userId X
+   ↓
+Trần Văn Bình
+userId Y
+   ↓
+Nguyễn Văn Minh
+dù cả hai đều ROLE_DOCTOR.
+Fix mình đề xuất
+/auth/me nên trả thế này
+{
+  "id": "18d7....",
+  "fullName": "Nguyễn Văn Minh",
+  "email": "minh@gmail.com",
+  "phoneNumber": "+84901234567",
+  "role": "ROLE_DOCTOR",
+  "avatarUrl": "/uploads/avatar/..."
+}
+Backend lấy từ:
+request.auth.userId
+        ↓
+users.id
+tuyệt đối không tìm bằng role.
+FE nên làm
+Sau login:
+login(...)
+  .pipe(
+    switchMap(session => {
+      this.tokenStore.setSession(
+        session.accessToken,
+        session.role
+      );
+      return this.getMe();
+    }),
+    tap(user => {
+      this.tokenStore.setCurrentUser(user);
+    })
+  );
+Tương tự sau refresh.
+Google callback cũng vậy.
+Và setSession() nên tránh stale identity
+Tối thiểu:
+setSession(
+  accessToken: string,
+  role: string,
+  user?: UserProfileInfo
+): void {
+  this._accessToken.set(accessToken);
+  this._userRole.set(role);
+  if (user) {
+    this.setCurrentUser(user);
+  } else {
+    this.setCurrentUser(null);
+  }
+}
+Nhưng tốt hơn nữa là sau đó gọi /auth/me.
+Kết luận
+Đây cũng là cùng họ lỗi với vấn đề mock dữ liệu chúng ta vừa tìm ở Doctor module.
+Hệ thống authentication phía backend phần lớn đang nhận diện user bằng UUID đúng, nhưng FE lại dựng một lớp identity giả:
+DEFAULT_USERS
++
+localStorage.currentUser
+nên tạo ra hiện tượng:
+Admin tạo Doctor mới → login Doctor mới → vẫn hiện Trần Bình
+Admin tạo Receptionist mới → login → vẫn hiện Lê Cường
+Google account → login → vẫn hiện account cũ / default
+Do đó P0 không phải sửa DB user mapping trước, mà là loại bỏ DEFAULT_USERS, sửa session hydration và thiết lập /auth/me làm single source of truth cho identity đang đăng nhập. Sau khi sửa phần này, mới chạy cross-account E2E để xác nhận DB thực sự không còn lỗi mapping.
+Priority | Vị trí | Fix
+🔴 P0 | header.component.ts | Xóa hoàn toàn DEFAULT_USERS khỏi production
+🔴 P0 | TokenStoreService | Không giữ currentUser cũ khi session thay đổi
+🔴 P0 | /auth/me | Trả profile thật từ PostgreSQL
+🔴 P0 | login | Sau login hydrate CurrentUser thật
+🔴 P0 | refresh | Sau F5 phải hydrate lại đúng user
+🔴 P0 | Google callback | Sau redirect phải fetch /auth/me
+🔴 P0 | Google complete | Không để stale currentUser từ account trước
+🟠 P1 | Header tests | Xóa test kỳ vọng Nguyễn An/Trần Bình/...
+🟠 P1 | Auth integration | Test token.userId === response.user.id
+🟠 P1 | Google integration | Test staff Google login giữ đúng staff role/user
+🟠 P1 | E2E | Login tuần tự A → logout → B và verify identity đổi thật
+
+
+# ==================== FILE: D:\Downloads\Đăng ký - OTP.docx ====================
+Đúng, mình đã tìm ra nguyên nhân trực tiếp. Vấn đề không phải OTP generation hay PostgreSQL, mà nằm ở thiết kế delivery hiện tại giữa FE ↔ backend ↔ SMTP/SMS.
+1. Nguyên nhân chính
+Luồng hiện tại là:
+Register FE
+  ↓
+bắt buộc nhập Email + SĐT
+  ↓
+POST /api/v1/auth/register/otp
+{
+  email,
+  phoneNumber,
+  ...
+}
+  ↓
+AuthService tạo OTP
+  ↓
+OtpDeliveryService.send()
+  ├─ gửi Email qua SMTP
+  └─ gửi SMS qua SMS_WEBHOOK_URL
+Vấn đề nằm ở đoạn cuối: khi có cả email và phone, backend yêu cầu cả hai kênh đều phải gửi thành công.
+Trong server/src/modules/auth/otp-delivery.service.ts:
+if (contact.email) {
+  if (!environment.SMTP_HOST || !environment.SMTP_FROM)
+    throw new Error("SMTP not configured");
+
+  await transport.sendMail(...);
+}
+if (contact.phoneNumber) {
+  if (!environment.SMS_WEBHOOK_URL || !environment.SMS_WEBHOOK_TOKEN)
+    throw new Error("SMS not configured");
+  await fetch(...);
+}
+Sau đó bất kỳ lỗi nào đều trở thành:
+503 OTP_DELIVERY_FAILED
+Không thể gửi OTP lúc này. Vui lòng thử lại sau.
+Trường hợp của project hiện tại gần như chắc chắn gặp lỗi này
+.env.example đang để:
+SMTP_HOST=smtp.example.com
+SMTP_FROM=no-reply@your-domain.com
+SMTP_USER=your_smtp_user
+SMTP_PASSWORD=your_smtp_password
+và:
+SMS_WEBHOOK_URL=https://sms-api.example.com/send
+SMS_WEBHOOK_TOKEN=your_sms_bearer_token
+Đây đều là placeholder, không phải provider thật.
+Đặc biệt phần SMS hiện tại chỉ là một generic webhook. Project chưa tích hợp nhà cung cấp SMS thật.
+Vì FE lại bắt buộc:
+if (
+  !fullName ||
+  !phoneNumber ||
+  !email ||
+  !password ||
+  ...
+)
+Nên từ UI không thể gửi chỉ bằng email.
+Kết quả là kể cả bạn cấu hình SMTP đúng:
+Email OTP
+   ✅ gửi thành công
+SMS
+   ❌ SMS_WEBHOOK_URL chưa có provider thật
+=> request toàn bộ FAIL
+=> FE báo không gửi được OTP
+Đây chính là bug thiết kế.
+Còn một lỗi nguy hiểm hơn
+Trong AuthService hiện tại thứ tự là:
+const otp = randomInt(...);
+await this.delivery.send(
+  { email, phoneNumber },
+  otp
+);
+// rồi mới save registration session
+await sessions.save(...)
+Vì vậy có thể xảy ra:
+SMTP gửi mail OTP thành công
+           ↓
+SMS gửi thất bại
+           ↓
+OtpDeliveryService throw
+           ↓
+DB transaction rollback
+           ↓
+registration_sessions KHÔNG CÓ OTP
+Người dùng thậm chí có thể nhận được OTP email nhưng OTP đó không dùng được vì session chưa được lưu.
+Đây là P0.
+2. Vì sao CI vẫn PASS?
+Test integration không sử dụng delivery thật.
+Trong server/test/register.integration.ts có:
+const send = jest.fn(async (_contact, value) => {
+  otp = value;
+});
+.overrideProvider(OtpDeliveryService)
+.useValue({ send })
+Nghĩa là test hiện nay kiểm tra:
+FE/API logic
+       ↓
+Mock OTP sender
+       ↓
+PostgreSQL
+chứ không kiểm tra:
+API
+ ↓
+SMTP thật
+ ↓
+SMS gateway thật
+Vì vậy 54/54 Auth integration PASS trước đó không chứng minh OTP có thể đến email/SĐT thật.
+3. Cách sửa đề xuất
+Không nên bắt cả email và SMS cùng thành công.
+Thiết kế lại tách biệt rõ ràng giữa Thông tin account (Email + SĐT) và Kênh nhận OTP (EMAIL hoặc SMS).
+Ví dụ request payload:
+{
+  "fullName": "Nguyen Van A",
+  "email": "user@gmail.com",
+  "phoneNumber": "0901234567",
+  "password": "Abcd123!",
+  "gender": "MALE",
+  "dateOfBirth": "2000-01-01",
+  "otpChannel": "EMAIL"
+}
+Xử lý tại Backend:
+if (dto.otpChannel === 'EMAIL') {
+  await delivery.sendEmail(dto.email, otp);
+}
+if (dto.otpChannel === 'SMS') {
+  await delivery.sendSms(phoneNumber, otp);
+}
+Tránh tuyệt đối việc gọi gửi cả hai kênh đồng thời cùng lúc:
+send({ email, phoneNumber }) // ❌ Không yêu cầu cả hai cùng thành công
+Ưu tiên Email OTP trước
+SMS thật cần một SMS gateway/provider nên sẽ phức tạp hơn. Với môi trường dev/demo, lộ trình triển khai phù hợp:
+Phase hiện tại: Email OTP thật qua SMTP ➔ Verify OTP ➔ Registration.
+Phase sau: Tích hợp SMS Provider để hỗ trợ SMS OTP.
+Giao diện FE có thể tùy chỉnh lựa chọn:
+Email: nguy***@gmail.com (Mặc định)
+Số điện thoại: 090****567 (Tạm chưa khả dụng)
+○ Số điện thoại: 090****567
+4. Cấu hình Gmail SMTP
+Để chạy thử nghiệm ngay với Gmail SMTP, cấu hình file .env local như sau:
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_FROM="E-Healthcare <your-email@gmail.com>"
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=YOUR_GOOGLE_APP_PASSWORD
+Lưu ý: SMTP_PASSWORD phải dùng App Password của Google, không dùng mật khẩu tài khoản cá nhân.
+Chỉ cấu hình Gmail là chưa đủ vì FE hiện tại vẫn truyền phoneNumber khiến backend gọi SMS webhook. Bắt buộc phải đồng thời cập nhật logic channel.
+5. Danh sách Patches cần thực hiện
+Kiến trúc khuyên dùng
+POST /auth/register/otp
+        │
+        ├── validate
+        │
+        ├── generate OTP
+        │
+        ├── save RegistrationSession (Lưu trước)
+        │
+        ▼
+   OTP Delivery
+        │
+   ┌────┴────┐
+ Email      SMS
+ SMTP      Provider
+   │          │
+   └────┬─────┘
+        ▼
+delivery result
+Tránh việc gọi service bên ngoài trước rồi mới lưu DB session vì các side effect bên ngoài không thể rollback cùng PostgreSQL transaction:
+send external service ➔ rồi mới lưu session (❌ Sai)
+Kết luận: Lỗi đăng ký không nhận OTP hiện tại chủ yếu do FE bắt buộc cả email + phone, backend cố gửi đồng thời SMTP + SMS, trong khi SMS webhook chỉ là placeholder. Thêm vào đó, integration test hiện tại đang mock OtpDeliveryService nên lỗi delivery thực tế không bị CI phát hiện.
+Giải pháp đề xuất là ưu tiên Email OTP thật trước, giữ SĐT làm thông tin tài khoản nhưng không bắt buộc gửi OTP qua SMS ở giai đoạn hiện tại.
+Priority | File | Sửa
+🔴 P0 | register.dto.ts | Thêm otpChannel: EMAIL | SMS
+🔴 P0 | register.page.ts | Cho phép chọn kênh OTP
+🔴 P0 | register.page.html | Không ghi cố định “OTP đã gửi đến số điện thoại”
+🔴 P0 | otp-delivery.service.ts | Tách biệt sendEmail() và sendSms()
+🔴 P0 | auth.service.ts | Chỉ gửi qua channel được chỉ định
+🔴 P0 | auth.service.ts | Lưu session trước khi gửi delivery để tránh rollback lỗi
+🟠 P1 | .env.example | Ghi chú rõ ràng SMTP/SMS là placeholder
+🟠 P1 | CI Test Pipeline | Bổ sung test delivery contract riêng
+🟠 P1 | E2E Testing | Chạy registration flow thực tế với Mailpit/SMTP test
+
+
+# ==================== FILE: D:\Downloads\RA_SOAT_BUG_BENH_NHAN (1).docx ====================
+Bệnh nhân
+Cannot PATCH /api/v1/phr/me
+Lỗi khi cập nhật thông tin cá nhân, BE trả về
+{"message":"Cannot PATCH /api/v1/phr/me","error":"Not Found","statusCode":404}
+Bộ lọc chuyên khoa không hoạt động
+Không hiển thị bác sĩ chuyên khoa, mặc dù 7 bác sĩ mặc định/label đã có tag
+
+Treo xác minh trạng thái thanh toán
+Thao tác gây lỗi:
+B1: Đặt lịch
+B2: Chọn phương thức thanh toán Momo
+B3: Không thanh toán (không quét QR) sau đó bấm hủy
+Kết quả: Backend kẹt, spam status
+
+
+Lỗi UI, không tương tác được với các nút khi trở về trang “đặt lịch khám” sau khi “hủy thanh toán”
+Thao tác gây lỗi:
+B1: Đặt lịch
+B2: Chọn phương thức thanh toán chuyển khoản
+B3: Không thanh toán (không quét QR) sau đó bấm hủy
+B4: Web kẹt trang status (như lỗi bên trên)
+B5: Bấm nút “Back” để trở về trang thanh toán
+B6: Bấm thay đổi phương thức thanh toán sang “Thanh toán tại bệnh viện” (hoặc 1 phương thức nào đó khác)
+Kết quả: Không tương tác được với các nút “Sửa hồ sơ”, “Chọn phương thức thanh toán khác” mà chỉ tương tác được nút “Xác nhận thanh toán tại bệnh viện”
+Chưa tối ưu điều hướng nút “Lịch sử khám bệnh”
+Nút “Lịch sử khám bệnh” nên route đến mục “Đã hoàn thành” thay vì chỉ dừng lại ở “Sắp tới”
+Bệnh nhân
+

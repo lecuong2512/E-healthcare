@@ -1,0 +1,30 @@
+// Responsive Breakpoints
+$breakpoint-mobile: 360px;
+$breakpoint-tablet: 768px;
+$breakpoint-desktop: 1366px;
+
+// Touch Target NFR
+$min-touch-target: 44px;
+
+// Medical Clean UI Color Tokens
+$color-primary: #0284c7;
+$color-primary-hover: #0369a1;
+$color-secondary: #0284c7;
+$color-canvas: #f8fafc;
+$color-card: #ffffff;
+$color-border: #e2e8f0;
+$color-text-base: #0f172a;
+$color-text-sub: #64748b;
+
+// Responsive Mixins
+@mixin tablet-up {
+  @media (min-width: #{$breakpoint-tablet}) {
+    @content;
+  }
+}
+
+@mixin desktop-up {
+  @media (min-width: #{$breakpoint-desktop}) {
+    @content;
+  }
+}

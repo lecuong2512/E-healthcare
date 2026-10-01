@@ -1,0 +1,221 @@
+<main class="staff-page">
+  <section>
+    <h1>Quản lý tài khoản nhân sự</h1>
+      <p>Phân quyền bác sĩ, lễ tân và quản trị viên theo nguyên tắc tối thiểu.</p>
+
+    <div class="cards">
+        <article><span>Nhân sự</span><b>{{ staffCount() }}</b><em>Tài khoản nhân sự</em></article>
+        <article><span>Phòng/Buồng khám</span><b>{{ roomCount() }}</b><em>Đang có trong danh mục</em></article>
+        <article><span>Ca trực chờ duyệt</span><b>{{ pendingShiftCount() }}</b><em>Ca trực cần phê duyệt</em></article>
+    </div>
+
+    <nav class="staff-tabs"><button [class.active]="activeTab() === 'staff'" (click)="activeTab.set('staff')">Nhân sự</button><button [class.active]="activeTab() === 'rooms'" (click)="activeTab.set('rooms')">Phòng/Buồng khám</button><button [class.active]="activeTab() === 'shifts'" (click)="activeTab.set('shifts')">Ca trực chờ duyệt ({{ pendingShiftCount() }})</button></nav>
+
+    @if (activeTab() === 'staff') {
+    <div class="filters">
+      <input data-testid="staff-search" aria-label="Tìm nhân sự" placeholder="Tên, email hoặc mã NV" (input)="onSearch($event)" />
+      <select data-testid="staff-role" aria-label="Lọc theo vai trò" (change)="onRoleFilter($event)">
+        <option value="">Tất cả vai trò</option>
+        <option [value]="Role.DOCTOR">Bác sĩ</option>
+        <option [value]="Role.RECEPTIONIST">Lễ tân</option>
+        <option [value]="Role.ADMIN">Quản trị viên</option>
+      </select>
+      <button type="button" (click)="openForm()">Thêm nhân sự</button>
+    </div>
+
+    <article class="table-card">
+      <h2>Danh sách nhân sự</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Mã NV</th><th>Họ tên</th><th>Vai trò</th><th>Phòng/Buồng</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+          <tbody>
+            @for (person of pagedStaff(); track person.id) {
+              <tr data-testid="staff-row">
+                <td>{{ person.code }}</td>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <img [src]="person.avatarUrl || 'assets/doctor.png'" alt="" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;" />
+                    <span>{{ person.name }}</span>
+                  </div>
+                </td>
+                <td>{{ person.role }}</td><td>{{ person.facility }}</td>
+                <td><span [class.blocked]="person.status === 'Đã khóa'">{{ person.status }}</span></td>
+                <td><div class="actions">
+                  <button class="row-action detail-action" type="button" (click)="openDetails(person)">Xem chi tiết</button>
+                  <button class="row-action" type="button" (click)="changeStatus(person, person.status === 'Đã khóa' ? 'ACTIVE' : 'BLOCKED')">{{ person.status === 'Đã khóa' ? 'Mở khóa' : 'Khóa' }}</button>
+                  <button class="row-action" type="button" (click)="openDetails(person)">Chỉnh sửa</button>
+                </div></td>
+              </tr>
+            } @empty { <tr><td colspan="6" class="empty">Không có nhân sự phù hợp với bộ lọc.</td></tr> }
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination" data-testid="staff-pagination"><span>Trang {{ staffPage() }} / {{ staffPageCount() }}</span><button type="button" (click)="changePage('staff', staffPage() - 1)" [disabled]="staffPage() === 1">Trước</button><button data-testid="staff-next-page" type="button" (click)="changePage('staff', staffPage() + 1)" [disabled]="staffPage() === staffPageCount()">Sau</button></div>
+    </article>
+    }
+
+    @if (activeTab() === 'rooms') {
+      <article class="table-card"><h2>Danh mục Phòng/Buồng khám</h2><form class="room-form room-form-grid" [formGroup]="roomForm" (ngSubmit)="createRoom()"><input formControlName="roomNumber" placeholder="Mã phòng, ví dụ P007" /><input formControlName="roomName" placeholder="Tên phòng/buồng" /><select formControlName="specialtyId"><option value="">Chọn chuyên khoa</option>@for (specialty of specialties(); track specialty.id) { <option [value]="specialty.id">{{ specialty.name }}</option> }</select><select formControlName="roomType"><option value="CONSULTATION">Phòng khám</option><option value="EXAMINATION">Buồng khám</option><option value="PROCEDURE">Phòng thủ thuật</option><option value="OTHER">Khác</option></select><input formControlName="location" placeholder="Tầng/khu vực" /><input formControlName="notes" placeholder="Ghi chú" /><button class="primary" type="submit">Thêm phòng</button></form>@if (roomMessage()) { <p class="room-success">{{ roomMessage() }}</p> } @if (roomError()) { <p class="form-error">{{ roomError() }}</p> }<div class="table-scroll"><table><thead><tr><th>Mã phòng</th><th>Tên phòng/buồng</th><th>Bác sĩ phụ trách</th><th>Chuyên khoa</th><th>Loại</th><th>Khu vực</th><th>Trạng thái</th><th>Hành động</th></tr></thead><tbody>@for (room of pagedRooms(); track room.id) { <tr><td>{{ room.roomNumber }}</td><td>{{ room.roomName || '—' }}</td><td><strong>{{ getDoctorInRoom(room.roomNumber) || 'Chưa phân công' }}</strong></td><td>{{ specialtyName(room.specialtyId) }}</td><td>{{ room.roomType === 'CONSULTATION' ? 'Phòng khám' : room.roomType === 'EXAMINATION' ? 'Buồng khám' : room.roomType === 'PROCEDURE' ? 'Phòng thủ thuật' : room.roomType || '—' }}</td><td>{{ room.location || '—' }}</td><td><span [class.blocked]="!room.isActive">{{ room.isActive ? 'Hoạt động' : 'Đã khóa' }}</span></td><td><div class="actions"><button class="row-action detail-action" data-testid="room-details" type="button" (click)="openRoomDetails(room)">Xem chi tiết</button><button class="row-action" type="button" (click)="lockRoom(room)">{{ room.isActive ? 'Khóa' : 'Mở khóa' }}</button><button class="row-action" data-testid="room-edit" type="button" (click)="openRoomEdit(room)">Chỉnh sửa</button></div></td></tr> } @empty { <tr><td colspan="8" class="empty">Chưa có phòng/buồng.</td></tr> }</tbody></table></div><div class="pagination"><span>Trang {{ roomPage() }} / {{ roomPageCount() }}</span><button type="button" (click)="changePage('room', roomPage() - 1)" [disabled]="roomPage() === 1">Trước</button><button type="button" (click)="changePage('room', roomPage() + 1)" [disabled]="roomPage() === roomPageCount()">Sau</button></div></article>
+    }
+
+    @if (activeTab() === 'shifts') {
+    <article class="table-card shifts">
+      <h2>Phân ca trực</h2><form class="room-form room-form-grid" [formGroup]="shiftForm" (ngSubmit)="createShift()"><select formControlName="userId"><option value="">Chọn nhân sự</option>@for (person of staff(); track person.id) { <option [value]="person.id">{{ person.name }} — {{ person.role }}</option> }</select><select formControlName="roomId"><option value="">Chọn phòng/buồng</option>@for (room of roomCatalog(); track room.id) { <option [value]="room.id">{{ room.roomNumber }} — {{ room.roomName || 'Chưa đặt tên' }}</option> }</select><input formControlName="shiftDate" type="date" /><input formControlName="startTime" type="time" /><input formControlName="endTime" type="time" /><input formControlName="notes" placeholder="Ghi chú ca trực" /><button class="primary" type="submit">Phân ca</button></form>
+      <table><thead><tr><th>Nhân sự</th><th>Ngày trực</th><th>Khung giờ</th><th>Phòng/Buồng</th><th>Trạng thái</th><th>Hành động</th></tr></thead><tbody>
+        @for (shift of pagedRecurringShifts(); track shift.id) {
+          <tr><td>{{ shift.staffName }}</td><td>{{ shift.shiftDate }}</td><td>{{ shift.startTime }} – {{ shift.endTime }}</td><td>{{ shift.roomNumber }}</td><td><span [class.pending]="shift.approvalStatus === 'PENDING'" [class.blocked]="shift.approvalStatus === 'LOCKED'">{{ shift.approvalStatus === 'APPROVED' ? 'Đã phê duyệt' : shift.approvalStatus === 'LOCKED' ? 'Đã khóa' : 'Chờ phê duyệt' }}</span></td><td><div class="actions"><button class="row-action detail-action" type="button" (click)="selectedShift.set(shift)">Xem chi tiết</button><button class="row-action" type="button" (click)="lockShift(shift)">{{ shift.approvalStatus === 'LOCKED' ? 'Mở khóa' : 'Khóa' }}</button><button class="row-action" type="button" (click)="openShiftEdit(shift)">Chỉnh sửa</button></div></td></tr>
+        } @empty { <tr><td colspan="6" class="empty">Chưa có phân ca trực.</td></tr> }
+      </tbody></table><div class="pagination"><span>Trang {{ shiftPage() }} / {{ shiftPageCount() }}</span><button type="button" (click)="changePage('shift', shiftPage() - 1)" [disabled]="shiftPage() === 1">Trước</button><button type="button" (click)="changePage('shift', shiftPage() + 1)" [disabled]="shiftPage() === shiftPageCount()">Sau</button></div>
+    </article>
+    }
+  </section>
+
+  @if (showForm()) {
+    <div class="shade"><form [formGroup]="staffForm" (ngSubmit)="createStaff()" novalidate>
+      <header><div><h2>Thêm nhân sự</h2><p>Tạo tài khoản và hồ sơ chuyên môn.</p></div><button type="button" class="close" (click)="showForm.set(false)">×</button></header>
+      @if (errorMessage()) {
+        <div style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+          <span>⚠️ {{ errorMessage() }}</span>
+        </div>
+      }
+      <div class="form-grid">
+        <label>
+          Họ tên *
+          <input formControlName="fullName" placeholder="Nguyễn Văn A" />
+          @if (staffForm.controls.fullName.invalid && staffForm.controls.fullName.touched) {
+            <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Vui lòng nhập họ tên nhân sự.</span>
+          }
+        </label>
+        <label>
+          Email *
+          <input formControlName="email" type="email" placeholder="example@clinic.vn" />
+          @if (staffForm.controls.email.invalid && staffForm.controls.email.touched) {
+            <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Vui lòng nhập email hợp lệ.</span>
+          }
+        </label>
+        <label>
+          Số điện thoại
+          <input formControlName="phoneNumber" type="tel" placeholder="0901234567" />
+          @if (staffForm.controls.phoneNumber.touched && staffForm.controls.phoneNumber.value && !staffForm.controls.phoneNumber.valid) {
+            <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Số điện thoại gồm 10 số di động VN.</span>
+          }
+        </label>
+        <label>Giới tính<select formControlName="gender"><option value="MALE">Nam</option><option value="FEMALE">Nữ</option><option value="OTHER">Khác</option></select></label>
+        <label>
+          Mật khẩu tạm thời *
+          <div style="position: relative; display: flex; align-items: center;">
+            <input [type]="showPassword() ? 'text' : 'password'" formControlName="password" style="padding-right: 36px; width: 100%;" placeholder="Tối thiểu 8 ký tự" />
+            <button type="button" (click)="showPassword.set(!showPassword())" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; font-size: 16px; color: #64748b;" aria-label="Hiện/ẩn mật khẩu">
+              {{ showPassword() ? '👁️' : '🙈' }}
+            </button>
+          </div>
+          @if (staffForm.controls.password.invalid && staffForm.controls.password.touched) {
+            <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Mật khẩu tối thiểu 8 ký tự.</span>
+          }
+        </label>
+        <label>
+          Ngày sinh *
+          <input formControlName="dateOfBirth" type="date" />
+          @if (staffForm.controls.dateOfBirth.invalid && staffForm.controls.dateOfBirth.touched) {
+            <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Vui lòng chọn ngày sinh.</span>
+          }
+        </label>
+        <label>Vai trò<select formControlName="role"><option [value]="Role.DOCTOR">Bác sĩ</option><option [value]="Role.RECEPTIONIST">Lễ tân</option><option [value]="Role.ADMIN">Quản trị</option></select></label>
+        @if (staffForm.controls.role.value === Role.DOCTOR) {
+          <label>
+            Số CCHN *
+            <input formControlName="licenseNumber" placeholder="Ví dụ: CCHN-00123" />
+            @if (staffForm.controls.licenseNumber.invalid && staffForm.controls.licenseNumber.touched) {
+              <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Tối thiểu 5 ký tự (chữ, số, ., /, -)</span>
+            }
+          </label>
+          <label>Phòng/Buồng khám *
+            <select formControlName="roomNumber" (change)="onRoomSelected($any($event.target).value)">
+              <option value="">Chọn phòng/buồng</option>
+              @for (room of availableRooms(); track room.roomNumber) {
+                <option [value]="room.roomNumber">{{ room.label }}</option>
+              }
+            </select>
+          </label>
+          <label>Số năm kinh nghiệm<input formControlName="yearsExperience" type="number" min="0" /></label>
+          <label>Học hàm / học vị<input formControlName="academicTitle" placeholder="ThS.BS, BSCKII, ..." /></label>
+          <label>Tiền khám (VNĐ)<input formControlName="consultationFee" type="number" min="0" step="10000" placeholder="200000" /></label>
+          <fieldset class="specialties"><legend>Chuyên khoa (chọn một hoặc nhiều) *</legend>@for (specialty of specialties(); track specialty.id) { <label><input type="checkbox" data-testid="create-specialty-option" [checked]="selectedCreateSpecialtyIds().includes(specialty.id)" (change)="toggleCreateSpecialty(specialty.id, $any($event.target).checked)" />{{ specialty.name }}</label> }</fieldset>
+        }
+      </div>
+      <footer><button type="button" (click)="showForm.set(false)">Hủy</button><button class="primary" [disabled]="submitting()" type="submit">{{ submitting() ? 'Đang tạo...' : 'Tạo tài khoản' }}</button></footer>
+    </form></div>
+  }
+
+  @if (selectedStaff(); as person) {
+    <div class="shade"><form class="detail-form" [formGroup]="detailForm" (ngSubmit)="saveDetails()">
+      <header><div><span class="staff-code">{{ person.code }}</span><h2>Hồ sơ nhân sự</h2><p>{{ person.email || 'Chưa có email' }}</p></div><button type="button" class="close" (click)="selectedStaff.set(null)">×</button></header>
+      @if (errorMessage()) {
+        <div style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin: 0 16px 12px 16px; display: flex; align-items: center; gap: 8px;">
+          <span>⚠️ {{ errorMessage() }}</span>
+        </div>
+      }
+      <div style="display: flex; align-items: center; gap: 16px; padding: 12px 16px; margin: 0 16px 16px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <img
+          [src]="staffAvatarPreview() || person.avatarUrl || 'assets/doctor.png'"
+          alt="Avatar"
+          style="width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 2px solid #0284c7;"
+        />
+        <div>
+          <div style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 2px;">Ảnh đại diện</div>
+          <span style="font-size: 11px; color: #64748b; display: block; margin-bottom: 6px;">JPG, PNG, WEBP (tối đa 10MB)</span>
+          <label style="cursor: pointer; display: inline-block; padding: 4px 10px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-weight: 500; color: #0284c7;">
+            {{ uploadingAvatar() ? 'Đang tải lên...' : 'Chọn ảnh mới' }}
+            <input type="file" style="display: none;" accept="image/png,image/jpeg,image/jpg,image/webp" [disabled]="uploadingAvatar()" (change)="onAvatarSelected($event)" />
+          </label>
+          @if (avatarUploadSuccess()) {
+            <div style="font-size: 12px; color: #059669; margin-top: 4px;">{{ avatarUploadSuccess() }}</div>
+          }
+          @if (avatarUploadError()) {
+            <div style="font-size: 12px; color: #dc2626; margin-top: 4px;">{{ avatarUploadError() }}</div>
+          }
+        </div>
+      </div>
+      <div class="form-grid">
+        <label>Họ tên<input formControlName="fullName" /></label><label>Vai trò<input [value]="person.role" disabled /></label>
+        <label>Số điện thoại<input formControlName="phoneNumber" type="tel" /></label><label>Giới tính<select formControlName="gender"><option value="MALE">Nam</option><option value="FEMALE">Nữ</option><option value="OTHER">Khác</option></select></label>
+        <label>Ngày sinh<input formControlName="dateOfBirth" type="date" /></label><label>Email<input [value]="person.email" disabled /></label>
+        @if (person.roleValue === Role.DOCTOR) {
+          <label>Học hàm / học vị<input formControlName="academicTitle" /></label>
+          <label>
+            Số CCHN
+            <input formControlName="licenseNumber" />
+            @if (detailForm.controls.licenseNumber.invalid && detailForm.controls.licenseNumber.touched) {
+              <span style="font-size: 11px; color: #dc2626; margin-top: 2px;">Tối thiểu 5 ký tự (chữ, số, ., /, -)</span>
+            }
+          </label>
+          <label>Số năm kinh nghiệm<input formControlName="yearsExperience" type="number" min="0" /></label>
+          <label>Tiền khám (VNĐ)<input formControlName="consultationFee" type="number" min="0" step="10000" /></label>
+          <label>Phòng/Buồng khám
+            <select formControlName="roomNumber">
+              <option value="">Chọn phòng/buồng</option>
+              @for (room of availableRooms(); track room.roomNumber) {
+                <option [value]="room.roomNumber">{{ room.label }}</option>
+              }
+            </select>
+          </label>
+          <fieldset class="specialties"><legend>Chuyên khoa (chọn một hoặc nhiều)</legend>@for (specialty of specialties(); track specialty.id) { <label><input type="checkbox" data-testid="specialty-option" [checked]="selectedDetailSpecialtyIds().includes(specialty.id)" (change)="toggleDetailSpecialty(specialty.id, $any($event.target).checked)" />{{ specialty.name }}</label> }</fieldset>
+        }
+      </div>
+      @if (errorMessage()) { <p class="form-error">{{ errorMessage() }}</p> }
+      <footer><button type="button" (click)="selectedStaff.set(null)">Đóng</button><button data-testid="save-details" class="primary" [disabled]="savingDetails()" type="submit">{{ savingDetails() ? 'Đang lưu...' : 'Lưu thay đổi' }}</button></footer>
+    </form></div>
+  }
+  @if (selectedRoom(); as room) {
+    <div class="shade"><section class="room-dialog"><header><div><h2>{{ room.roomNumber }}</h2><p>Chi tiết phòng/buồng khám</p></div><button type="button" class="close" (click)="selectedRoom.set(null)">×</button></header><dl><dt>Tên phòng/buồng</dt><dd>{{ room.roomName || '—' }}</dd><dt>Chuyên khoa</dt><dd>{{ specialtyName(room.specialtyId) }}</dd><dt>Loại</dt><dd>{{ room.roomType || '—' }}</dd><dt>Tầng/khu vực</dt><dd>{{ room.location || '—' }}</dd><dt>Ghi chú</dt><dd>{{ room.notes || '—' }}</dd><dt>Trạng thái</dt><dd>{{ room.isActive ? 'Hoạt động' : 'Ngừng dùng' }}</dd></dl><footer><button type="button" (click)="selectedRoom.set(null)">Đóng</button><button type="button" class="primary" (click)="selectedRoom.set(null); openRoomEdit(room)">Chỉnh sửa</button></footer></section></div>
+  }
+  @if (editingRoom(); as room) {
+    <div class="shade"><form class="room-dialog" [formGroup]="roomEditForm" (ngSubmit)="saveRoom()"><header><div><h2>Chỉnh sửa phòng/buồng</h2><p>Mã phòng: {{ room.roomNumber }}</p></div><button type="button" class="close" (click)="editingRoom.set(null)">×</button></header><label>Tên phòng/buồng<input formControlName="roomName" /></label><label>Chuyên khoa<select formControlName="specialtyId"><option value="">Chưa gán chuyên khoa</option>@for (specialty of specialties(); track specialty.id) { <option [value]="specialty.id">{{ specialty.name }}</option> }</select></label><label>Loại phòng<select formControlName="roomType"><option value="CONSULTATION">Phòng khám</option><option value="EXAMINATION">Buồng khám</option><option value="PROCEDURE">Phòng thủ thuật</option><option value="OTHER">Khác</option></select></label><label>Tầng/khu vực<input formControlName="location" /></label><label>Ghi chú<textarea formControlName="notes"></textarea></label><label class="checkbox-label"><input formControlName="isActive" type="checkbox" />Đang hoạt động</label>@if (roomError()) { <p class="form-error">{{ roomError() }}</p> }<footer><button type="button" (click)="editingRoom.set(null)">Hủy</button><button type="submit" class="primary" [disabled]="savingRoom()">{{ savingRoom() ? 'Đang lưu...' : 'Lưu thay đổi' }}</button></footer></form></div>
+  }
+  @if (selectedShift(); as shift) {
+    <div class="shade"><section class="room-dialog"><header><div><h2>Ca trực {{ shift.shiftDate }}</h2><p>{{ shift.staffName }}</p></div><button type="button" class="close" (click)="selectedShift.set(null)">×</button></header><dl><dt>Phòng/Buồng</dt><dd>{{ shift.roomNumber }}</dd><dt>Khung giờ</dt><dd>{{ shift.startTime }} – {{ shift.endTime }}</dd><dt>Trạng thái</dt><dd>{{ shift.approvalStatus === 'APPROVED' ? 'Đã phê duyệt' : shift.approvalStatus === 'LOCKED' ? 'Đã khóa' : 'Chờ phê duyệt' }}</dd><dt>Ghi chú</dt><dd>{{ shift.notes || '—' }}</dd></dl><footer><button type="button" (click)="selectedShift.set(null)">Đóng</button><button type="button" class="primary" (click)="selectedShift.set(null); openShiftEdit(shift)">Chỉnh sửa</button></footer></section></div>
+  }
+  @if (editingShift(); as shift) {
+    <div class="shade"><form class="room-dialog" [formGroup]="shiftEditForm" (ngSubmit)="saveShift()"><header><div><h2>Chỉnh sửa ca trực</h2><p>{{ shift.staffName }}</p></div><button type="button" class="close" (click)="editingShift.set(null)">×</button></header><label>Phòng/Buồng<select formControlName="roomId">@for (room of roomCatalog(); track room.id) { <option [value]="room.id">{{ room.roomNumber }} — {{ room.roomName || 'Chưa đặt tên' }}</option> }</select></label><label>Ngày trực<input formControlName="shiftDate" type="date" /></label><label>Giờ bắt đầu<input formControlName="startTime" type="time" /></label><label>Giờ kết thúc<input formControlName="endTime" type="time" /></label><label>Trạng thái<select formControlName="approvalStatus"><option value="PENDING">Chờ phê duyệt</option><option value="APPROVED">Đã phê duyệt</option><option value="LOCKED">Đã khóa</option></select></label><label>Ghi chú<textarea formControlName="notes"></textarea></label><footer><button type="button" (click)="editingShift.set(null)">Hủy</button><button type="submit" class="primary" [disabled]="savingShift()">{{ savingShift() ? 'Đang lưu...' : 'Lưu thay đổi' }}</button></footer></form></div>
+  }
+</main>

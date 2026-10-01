@@ -1,0 +1,29 @@
+{
+  "name": "e-healthcare",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hệ thống Quản lý & Đặt lịch Khám chữa bệnh (E-Healthcare Portal) - Monorepo",
+  "workspaces": [
+    "shared",
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:client": "npm run build --workspace=ehealth-web-client",
+    "build:shared": "npm run build --workspace=@ehealth/shared",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "seed:payment-demo": "node scripts/patient-payment-demo.cjs",
+    "seed:admin-catalog-demo": "docker exec -i ehealth-postgres psql -v ON_ERROR_STOP=1 -U postgres -d ehealth_db < scripts/seed-admin-catalog-demo.sql",
+    "seed:admin-demo": "docker exec -i ehealth-postgres psql -v ON_ERROR_STOP=1 -U postgres -d ehealth_db < scripts/seed-admin-dashboard-demo.sql"
+  },
+  "overrides": {
+    "@nestjs/platform-express": {
+      "multer": "^2.3.0"
+    }
+  },
+  "devDependencies": {
+    "@angular/compiler": "^18.2.14"
+  }
+}

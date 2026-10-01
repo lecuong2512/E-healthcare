@@ -1,0 +1,136 @@
+<main class="queue-board">
+  <header class="queue-board__header">
+    <div class="queue-board__header-inner">
+      <div class="queue-board__brand" aria-label="E-Healthcare Medical">
+        <img
+          src="assets/figma/reception-logo.png"
+          alt=""
+          width="40"
+          height="40"
+        />
+        <div>
+          <p>E-Healthcare <span>Medical</span></p>
+          <small>Cổng thông tin y tế</small>
+        </div>
+      </div>
+
+      <div class="queue-board__title">
+        <p>Bảng hàng đợi</p>
+        <h1>Gọi số khám bệnh</h1>
+      </div>
+
+      <div class="queue-board__meta">
+        <div
+          class="queue-board__connection"
+          [attr.data-state]="store.connectionState()"
+          role="status"
+        >
+          <span aria-hidden="true"></span>
+          <div>
+            <strong>{{ connectionLabel() }}</strong>
+            @if (store.updatedAt()) {
+              <small>
+                Cập nhật {{ store.updatedAt() | date: 'HH:mm:ss':'+0700' }}
+              </small>
+            }
+          </div>
+        </div>
+
+        <time [attr.datetime]="now().toISOString()">
+          {{ now() | date: 'HH:mm':'+0700' }}
+          <small>Hôm nay · {{ now() | date: 'dd/MM/yyyy':'+0700' }}</small>
+        </time>
+
+        <button
+          type="button"
+          class="queue-board__sound"
+          (click)="toggleMuted()"
+          [attr.aria-label]="muted() ? 'Bật chuông gọi số' : 'Tắt chuông gọi số'"
+          [attr.title]="muted() ? 'Bật chuông gọi số' : 'Tắt chuông gọi số'"
+        >
+          <span aria-hidden="true">{{ muted() ? '🔇' : '🔊' }}</span>
+        </button>
+
+        <button
+          type="button"
+          class="queue-board__exit"
+          (click)="exitPresentation()"
+          aria-label="Thoát chế độ trình chiếu / Quay lại quầy"
+          title="Thoát chế độ trình chiếu / Quay lại quầy"
+        >
+          <span class="queue-board__exit-icon" aria-hidden="true">🚪</span>
+          <span class="queue-board__exit-text">Quay lại quầy</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <section class="queue-board__content" aria-live="polite">
+    <app-queue-board-now-serving
+      [tickets]="store.nowServing()"
+      [lastCalledTicketId]="store.lastCalledTicketId()"
+    />
+    <app-queue-board-next-up [tickets]="store.nextUp()" />
+  </section>
+
+  <footer class="queue-board__footer">
+    <span aria-hidden="true">ℹ</span>
+    <p>
+      Vui lòng theo dõi số thứ tự và di chuyển đến đúng phòng khám khi được gọi.
+    </p>
+  </footer>
+
+  @if (!presentationStarted()) {
+    <div
+      class="presentation-launcher"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="launcher-title"
+    >
+      <div class="presentation-launcher__card">
+        <img
+          src="assets/figma/reception-logo.png"
+          alt=""
+          width="48"
+          height="48"
+        />
+        <p class="presentation-launcher__eyebrow">E-Healthcare Medical</p>
+        <h2 id="launcher-title">Sẵn sàng hiển thị bảng gọi số</h2>
+        <p class="presentation-launcher__description">
+          Bắt đầu chế độ trình chiếu toàn màn hình và cho phép phát chuông khi
+          có bệnh nhân được gọi vào phòng khám.
+        </p>
+        <div class="presentation-launcher__sound-state">
+          <span aria-hidden="true">{{ muted() ? '🔇' : '🔊' }}</span>
+          <div>
+            <strong>Âm thanh gọi số</strong>
+            <small>{{ muted() ? 'Đang tắt' : 'Đang bật' }}</small>
+          </div>
+          <button type="button" (click)="toggleMuted()">
+            {{ muted() ? 'Bật âm thanh' : 'Tắt âm thanh' }}
+          </button>
+        </div>
+        <div class="presentation-launcher__actions">
+          <button
+            type="button"
+            class="presentation-launcher__start"
+            (click)="startPresentation()"
+          >
+            Bắt đầu trình chiếu
+          </button>
+          <a
+            routerLink="/receptionist/checkin"
+            class="presentation-launcher__cancel"
+          >
+            Quay lại quầy lễ tân
+          </a>
+        </div>
+        @if (fullscreenError()) {
+          <p class="presentation-launcher__error" role="alert">
+            {{ fullscreenError() }}
+          </p>
+        }
+      </div>
+    </div>
+  }
+</main>

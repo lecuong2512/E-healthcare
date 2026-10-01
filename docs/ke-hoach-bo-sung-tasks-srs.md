@@ -1,0 +1,391 @@
+# KẾ HOẠCH BỔ SUNG NHIỆM VỤ DỰ ÁN E-HEALTHCARE PORTAL (PHIÊN BẢN CẬP NHẬT SPRINT 3)
+## Báo cáo Rà soát Khoảng hụt (Gap Analysis) & Phân bổ Tối đa các Task Bổ sung vào Sprint 3 theo SRS-EHEALTH-2026-V1
+
+- **Dự án:** Hệ thống Quản lý & Đặt lịch Khám chữa bệnh (E-Healthcare Portal)
+- **Tài liệu căn cứ:** 
+  - `docs/SRS-EHEALTH-2026-V1.docx` (Bản đặc tả Baseline 07/09/2026)
+  - `docs/cautruc.md` (Tài liệu Cấu trúc Thư mục & Nguyên tắc Vận hành Dự án)
+  - `Kế hoạch Phân công Dự án EHealth (SRS-EHEALTH-2026-V1).xlsx` (Bảng phân công gốc 4 Sprint)
+- **Người lập:** Ban Kỹ thuật Dự án (Technical Lead & System Analyst)
+- **Thời điểm cập nhật:** 21/09/2026 (Tuần 3 - Đang trong giai đoạn Sprint 3)
+- **Định hướng điều chỉnh:** **Tập trung bổ sung gần như toàn bộ (9/11 tasks mới) trực tiếp vào Sprint 3 (21/09 - 25/09/2026)** để hoàn thiện trọn vẹn toàn bộ chu trình khám chữa bệnh, lịch trực, lễ tân sảnh, hàng đợi và bảo mật ngay trong Sprint này. Sprint 4 sẽ chỉ tập trung vào Cổng thanh toán, Báo cáo Quản trị, Rà soát An ninh & Đóng gói Release.
+
+---
+
+## 1. TỔNG QUAN ĐIỀU CHỈNH KẾ HOẠCH
+
+Sau khi xem xét tiến độ thực tế ngày 21/09/2026 (các nhánh PR #10, #11, #12, #13 của Sprint 1 & 2 đã hoàn thành và merge thành công), **Sprint 3 là thời điểm vàng để hoàn tất mọi mắt xích nghiệp vụ cốt lõi**.
+
+Việc dồn các task bổ sung vào Sprint 3 giúp:
+1. **Khép kín luồng nghiệp vụ Bác sĩ:** Không chỉ có buồng khám (Card 3.4) mà có luôn giao diện khai báo ca trực tuần `/doctor/schedule` và phụ lục bệnh án (EMR Addendum) sau khóa 24h.
+2. **Khép kín luồng nghiệp vụ Lễ tân & Sảnh chờ:** Không chỉ có quầy check-in (Card 3.2) mà có đồng thời Màn hình TV gọi số ngoài sảnh (Queue Board) và Mẫu in phiếu khám nhiệt POS K80 / A5.
+3. **Hoàn thiện bảo mật & tài khoản:** Bổ sung ngay Quên mật khẩu OTP, Redis Token Blacklist thu hồi phiên đăng xuất và Backend PHR API phục vụ khám bệnh.
+4. **Minh bạch luồng Lịch hẹn:** Kết hợp máy trạng thái (Card 3.1) với giao diện Bệnh nhân tự hủy lịch & chính sách hoàn phí 100/70/0%.
+5. **Ổn định hạ tầng nền tảng:** Đưa BullMQ / Redis Queue và Cron Schedulers vào ngay Sprint 3 để phục vụ gửi mail, SMS nhắc hẹn và dọn dẹp slot.
+
+---
+
+## 2. BẢNG TỔNG HỢP PHÂN BỔ CÁC TASK BỔ SUNG VÀO SPRINT 3 & SPRINT 4
+
+| STT | Mã Card | Tên Task / Đầu việc Bổ sung | Căn cứ SRS | Vai trò | Phụ trách chính | Phân bổ Sprint | Trạng thái |
+| :---: | :---: | :--- | :--- | :---: | :---: | :---: | :---: |
+| **1** | **Card 3.6** | **UI Khai báo & Quản lý Ca trực Bác sĩ** (`/doctor/schedule`) | SRS-DOC-01 (Mục 4.3.1) | 🔵 Frontend | **Trần Văn Tiến** | ⚡ **Sprint 3** | ✅ **Hoàn thành** |
+| **2** | **Card 3.7** | **Quên mật khẩu OTP, Thu hồi phiên (Token Blacklist) & Backend PHR API** | SRS-AUTH-01..03, NFR-SEC-02 | 🩵 Backend | **Đồng Văn Tú** | ⚡ **Sprint 3** | ✅ **Hoàn thành** |
+| **3** | **Card 3.8** | **Màn hình Bảng Hàng đợi Gọi số Sảnh chờ Fullscreen TV** (`/receptionist/queue-board`) | Section 3.4, SRS-REC-01 | 🔵 FE & 🩵 WS | **Trần Trọng Hoàn** | ⚡ **Sprint 3** | ✅ **Hoàn thành** |
+| **4** | **Card 3.9** | **Chuẩn hóa Mẫu In Phiếu Khám & Hóa đơn Nhiệt POS 80mm (K80) / Laser A5** | Section 3.2, SRS-REC-01 | 🔵 Frontend | **Nguyễn Mạnh Thi** | ⚡ **Sprint 3** | ✅ **Hoàn thành** |
+| **5** | **Card 3.10** | **Cơ chế Phụ lục Bệnh án Điện tử (EMR Addendum) sau Khóa 24h** | Section 5.4, SRS-DOC-03 | 🩵 BE & 🔵 FE | **Nguyễn Văn Tùng** | ⚡ **Sprint 3** | ✅ **Hoàn thành** |
+| **6** | **Card 3.11** | **UI Bệnh nhân Chủ động Hủy lịch & Hiển thị Tỷ lệ Hoàn tiền 100/70/0%** | Section 5.3, SRS-PAT-04 | 🔵 FE & 🩵 BE | **Đồng Văn Tú** (phối hợp Tiến) | ⚡ **Sprint 3** | ✅ **Hoàn thành** |
+| **7** | **Card 3.12** | **Hạ tầng Background Message Queue (BullMQ) & Cron Schedulers** | Section 7.1, SRS-PAT-05 | 🩵 BE & 🟡 DevOps | **Lê Việt Cường** | ⚡ **Sprint 3** | ✅ **Hoàn thành** |
+| **8** | **Card 3.13** | **Giao diện Quản trị Tra cứu Nhật ký Kiểm toán** (`/admin/audit-logs`) | SRS-ADM-04 (Mục 4.5.4) | 🔵 Frontend | **Trần Trọng Hoàn** | ⚡ **Sprint 3** | ✅ **Hoàn thành** |
+| **9** | **Card 3.14** | **Bệnh nhân Gửi Đánh giá 1-5 Sao & Nhận xét Bác sĩ sau ca khám** | SRS-PAT-01, Table 7 | 🔵 FE & 🩵 BE | **Nguyễn Mạnh Thi** | ⚡ **Sprint 3** | ✅ **Hoàn thành** |
+| **10** | **Card 4.7** | **UI Đón Kết quả Thanh toán VNPAY/MoMo & Hóa đơn Điện tử kèm QR** | SRS-PAT-03 (Mục 4.2.3) | 🔵 Frontend | **Trần Văn Tiến** | 🚀 **Sprint 4** | ✅ **Hoàn thành** |
+| **11** | **Card 4.8** | **Diễn tập Khôi phục Thảm họa (RTO < 2h, RPO < 15m) & Audit OWASP Top 10** | NFR-AVAIL-02, NFR-SEC-03 | 🟢 QA & 🟡 DevOps | **Nguyễn Văn Tùng** (phối hợp Cường) | 🚀 **Sprint 4** | 🔄 **Đang triển khai** |
+| **12** | **Card 4.9** | **[UI/UX] Hệ thống điều hướng Role-based & Xóa bỏ trùng lặp 2 Header** | SRS-PAT-01..05, SRS-DOC-01, SRS-REC-01 | 🔵 Frontend | **Lê Việt Cường** | 🚀 **Sprint 4 (QA Fix)** | ✅ **Hoàn thành** |
+| **13** | **Card 4.10** | **[Auth/UI] Nâng cấp Avatar góc phải: Hiển thị tên thật, Dropdown Menu & Đăng xuất** | SRS-AUTH-01..03, UI/UX Shell | 🔵 Frontend | **Lê Việt Cường** | 🚀 **Sprint 4 (QA Fix)** | ✅ **Hoàn thành** |
+| **14** | **Card 4.11** | **[Reception] Điều hướng 2 chiều Bảng gọi số Smart TV (Lối vào & Lối thoát)** | Section 3.4, SRS-REC-01 | 🔵 Frontend | **Lê Việt Cường** | 🚀 **Sprint 4 (QA Fix)** | ✅ **Hoàn thành** |
+| **15** | **Card 4.12** | **[Fullstack] Bổ sung Upload Avatar (User/Doctor) & Kênh Web Push Notification** | SRS-DOC-01, SRS-PAT-05 | 🟣 Fullstack | **Lê Việt Cường** | 🚀 **Sprint 4 (QA Fix)** | ✅ **Hoàn thành** |
+| **16** | **Card 4.13** | **[QA/Hotfix] Xử lý 15 Lỗi Tích hợp & Làm giàu Dữ liệu Seed 625 Slots Khám** | Toàn hệ thống | 🟣 Fullstack & QA | **Lê Việt Cường** | 🚀 **Sprint 4 (QA Fix)** | ✅ **Hoàn thành** |
+| **17** | **Card 4.14** | **[QA/Hotfix] Khắc phục Lỗi Nghiệp vụ Bác sĩ & Admin Staff (Thi.docx)** | Admin & Doctor | 🟣 Fullstack & QA | **Lê Việt Cường** | 🚀 **Sprint 4 (QA Fix)** | ✅ **Hoàn thành** |
+| **18** | **Card 4.15** | **[Payment/Lifecycle] Hoàn thiện Chu trình VNPAY/MoMo, Đặt cho Người khác & Auth Header** | Patient & Auth Shell | 🟣 Fullstack & QA | **Lê Việt Cường** | 🚀 **Sprint 4 (QA Fix)** | ✅ **Hoàn thành** |
+
+> **Nhận xét phân bổ:** Có **9/11 tasks bổ sung ban đầu (chiếm 82%)** đã hoàn thành trong **Sprint 3**. Tại giai đoạn QA chốt Release Sprint 4 (30/09/2026), bổ sung tiếp **4 Cards (Card 4.9 → Card 4.12) giao cho Lê Việt Cường phụ trách** nhằm khắc phục triệt để các tồn đọng về điều hướng, trải nghiệm người dùng, tải ảnh đại diện và kênh Web Push.
+
+---
+
+## 3. CHI TIẾT CÁC CARD BỔ SUNG TRONG SPRINT 3 (21/09 - 25/09/2026)
+
+---
+
+### 🏷️ Card 3.6 | [SRS-DOC-01] Xây dựng Giao diện Đăng ký & Quản lý Ca trực Bác sĩ
+- **Phân hệ:** Bác sĩ (Doctor Portal)
+- **Vai trò:** 🔵 Frontend
+- **Thành viên phụ trách:** **Trần Văn Tiến**
+- **Thời lượng dự kiến:** 2 ngày (21/09 - 22/09)
+- **Checklist chi tiết:**
+  - [x] Xây dựng màn hình `/doctor/schedule` (thay thế màn hình TODO hiện tại).
+  - [x] Lịch trực theo tuần (Thứ Hai - Chủ Nhật): Hiển thị trực quan các ca đã đăng ký (Ca sáng 08:00 - 12:00, Ca chiều 13:30 - 17:30).
+  - [x] Form đăng ký ca làm việc mới: Chọn ngày, chọn ca trực, chọn thời lượng slot (15 phút hoặc 30 phút), chọn buồng khám (`room_number`).
+  - [x] Tự động xem trước (Preview) danh sách slot được sinh ra trước khi gửi lên API `POST /api/v1/doctor/schedules`.
+  - [x] Hiển thị trạng thái ca trực: Đánh dấu ca đã có bệnh nhân đặt hẹn (khóa nút Hủy/Sửa ca) và ca còn trống 100% (cho phép Hủy/Sửa).
+  - [x] Kiểm tra hạn chót: Hiển thị cảnh báo nếu đăng ký sau 17:00 Thứ Sáu đối với tuần làm việc tiếp theo.
+
+---
+
+### 🏷️ Card 3.7 | [SRS-AUTH-01..03 & NFR-SEC-02] Quên Mật Khẩu, Thu Hồi Phiên (Token Blacklist) & PHR Backend API
+- **Phân hệ:** Quản lý Người dùng & Bảo mật (IAM & Security)
+- **Vai trò:** 🩵 Backend
+- **Thành viên phụ trách:** **Đồng Văn Tú**
+- **Thời lượng dự kiến:** 2 ngày (21/09 - 22/09)
+- **Checklist chi tiết:**
+  - [x] **Quên mật khẩu OTP (SRS-AUTH-01 & 02):**
+    - `POST /api/v1/auth/forgot-password`: Tiếp nhận email/SĐT, kiểm tra rate limit, sinh mã OTP 6 số lưu Redis với TTL 5 phút.
+    - `POST /api/v1/auth/reset-password`: Xác thực OTP, cập nhật mật khẩu mới (BCrypt cost 12), thu hồi toàn bộ token đang hoạt động.
+  - [x] **Thu hồi phiên & Token Blacklist (NFR-SEC-02):**
+    - `POST /api/v1/auth/logout`: Xóa HttpOnly Cookie `refreshToken`, trích xuất `jti` của Access Token đưa vào Redis Blacklist với TTL bằng thời gian sống còn lại.
+    - Tích hợp kiểm tra Blacklist trong `JwtAuthGuard` của NestJS server.
+  - [x] **Backend PHR API (SRS-AUTH-03):**
+    - Tạo `PhrModule` phục vụ 2 endpoints: `GET /api/v1/phr/me` và `PUT /api/v1/phr/me`.
+    - Validate mã thẻ BHYT chuẩn Việt Nam (15 ký tự: 2 chữ cái + 1 số đối tượng + 2 số tỉnh + 10 số BHXH).
+    - Validate enum nhóm máu (`A+`, `A-`, `B+`, `B-`, `AB+`, `AB-`, `O+`, `O-`) và danh sách tiền sử dị ứng thuốc/thức ăn.
+
+---
+
+### 🏷️ Card 3.8 | [Section 3.4 & SRS-REC-01] Màn hình Bảng Hàng đợi Gọi số Sảnh chờ (Queue Board Fullscreen TV)
+- **Phân hệ:** Lễ tân & Trình chiếu Sảnh Chờ (Receptionist & Public Queue)
+- **Vai trò:** 🔵 Frontend & 🩵 Backend WebSocket
+- **Thành viên phụ trách:** **Trần Trọng Hoàn**
+- **Thời lượng dự kiến:** 2 ngày (22/09 - 23/09)
+- **Checklist chi tiết:**
+  - [x] Xây dựng màn hình chuyên dụng `/receptionist/queue-board` (hỗ trợ chế độ Toàn màn hình TV độ phân giải Full HD / 4K ngoài sảnh).
+  - [x] Bố cục giao diện hiển thị 2 khu vực trực quan:
+    - **Đang khám (Now Serving):** Hiển thị số thứ tự (STT) khổ lớn, tên bệnh nhân (dạng viết tắt bảo mật: `Nguyễn V. A`), số buồng khám, chuyên khoa và tên bác sĩ phụ trách.
+    - **Chuẩn bị vào khám (Next Up):** Danh sách 5 bệnh nhân kế tiếp đang chờ ở sảnh kèm STT.
+  - [x] Kết nối WebSocket / Server-Sent Events (SSE) bắt sự kiện `appointment.status_changed`: Cập nhật bảng tức thì trong < 500ms mà không cần F5 trình duyệt.
+  - [x] Hiệu ứng Flash viền vàng/xanh kèm chuông âm thanh nhẹ khi có bệnh nhân mới được gọi vào buồng khám.
+
+---
+
+### 🏷️ Card 3.9 | [Section 3.2 & SRS-REC-01] Mẫu In Phiếu Khám & Hóa đơn Nhiệt POS 80mm / Laser A5
+- **Phân hệ:** Lễ tân (Receptionist)
+- **Vai trò:** 🔵 Frontend
+- **Thành viên phụ trách:** **Nguyễn Mạnh Thi**
+- **Thời lượng dự kiến:** 1.5 ngày (22/09 - 23/09)
+- **Checklist chi tiết:**
+  - [x] Thiết kế Component chuyên dụng `PrintReceiptComponent` phục vụ in ấn.
+  - [x] Chuẩn hóa CSS `@media print` cho 2 khổ in thực tế tại phòng khám:
+    - Khổ máy in nhiệt POS 80mm (K80): Header logo phòng khám, Mã vạch / QR lịch hẹn, Số thứ tự khám, Tên bệnh nhân, Chuyên khoa, Buồng khám, Số tiền viện phí đã nộp, Lời dặn đến trước 15 phút.
+    - Khổ in Laser A5: Phiếu thu tiền viện phí có đầy đủ thông tin pháp lý phục vụ thanh toán BHYT / thanh toán doanh nghiệp.
+  - [x] Tích hợp nút thao tác "In Phiếu Tiếp Đón" tự động ngay sau khi Lễ tân bấm Check-in thành công.
+
+---
+
+### 🏷️ Card 3.10 | [Section 5.4 & SRS-DOC-03] Cơ chế Phụ lục Bệnh án Điện tử (EMR Addendum) sau Khóa 24h
+- **Phân hệ:** Bác sĩ & Hồ sơ Y tế (Clinical)
+- **Vai trò:** 🩵 Backend & 🔵 Frontend
+- **Thành viên phụ trách:** **Nguyễn Văn Tùng**
+- **Thời lượng dự kiến:** 2 ngày (23/09 - 24/09)
+- **Checklist chi tiết:**
+  - [x] **Backend CSDL & API:**
+    - Tạo bảng `EMR_ADDENDUMS` (`id`, `medical_record_id`, `doctor_id`, `reason`, `previous_content`, `updated_content`, `created_at`).
+    - Logic kiểm soát: Nếu `medical_records.locked_at` đã quá 24 giờ, chặn tuyệt đối thao tác `PUT/PATCH` sửa trực tiếp bệnh án gốc.
+    - Endpoint `POST /api/v1/clinical/records/:id/addendums`: Tạo phụ lục bổ sung kèm lý do y khoa (ví dụ: "Bổ sung kết quả sinh thiết / kháng sinh đồ gửi muộn").
+    - Endpoint `GET /api/v1/clinical/records/:id/history`: Truy vết đầy đủ bệnh án ban đầu và toàn bộ phụ lục đính kèm theo thời gian.
+  - [x] **Frontend Buồng khám:**
+    - Hiển thị nhãn Badge màu đỏ **"HỒ SƠ ĐÃ KHÓA 24H (CHỈ ĐỌC)"**.
+    - Cung cấp nút bấm "Tạo Phụ lục Bệnh án (Addendum)" theo đúng quy định Thông tư 46/2018/TT-BYT.
+
+---
+
+### 🏷️ Card 3.11 | [Section 5.3 & SRS-PAT-04] Giao diện Bệnh nhân Tự Hủy Lịch & Minh Bạch Hoàn Tiền 100/70/0%
+- **Phân hệ:** Bệnh nhân (Patient Portal)
+- **Vai trò:** 🔵 Frontend & 🩵 Backend
+- **Thành viên phụ trách:** **Đồng Văn Tú** (phối hợp **Trần Văn Tiến**)
+- **Thời lượng dự kiến:** 2 ngày (23/09 - 24/09)
+- **Checklist chi tiết:**
+  - [x] Thêm nút "Hủy lịch khám" trong danh sách lịch hẹn sắp tới tại `/patient/history`.
+  - [x] Popup Modal xác nhận hủy lịch kèm bộ tính toán thời gian tự động:
+    - Khoảng cách đến giờ khám $T \ge 24h$: Thông báo màu xanh "Được hoàn 100% chi phí khám".
+    - $2h \le T < 24h$: Cảnh báo màu vàng "Được hoàn 70% chi phí khám (khấu trừ 30% phí điều phối ca trực)".
+    - $T < 2h$: Cảnh báo màu đỏ "Hủy trong vòng dưới 2 giờ trước khám không được hoàn phí".
+  - [x] Người dùng nhập lý do hủy -> Xác nhận -> Lịch hẹn chuyển `CANCELLED`, slot giải phóng về `AVAILABLE` để bệnh nhân khác có thể đặt.
+
+---
+
+### 🏷️ Card 3.12 | [Section 7.1 & SRS-PAT-05] Hạ tầng Background Message Queue (BullMQ) & Cron Schedulers
+- **Phân hệ:** Hạ tầng & Backend (DevOps & Backend)
+- **Vai trò:** 🩵 Backend & 🟡 DevOps
+- **Thành viên phụ trách:** **Lê Việt Cường**
+- **Thời lượng dự kiến:** 2 ngày (23/09 - 24/09)
+- **Checklist chi tiết:**
+  - [x] Tích hợp BullMQ & Redis connection pool vào NestJS server.
+  - [x] Tách biệt các hàng đợi xử lý ngầm (Queue Workers):
+    - `email-queue`: Gửi email xác nhận đặt lịch, email kích hoạt tài khoản, email nhắc hẹn trước 24h.
+    - `sms-queue`: Gửi mã OTP xác thực, SMS nhắc hẹn trước 2h.
+    - `pdf-queue`: Sinh đơn thuốc điện tử và hồ sơ bệnh án định dạng PDF có mã QR.
+  - [x] Cron Job quét tự động:
+    - Quét lịch hẹn `CONFIRMED` quá 30 phút mà bệnh nhân không check-in quầy -> tự động đánh dấu `NO_SHOW` vào cuối ngày (Section 5.2).
+    - Quét dọn dẹp các slot giữ chỗ mồ côi (nếu xảy ra lỗi kết nối mạng bất thường).
+
+---
+
+### 🏷️ Card 3.13 | [SRS-ADM-04] Giao diện Tra cứu Nhật ký Kiểm toán (Audit Logs Viewer UI)
+- **Phân hệ:** Quản trị Hệ thống (Admin Portal)
+- **Vai trò:** 🔵 Frontend
+- **Thành viên phụ trách:** **Trần Trọng Hoàn**
+- **Thời lượng dự kiến:** 1.5 ngày (24/09 - 25/09)
+- **Checklist chi tiết:**
+  - [x] Xây dựng màn hình `/admin/audit-logs` (thay thế placeholder TODO).
+  - [x] Bảng nhật ký kiểm toán với các cột: Thời điểm (UTC+7), Tài khoản thực hiện, Vai trò, Thao tác (`LOGIN`, `VIEW_EMR`, `UPDATE_RX`, `CANCEL_APPT`...), Địa chỉ IP, User-Agent.
+  - [x] Bộ lọc tìm kiếm: Lọc theo khoảng thời gian, theo loại hành động (Action) và tìm kiếm theo User ID / IP.
+  - [x] Đảm bảo tính bảo mật: Giao diện chỉ có quyền Xem và Xuất file (Read-only & Export CSV), hoàn toàn không có nút Sửa/Xóa.
+
+---
+
+### 🏷️ Card 3.14 | [SRS-PAT-01 & Table 7] Tính năng Gửi Đánh giá & Phản hồi Bác sĩ sau Ca khám
+- **Phân hệ:** Bệnh nhân (Patient Portal)
+- **Vai trò:** 🔵 Frontend & 🩵 Backend
+- **Thành viên phụ trách:** **Nguyễn Mạnh Thi**
+- **Thời lượng dự kiến:** 1.5 ngày (24/09 - 25/09)
+- **Checklist chi tiết:**
+  - [x] Trong tab "Lịch sử đã khám", hiển thị nút "Đánh giá bác sĩ" đối với các ca khám `COMPLETED` chưa được đánh giá.
+  - [x] Form đánh giá: Chấm điểm từ 1 đến 5 sao và viết nhận xét (tối đa 500 ký tự).
+  - [x] Backend API `POST /api/v1/doctors/:id/reviews`: Kiểm tra tính hợp lệ (bệnh nhân bắt buộc phải có ca khám hoàn thành với bác sĩ đó).
+  - [x] Cập nhật trường `rating_average` trong bảng `DOCTORS` và làm mới Redis Cache danh mục bác sĩ.
+
+---
+
+## 4. CHI TIẾT CÁC CARD CÒN LẠI TRONG SPRINT 4 (26/09 - 01/10/2026)
+
+Sprint 4 sẽ được giải phóng khỏi các task phát triển lẻ tẻ, tập trung tối đa vào Thanh toán, Quản trị, An ninh và Đóng gói phát hành:
+
+- **Card 4.1:** Tích hợp Cổng thanh toán VNPAY / MoMo Backend (Thi)
+- **Card 4.7 [MỚI]:** Giao diện Đón kết quả thanh toán & Hóa đơn điện tử kèm QR (Tiến - phối hợp Thi)
+- **Card 4.2:** Lịch sử khám bệnh & Tải đơn thuốc PDF (Tiến)
+- **Card 4.3:** Mã hóa CSDL AES-256 tầng dữ liệu nhạy cảm (Hoàn)
+- **Card 4.4:** Quản trị Danh mục Y tế, Bác sĩ & Dashboard KPI Phòng khám (Tú)
+- **Card 4.8 [MỚI]:** Diễn tập Khôi phục Thảm họa (RTO < 2h, RPO < 15m) & Rà soát Lỗ hổng OWASP Top 10 (Tùng + Cường)
+- **Card 4.5:** Kiểm thử Tích hợp Toàn hệ thống, Đo SLA & Đóng Ma trận RTM (Tùng)
+- **Card 4.6:** Đóng gói Release v1.0.0 & Báo cáo Demo Nghiệm thu (Toàn đội)
+
+---
+
+## 5. BẢNG PHÂN BỔ NHÂN LỰC TOÀN ĐỘI TRONG SPRINT 3 (21/09 - 25/09/2026)
+
+| Thành viên | Vai trò | Các Task đảm nhiệm trong Sprint 3 (Hiện tại) | Khối lượng |
+| :--- | :--- | :--- | :---: |
+| **Lê Việt Cường** | Tech Lead & Core Backend | **Card 3.5** (Test Chu trình khám lâm sàng & Dị ứng) + **Card 3.12** (BullMQ & Cron Workers) | 2 Cards |
+| **Trần Văn Tiến** | Frontend Engineer | **Card 3.4** (Buồng khám Bác sĩ UI) + **Card 3.6** (UI Khai báo ca trực) + Hỗ trợ UI Card 3.11 | 2.5 Cards |
+| **Nguyễn Mạnh Thi** | Fullstack Engineer | **Card 3.2** (Lễ tân Check-in Backend) + **Card 3.9** (Mẫu in POS K80/A5) + **Card 3.14** (Đánh giá Bác sĩ) | 3 Cards |
+| **Đồng Văn Tú** | Backend / Database | **Card 3.1** (State Machine & Refund) + **Card 3.7** (Quên pass, Blacklist, PHR) + **Card 3.11** (Hủy lịch & Hoàn tiền BE) | 3 Cards |
+| **Trần Trọng Hoàn** | Fullstack & QA | **Card 3.2** (Lễ tân Check-in Frontend) + **Card 3.8** (Queue Board TV Sảnh) + **Card 3.13** (Audit Logs UI) | 3 Cards |
+| **Nguyễn Văn Tùng** | QA/QC & Clinical Logic | **Card 3.3** (EMR, ICD-10 & Kê đơn Backend) + **Card 3.10** (Phụ lục Bệnh án EMR Addendum) | 2 Cards |
+
+---
+
+## 6. SƠ ĐỒ TIẾN TRÌNH SPRINT 3 (GIAI ĐOẠN 21/09 - 25/09/2026)
+
+```text
+SPRINT 3 TIẾN ĐỘ THỰC HIỆN TẬP TRUNG (21/09 - 25/09/2026):
+
+[21/09 - 22/09/2026] ── Khởi động Khai báo Ca trực, Lễ tân & IAM Nâng cao
+├── Card 3.6: UI Khai báo ca trực Bác sĩ /doctor/schedule (Tiến)
+├── Card 3.7: Quên mật khẩu OTP, Redis Token Blacklist & PHR Backend (Tú)
+├── Card 3.1: Máy trạng thái Lịch hẹn State Machine (Tú)
+└── Card 3.2: Tiếp đón Check-in QR quầy Lễ tân (Thi + Hoàn)
+
+[22/09 - 23/09/2026] ── Trình chiếu Sảnh, Mẫu in & Lâm sàng EMR
+├── Card 3.8: Màn hình Bảng Hàng đợi Fullscreen TV sảnh chờ /queue-board (Hoàn)
+├── Card 3.9: Mẫu in Phiếu tiếp đón & Hóa đơn nhiệt POS 80mm / A5 (Thi)
+├── Card 3.3: Bệnh án điện tử EMR, ICD-10 & Kê đơn thuốc Backend (Tùng)
+└── Card 3.4: Buồng khám Bác sĩ & Hàng đợi chuyên khoa UI (Tiến)
+
+[23/09 - 24/09/2026] ── Phụ lục Bệnh án, Hủy lịch Hoàn phí & Background Queue
+├── Card 3.10: Phụ lục Bệnh án EMR Addendum sau khóa 24h (Tùng)
+├── Card 3.11: Giao diện Bệnh nhân Hủy lịch & Hoàn tiền tự động (Tú + Tiến)
+└── Card 3.12: Hạ tầng BullMQ Message Queue & Cron Schedulers (Cường)
+
+[24/09 - 25/09/2026] ── Đánh giá Bác sĩ, Nhật ký Kiểm toán & Kiểm thử Chu trình Khám
+├── Card 3.13: Màn hình Quản trị Nhật ký Kiểm toán /admin/audit-logs (Hoàn)
+├── Card 3.14: Gửi Đánh giá 1-5 Sao & Nhận xét Bác sĩ (Thi)
+└── Card 3.5: Kiểm thử Toàn diện Chu trình Khám Lâm sàng & Cảnh báo Dị ứng (Cường)
+```
+
+---
+
+## 7. KẾT LUẬN
+
+Việc bổ sung tập trung **9 tasks vào Sprint 3**:
+- Giải quyết dứt điểm các màn hình còn đang để `[TODO]` trong hệ thống (`/doctor/schedule`, `/receptionist/queue-board`, `/admin/audit-logs`).
+- Hoàn thiện 100% nghiệp vụ phòng khám (tiếp đón -> gọi số sảnh -> khám bệnh -> kê đơn -> in phiếu -> khóa bệnh án -> đánh giá chất lượng) ngay trong tuần hiện tại.
+- Đảm bảo tải công việc được chia đều cho cả 6 thành viên (mỗi người 2 đến 3 tasks trong 5 ngày), khả thi cao và sẵn sàng đưa vào triển khai ngay.
+
+---
+
+## 8. CHI TIẾT CÁC CARD BỔ SUNG GIAI ĐOẠN QA CHỐT RELEASE SPRINT 4 (PHÂN CÔNG LÊ VIỆT CƯỜNG)
+
+- **Thời điểm lập:** 30/09/2026 (Phiên QA & Chuẩn bị Chốt Release v1.0.0).  
+- **Người phụ trách chính:** **Lê Việt Cường** (Technical Lead & Lead QA)  
+- **Căn cứ:** Kết quả kiểm thử thực tế trên nhánh `develop`, ghi nhận lỗi điều hướng, thiếu avatar và thiếu kênh thông báo Web Push.
+
+---
+
+### 🏷️ Card 4.9 | [UI/UX] Xây dựng hệ thống điều hướng Role-based & Xóa bỏ trùng lặp 2 Header
+- **Phân hệ:** Toàn hệ thống (Shell Layout & Role Navigation)
+- **Vai trò:** 🔵 Frontend
+- **Thành viên phụ trách:** **Lê Việt Cường**
+- **Căn cứ phát sinh:** Kết quả QA trực tiếp ngày 30/09/2026 phát hiện người dùng ở cả 4 role bị cô lập trang, thiếu menu chính và bị hiển thị 2 header chồng nhau.
+- **Checklist công việc:**
+  - [x] **Xóa bỏ Header trùng lặp:** Xóa thẻ `<header>` nội bộ trong các trang `checkin-desk.page.html`, `walkin-booking.page.html` và `phr-profile.page.html`.
+  - [x] **Menu Bệnh nhân:** Bổ sung thanh điều hướng nhanh: *Tìm kiếm bác sĩ* (`/patient/doctor-search`), *Lịch sử khám & Đơn thuốc* (`/patient/history`), *Hồ sơ sức khỏe* (`/patient/profile`).
+  - [x] **Menu Bác sĩ:** Thêm nút/tab chuyển đổi giữa *Hàng đợi khám* (`/doctor/queue`) và *Cấu hình ca trực* (`/doctor/schedule`).
+  - [x] **Menu Lễ tân:** Bổ sung nút chuyển đổi qua lại giữa *Bàn tiếp đón check-in* (`/receptionist/checkin`) và *Tiếp nhận vãng lai* (`/receptionist/walkin`).
+  - [x] **Sidebar/Menu Admin:** Xây dựng Sidebar điều hướng xuyên suốt 4 khu vực: *Dashboard KPI*, *Danh mục y tế*, *Quản lý nhân sự*, *Audit Logs*.
+
+---
+
+### 🏷️ Card 4.10 | [Auth/UI] Nâng cấp Avatar góc phải: Hiển thị tên thật, Dropdown Menu & Nút Đăng xuất
+- **Phân hệ:** Xác thực & Header Shell (`NavbarComponent`)
+- **Vai trò:** 🔵 Frontend / Auth
+- **Thành viên phụ trách:** **Lê Việt Cường**
+- **Căn cứ phát sinh:** Khắc phục nút avatar tròn `TN` đang bị hardcode tĩnh, thiếu menu tài khoản và thiếu nút Đăng xuất.
+- **Checklist công việc:**
+  - [x] Thay thế chuỗi cố định `TN` bằng Initials Avatar lấy từ tên người dùng thật (`AuthService.currentUser`).
+  - [x] Hiển thị **Họ và tên + Badge vai trò** (Bệnh nhân, Bác sĩ, Lễ tân, Quản trị viên) bên cạnh Avatar trên Header.
+  - [x] Xây dựng Menu xổ xuống (Dropdown Menu) khi click vào Avatar:
+    - [x] **Đối với Bệnh nhân:** Thêm mục *"Thông tin & Chỉnh sửa hồ sơ sức khỏe (PHR)"* (dẫn tới `/patient/profile`) và *"Lịch sử khám"*.
+    - [x] **Đối với Bác sĩ / Lễ tân / Admin:** Thêm mục lối tắt cấu hình trang cá nhân tương ứng.
+    - [x] Thêm nút **"Đăng xuất (Logout)"** chuẩn để xóa session/token và đưa người dùng về lại trang Login.
+
+---
+
+### 🏷️ Card 4.11 | [Reception] Hoàn thiện điều hướng 2 chiều cho Bảng gọi số sảnh chờ Smart TV
+- **Phân hệ:** Lễ tân (`/receptionist/queue-board`)
+- **Vai trò:** 🔵 Frontend / UX
+- **Thành viên phụ trách:** **Lê Việt Cường**
+- **Căn cứ phát sinh:** Lễ tân không có nút mở trang Bảng gọi số và bị kẹt khi vào chế độ toàn màn hình.
+- **Checklist công việc:**
+  - [x] **Lối vào:** Thêm nút *"Mở bảng gọi số sảnh chờ (Smart TV)"* tại thanh công cụ bàn làm việc của Lễ tân (`/receptionist/checkin`).
+  - [x] **Lối thoát modal:** Bổ sung nút *"Quay lại quầy lễ tân"* hoặc icon đóng (X) trên popup *"Sẵn sàng hiển thị bảng gọi số"*.
+  - [x] **Lối thoát trình chiếu:** Thêm nút/icon *"Thoát chế độ trình chiếu"* trên thanh tiêu đề bảng gọi số để lễ tân có thể quay lại trang làm việc bất cứ lúc nào mà không cần bấm Back trình duyệt.
+
+---
+
+### 🏷️ Card 4.12 | [Fullstack] Bổ sung tính năng Upload Avatar và Kênh thông báo Web Push theo SRS
+- **Phân hệ:** Fullstack (Bác sĩ, Bệnh nhân, Admin, Notification)
+- **Vai trò:** 🟣 Fullstack
+- **Thành viên phụ trách:** **Lê Việt Cường**
+- **Căn cứ phát sinh:** Khắc phục khoảng hụt (GAP) hiển thị avatar thực tế và bổ sung kênh Web Push còn thiếu so với SRS-PAT-05.
+- **Checklist công việc:**
+  - [x] **Phần Avatar:**
+    - [x] Thêm cột `avatar_url` vào bảng `users` và `doctors` trong cơ sở dữ liệu (Migration TypeORM).
+    - [x] Xây dựng API `POST /api/v1/users/avatar` (sử dụng Multer, lưu trữ vào thư mục `/uploads`).
+    - [x] Tích hợp component chọn/upload ảnh tại trang Hồ sơ bệnh nhân (`/patient/profile`) và form thêm bác sĩ của Admin (`/admin/staff`).
+    - [x] Hiển thị ảnh đại diện thật của từng bác sĩ trên danh sách tìm kiếm (`doctor-search`) và bước đặt lịch (`booking-stepper`).
+  - [x] **Phần Web Push Notification (SRS-PAT-05):**
+    - [x] Backend: Tích hợp thư viện `web-push`, cấu hình cặp khóa VAPID Keys, tạo bảng `push_subscriptions`.
+    - [x] Frontend: Đăng ký Service Worker (`@angular/service-worker`), hiển thị popup xin quyền nhận thông báo đẩy khi bệnh nhân đặt lịch thành công.
+
+
+---
+
+## 9. CHI TIẾT CÁC CARD BỔ SUNG & HOTFIX GIAI ĐOẠN CHỐT RELEASE SPRINT 4 (01/10/2026)
+
+- **Thời điểm hoàn thành:** 01/10/2026 (Chốt hoàn thiện toàn bộ mã nguồn trước Demo).  
+- **Người phụ trách chính:** **Lê Việt Cường** (Technical Lead & Lead QA)  
+- **Căn cứ phát sinh:** Kết quả kiểm thử thực tế từ 2 file rà soát `Thi.docx`, `Thi (1).docx`, rà soát chu trình thanh toán VNPAY/MoMo và phản hồi người dùng về hiển thị Header tại trang Login.
+
+---
+
+### 🏷️ Card 4.13 | [QA / Hotfix] Xử lý 15 Lỗi Tích hợp & Làm giàu Dữ liệu Seed 625 Slots Khám (BUG-01 -> BUG-15)
+- **Phân hệ:** Toàn hệ thống (Patient, Doctor EMR, Receptionist, Auth)
+- **Vai trò:** 🟣 Fullstack & QA
+- **Thành viên phụ trách:** **Lê Việt Cường**
+- **Trạng thái:** ✅ **Hoàn thành**
+- **Checklist công việc:**
+  - [x] **BUG-01:** Bổ sung chuẩn hóa Unicode NFD loại bỏ dấu tiếng Việt và lọc ngày khám `selectedDate` trong `doctor-search.page.ts`.
+  - [x] **BUG-02:** Cấu hình chính thức VNPAY Sandbox `VNPAY_TMN_CODE=NFZSAHX6` và `VNPAY_HASH_SECRET=JATSRBUCHOANNIVOTQCJLVYAVHEXTNRN`.
+  - [x] **BUG-03:** Bắt mã hủy `resultCode=1006` (MoMo) và `vnp_ResponseCode=24` (VNPAY), ngắt polling loading vô hạn, hiển thị màn hình phục hồi `recoverable`.
+  - [x] **BUG-04:** Bổ sung decorator `@Patch('me')` song song với `@Put('me')` cho `PhrController.updateMyPhr`.
+  - [x] **BUG-05:** Gắn `@Roles(...)` cho `UserController.uploadAvatar` tránh bị RolesGuard chặn 403.
+  - [x] **BUG-06:** Sửa `routerLink` của Brand Logo Header theo dynamic `homeRoute()` tương ứng từng vai trò.
+  - [x] **BUG-07:** Bổ sung trường `user` trong `IssuedSession` và lưu vào `TokenStoreService` để Header hiển thị họ tên thật, role badge và dynamic initials avatar.
+  - [x] **BUG-08:** Cơ chế Sandbox fallback cho OTP SMS ghi vào Logger hệ thống khi chưa cấu hình webhook SMS.
+  - [x] **BUG-09:** Bước 3 đặt lịch: Thêm nút chọn "Đặt cho bản thân" (tự điền PHR) và "Đặt cho người thân / người khác" (reset form).
+  - [x] **BUG-10:** Thiết kế lại `seed-qa.ts`: Tạo 6 chuyên khoa, 6 phòng khám, 5 bác sĩ chuyên khoa với **625 ca trực** phủ kín cả 3 ca (Sáng, Chiều, Tối).
+  - [x] **BUG-11:** Xóa bỏ toàn bộ các thẻ `<header>` nội bộ thừa trong `login`, `register`, `checkin-desk`, `walkin-booking` và `phr-profile`.
+  - [x] **BUG-12:** Tự động ẩn thanh Navbar khi ở chế độ Bảng gọi số Smart TV (`/receptionist/queue-board`).
+  - [x] **BUG-13:** Xóa mock 9 bệnh nhân gõ tay, kết nối trực tiếp API `GET /api/v1/doctor/queue` và WebSocket realtime `queue.snapshot` & `queue.status_changed`.
+  - [x] **BUG-14:** Đấu nối hàm `saveDraft()` vào CSDL PostgreSQL qua API lâm sàng.
+  - [x] **BUG-15:** Bổ sung Modal xác nhận trước khi hoàn thành ca khám, sinh chữ ký số SHA-256 cho đơn thuốc điện tử.
+
+---
+
+### 🏷️ Card 4.14 | [QA / Hotfix] Khắc phục Toàn diện Lỗi Nghiệp vụ Bác sĩ & Admin Staff (Thi.docx & Thi (1).docx)
+- **Phân hệ:** Quản trị Nhân sự (Admin Staff), Bác sĩ (Doctor EMR & Schedule)
+- **Vai trò:** 🟣 Fullstack & QA
+- **Thành viên phụ trách:** **Lê Việt Cường**
+- **Trạng thái:** ✅ **Hoàn thành**
+- **Checklist công việc:**
+  - [x] **Admin Staff - Trùng SĐT:** Bắt lỗi xung đột ràng buộc duy nhất `uq_users_login_phone_number` trong `staff-admin.service.ts`, ném lỗi HTTP 409 Conflict với thông báo tiếng Việt: *"Số điện thoại này đã được sử dụng bởi một tài khoản khác"*.
+  - [x] **Admin Staff - Đồng bộ danh sách:** Sửa lỗi tạo tài khoản nhân sự mới thành công nhưng reload trang bị mất do thiếu bản ghi vai trò tương ứng (tự động đồng bộ `doctors` và `receptionists`).
+  - [x] **Doctor Schedule - Đấu nối CSDL:** Xóa bỏ mock data cứng trong `schedule-config.page.ts`, xây dựng controller `GET /api/v1/doctor/schedules` và `POST /api/v1/doctor/schedules` lưu trực tiếp ca trực vào bảng `doctor_schedules` trong PostgreSQL.
+  - [x] **Bổ sung Giá khám (`consultationFee`):** Thêm trường giá khám trong form thêm/sửa bác sĩ của Admin Staff, hiển thị giá khám rõ ràng trên giao diện tìm kiếm bác sĩ và màn hình đặt lịch.
+  - [x] **Doctor Search - Bác sĩ Nhi khoa:** Khắc phục lỗi không tìm thấy bác sĩ chuyên khoa Nhi khi lọc theo chuyên khoa hoặc từ khóa "nhi".
+  - [x] **ICD-10 & Danh mục Thuốc:** Nạp danh mục chẩn đoán bệnh từ bảng `icd10_catalogs` và danh mục thuốc từ bảng `medicines` trong CSDL PostgreSQL thật, xóa bỏ mảng tĩnh `DRUGS` và `ICD`.
+  - [x] **Clinical Summary:** Tạo endpoint `GET /api/v1/clinical/appointments/:appointmentId/patient-summary` cho phép Bác sĩ xem tóm tắt PHR, dị ứng và bệnh mạn tính của bệnh nhân trong ca khám mà không bị lỗi 403 Forbidden.
+
+---
+
+### 🏷️ Card 4.15 | [Payment / Lifecycle] Hoàn thiện Chu trình VNPAY/MoMo, Đặt cho Người khác & Sửa lỗi Header Trang Login
+- **Phân hệ:** Thanh toán (Payment), Đặt lịch (Booking Stepper), Xác thực (Auth Shell)
+- **Vai trò:** 🟣 Fullstack & QA
+- **Thành viên phụ trách:** **Lê Việt Cường**
+- **Trạng thái:** ✅ **Hoàn thành**
+- **Checklist công việc:**
+  - [x] **Payment UUID Resolver:** Bỏ `ParseUUIDPipe` cứng tại các endpoint `GET :appointmentId/status`, `POST :appointmentId/cancel-pending`, `POST :appointmentId/fallback-clinic`. Tự động phân giải cả UUID lịch hẹn và mã giao dịch thương mại `PAY...` (`merchantTransactionId`).
+  - [x] **VNPAY Return Success Fix:** Khắc phục lỗi màn hình đỏ báo lỗi khi thanh toán VNPAY thành công quay về web (`vnp_ResponseCode=00`).
+  - [x] **MoMo Cancel Fix:** Khắc phục lỗi nút "Hủy giữ chỗ lịch hẹn" không hoạt động sau khi người dùng hủy giao dịch trên MoMo (`resultCode=1006`), giải phóng slot khám và Redis lock thành công.
+  - [x] **Đặt cho Người thân / Người khác:** Mở rộng DTO `bookingFor: 'other'`, tự động tạo profile bệnh nhân phụ thuộc và cho phép người đặt xem toàn bộ lịch hẹn đã đặt trong `listForPatient()`.
+  - [x] **Quên mật khẩu & Reset Password:** Xây dựng trọn vẹn trang `/forgot-password` với 3 bước: nhập email/SĐT -> xác thực OTP 6 số -> nhập mật khẩu mới. Bổ sung ô "Nhập lại mật khẩu" (Confirm Password) tại trang `/register`.
+  - [x] **Unauthenticated Header User Display Fix:** Khắc phục triệt để lỗi khi người dùng truy cập trang Đăng nhập (`/login`) vẫn bị hiển thị avatar Quản trị viên và menu Admin do `tokenStore` đọc dữ liệu cũ từ `localStorage`.
+  - [x] **README VNPAY Demo:** Cập nhật danh mục đầy đủ các thẻ test VNPAY Sandbox chính thức (thẻ NCB thành công, không đủ số dư, khóa, hết hạn; thẻ VISA/MasterCard/JCB có và không có 3DS; thẻ NAPAS/Eximbank) vào `README.md`.

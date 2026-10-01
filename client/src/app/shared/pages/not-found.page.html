@@ -1,0 +1,43 @@
+
+<div class="flex flex-col items-center justify-center min-h-[calc(100dvh-124px)] text-center px-4 bg-medical-surface">
+  <!-- Search / Not Found Icon -->
+  <div class="w-24 h-24 rounded-3xl mb-6 flex items-center justify-center bg-slate-100 shadow-sm">
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5">
+      <circle cx="11" cy="11" r="8" />
+      <path d="M21 21l-4.35-4.35" />
+      <line x1="11" y1="8" x2="11" y2="14" />
+      <line x1="11" y1="16" x2="11.01" y2="16" />
+    </svg>
+  </div>
+
+  <!-- Error Code -->
+  <p class="font-mono text-6xl font-bold mb-2 text-slate-200 select-none">
+    404
+  </p>
+
+  <!-- Title & Description -->
+  <h1 class="font-bold text-2xl mb-2 text-slate-900">
+    Trang không tồn tại
+  </h1>
+  <p class="text-sm max-w-sm mb-8 text-slate-500 leading-relaxed">
+    Địa chỉ bạn truy cập không tồn tại hoặc đã bị xóa. Hãy kiểm tra lại đường dẫn.
+  </p>
+
+  <!-- Action Buttons (NFR-UX-02: min-h-[44px]) -->
+  <div class="flex gap-3 flex-wrap justify-center">
+    <button
+      type="button"
+      (click)="navigateToHome()"
+      class="px-5 min-h-[44px] rounded-xl text-sm font-semibold text-white bg-sky-600 hover:bg-sky-700 transition"
+    >
+      Về trang chủ
+    </button>
+    <button
+      type="button"
+      (click)="navigateToLogin()"
+      class="px-5 min-h-[44px] rounded-xl border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-100 transition"
+    >
+      Đăng nhập
+    </button>
+  </div>
+</div>

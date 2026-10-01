@@ -1,0 +1,108 @@
+:host {
+  display: block;
+}
+
+.reception-shell {
+  background:
+    radial-gradient(circle at 8% 5%, rgb(224 242 254 / 55%), transparent 24rem),
+    #f8fafc;
+}
+
+.field {
+  display: grid;
+  gap: 0.4rem;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.field input,
+.field select,
+.field textarea {
+  min-height: 2.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.7rem;
+  background: #fff;
+  padding: 0.65rem 0.75rem;
+  color: #0f172a;
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: #0284c7;
+  outline: none;
+  box-shadow: 0 0 0 3px #e0f2fe;
+}
+
+.form-error {
+  margin-top: 0.65rem;
+  color: #b91c1c;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.doctor-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.85rem;
+  padding: 1rem;
+  background: #fff;
+}
+
+.doctor-card:hover,
+.doctor-card--selected {
+  border-color: #38bdf8;
+  background: #f8fdff;
+  box-shadow: 0 5px 16px rgb(2 132 199 / 8%);
+}
+
+.doctor-card--selected {
+  box-shadow: inset 0 0 0 1px #38bdf8;
+}
+
+.slot-button {
+  min-height: 2.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.65rem;
+  background: #fff;
+  padding: 0.55rem 0.8rem;
+  color: #475569;
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.slot-button--selected {
+  border-color: #0284c7;
+  color: #fff;
+  background: #0284c7;
+  box-shadow: 0 5px 12px rgb(2 132 199 / 18%);
+}
+
+.summary-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.summary-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 0.7rem;
+}
+
+.summary-list dt {
+  color: #64748b;
+}
+
+.summary-list dd {
+  color: #0f172a;
+  text-align: right;
+  font-weight: 700;
+}

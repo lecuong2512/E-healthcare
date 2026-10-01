@@ -1,0 +1,133 @@
+@if (data(); as receipt) {
+<article class="receipt" [class.receipt--k80]="receipt.type === 'CHECKIN_TICKET'"
+  [class.receipt--a5]="receipt.type === 'PAYMENT_RECEIPT'">
+  <header>
+    @if (receipt.clinic.logoUrl) {
+    <img class="logo" [src]="receipt.clinic.logoUrl" alt="Logo phòng khám" (error)="hideBrokenLogo($event)" />
+    }
+    <h1>{{ receipt.clinic.clinicName }}</h1>
+    <p>{{ receipt.clinic.address }}</p>
+    @if (receipt.clinic.phone) { <p>Điện thoại: {{ receipt.clinic.phone }}</p> }
+  </header>
+  @if (receipt.type === 'CHECKIN_TICKET') {
+  <h2>PHIẾU TIẾP ĐÓN / PHIẾU KHÁM</h2>
+  <p class="center">Mã lịch hẹn: <strong>{{ receipt.appointmentCode }}</strong></p>
+  @if (qr(); as code) {
+  <svg class="qr" [attr.viewBox]="'0 0 ' + code.size + ' ' + code.size" role="img" aria-label="QR mã lịch hẹn"
+    shape-rendering="crispEdges">
+    <rect width="100%" height="100%" fill="white" />
+    <path [attr.d]="code.path" fill="black" />
+  </svg>
+  }
+  <div class="queue">
+    <p>SỐ THỨ TỰ KHÁM</p><strong>{{ receipt.queueNumber }}</strong>
+  </div>
+  <dl>
+    <div>
+      <dt>Bệnh nhân</dt>
+      <dd>{{ receipt.patientName }}</dd>
+    </div>
+    <div>
+      <dt>Bác sĩ</dt>
+      <dd>{{ receipt.doctorName }}</dd>
+    </div>
+    <div>
+      <dt>Chuyên khoa</dt>
+      <dd>{{ receipt.specialtyName }}</dd>
+    </div>
+    <div>
+      <dt>Phòng khám</dt>
+      <dd>{{ receipt.roomNumber }}</dd>
+    </div>
+    <div>
+      <dt>Ngày giờ khám</dt>
+      <dd>{{ date(receipt.appointmentDate) }} {{ receipt.appointmentTime.slice(0, 5) }}</dd>
+    </div>
+    <div>
+      <dt>Viện phí đã nộp</dt>
+      <dd>{{ receipt.paidAmount === undefined ? 'Chưa có thông tin' : money(receipt.paidAmount) }}</dd>
+    </div>
+    <div>
+      <dt>Check-in lúc</dt>
+      <dd>{{ timestamp(receipt.checkedInAt) }}</dd>
+    </div>
+  </dl>
+  <footer>Vui lòng đến trước giờ khám 15 phút</footer>
+  } @else {
+  @if (receipt.clinic.taxCode) { <p>Mã số thuế: {{ receipt.clinic.taxCode }}</p> }
+  @if (receipt.clinic.licenseNumber) { <p>Giấy phép: {{ receipt.clinic.licenseNumber }}</p> }
+  <h2>PHIẾU THU VIỆN PHÍ</h2>
+  <dl>
+    <div>
+      <dt>Mã phiếu thu</dt>
+      <dd>{{ receipt.receiptCode }}</dd>
+    </div>
+    <div>
+      <dt>Mã giao dịch</dt>
+      <dd>{{ receipt.transactionCode }}</dd>
+    </div>
+    <div>
+      <dt>Mã lịch hẹn</dt>
+      <dd>{{ receipt.appointmentCode }}</dd>
+    </div>
+    <div>
+      <dt>Bệnh nhân</dt>
+      <dd>{{ receipt.patientName }}</dd>
+    </div>
+    <div>
+      <dt>Bác sĩ</dt>
+      <dd>{{ receipt.doctorName }}</dd>
+    </div>
+    @if (receipt.specialtyName) { <div>
+      <dt>Chuyên khoa</dt>
+      <dd>{{ receipt.specialtyName }}</dd>
+    </div> }
+    <div>
+      <dt>Nội dung thu</dt>
+      <dd>{{ receipt.description }}</dd>
+    </div>
+  </dl>
+  <table class="amounts">
+    <caption>Thông tin thanh toán</caption>
+    <tbody>
+      <tr>
+        <th scope="row">Số tiền viện phí</th>
+        <td>{{ money(receipt.amount) }}</td>
+      </tr>
+      <tr>
+        <th scope="row">Tiền khách đưa</th>
+        <td>{{ money(receipt.amountTendered) }}</td>
+      </tr>
+      <tr>
+        <th scope="row">Tiền thừa</th>
+        <td>{{ money(receipt.changeAmount) }}</td>
+      </tr>
+    </tbody>
+  </table>
+  <dl>
+    <div>
+      <dt>Hình thức thanh toán</dt>
+      <dd>{{ receipt.paymentMethod }}</dd>
+    </div>
+    <div>
+      <dt>Người thu</dt>
+      <dd>{{ receipt.collectedBy }}</dd>
+    </div>
+    <div>
+      <dt>Thời gian thanh toán</dt>
+      <dd>{{ timestamp(receipt.paidAt) }}</dd>
+    </div>
+  </dl>
+  <footer class="signatures">
+    <div><strong>Người nộp tiền</strong>
+      <p>(Ký, ghi rõ họ tên)</p>
+      <p class="signature-name">{{ receipt.patientName }}</p>
+    </div>
+    <div><strong>Người thu tiền</strong>
+      <p>(Ký, ghi rõ họ tên)</p>
+      <p class="signature-name">{{ receipt.collectedBy }}</p>
+    </div>
+  </footer>
+  }
+</article>
+}
