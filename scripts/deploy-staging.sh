@@ -4,18 +4,20 @@
 # ==============================================================================
 set -euo pipefail
 
+TARGET_BRANCH="${1:-main}"
+
 echo "======================================================================"
-echo "🚀 [QA DEPLOY] Bắt đầu triển khai nhánh develop lên máy chủ QA..."
+echo "🚀 [DEPLOY] Bắt đầu triển khai nhánh $TARGET_BRANCH lên máy chủ..."
 echo "======================================================================"
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-# 1. Cập nhật mã nguồn nhánh develop mới nhất từ GitHub
-echo "==> [1/7] Đồng bộ mã nguồn develop..."
-git fetch origin develop
-git checkout develop
-git pull origin develop
+# 1. Cập nhật mã nguồn nhánh mục tiêu mới nhất từ GitHub
+echo "==> [1/7] Đồng bộ mã nguồn $TARGET_BRANCH..."
+git fetch origin "$TARGET_BRANCH"
+git checkout "$TARGET_BRANCH"
+git pull origin "$TARGET_BRANCH"
 
 # 2. Kiểm tra file cấu hình .env
 echo "==> [2/7] Kiểm tra file .env..."

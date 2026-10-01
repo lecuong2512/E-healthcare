@@ -1,17 +1,21 @@
 # ==============================================================================
 # E-HEALTHCARE PORTAL - KỊCH BẢN TRIỂN KHAI QA TRÊN POWERSHELL
 # ==============================================================================
+param(
+    [string]$TargetBranch = "main"
+)
+
 $ErrorActionPreference = "Stop"
 
 Write-Host "======================================================================" -ForegroundColor Cyan
-Write-Host "🚀 [QA DEPLOY] Bắt đầu triển khai nhánh develop..." -ForegroundColor Cyan
+Write-Host "🚀 [DEPLOY] Bắt đầu triển khai nhánh $TargetBranch..." -ForegroundColor Cyan
 Write-Host "======================================================================" -ForegroundColor Cyan
 
 # 1. Update git
-Write-Host "==> [1/7] Đồng bộ mã nguồn develop..." -ForegroundColor Yellow
-git fetch origin develop
-git checkout develop
-git pull origin develop
+Write-Host "==> [1/7] Đồng bộ mã nguồn $TargetBranch..." -ForegroundColor Yellow
+git fetch origin $TargetBranch
+git checkout $TargetBranch
+git pull origin $TargetBranch
 
 # 2. Check .env
 if (-not (Test-Path ".env")) {
