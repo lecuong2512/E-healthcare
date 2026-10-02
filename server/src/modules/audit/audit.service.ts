@@ -72,7 +72,7 @@ export class AuditService {
     const allowed = AUDIT_METADATA_ALLOWLIST[action] ?? new Set<string>();
     const sanitized: Record<string, string | number | boolean | null> = {};
     for (const [key, value] of Object.entries(metadata)) {
-      if (FORBIDDEN_METADATA_KEY.test(key) || !allowed.has(key)) {
+      if (!allowed.has(key) || (FORBIDDEN_METADATA_KEY.test(key) && key !== 'hasPrescription')) {
         throw new Error(`Audit metadata field is not allowed for ${action}: ${key}`);
       }
       if (typeof value === 'string') {

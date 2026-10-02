@@ -45,6 +45,16 @@ describe('Global audit metadata policy', () => {
     expect(saved[0].metadata).toEqual({ operation: 'UPDATE' });
   });
 
+  it('accepts approved hasPrescription flag for CREATE_EMR', async () => {
+    await audit.record(manager, context, {
+      action: AuditAction.CREATE_EMR,
+      outcome: AuditOutcome.SUCCESS,
+      metadata: { hasPrescription: true },
+    });
+
+    expect(saved[0].metadata).toEqual({ hasPrescription: true });
+  });
+
   it.each(['clinicalNotes', 'token', 'requestBody', 'medicineName'])(
     'rejects sensitive metadata field %s',
     async (field) => {
