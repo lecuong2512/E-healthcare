@@ -60,14 +60,27 @@ export class LoginService {
           })
           .getOne();
 
-        if (!user || user.status !== UserStatus.ACTIVE) {
+        if (!user) {
+          await this.recordLogin(manager, transport, null, null, false, 'UNKNOWN_ACCOUNT');
+          return this.invalidLogin();
+        }
+
+        if (user.status === UserStatus.BLOCKED) {
+          await this.recordLogin(manager, transport, user.id, null, false, 'BLOCKED_ACCOUNT');
+          return new UnauthorizedException({
+            code: "ACCOUNT_BLOCKED",
+            message: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.",
+          });
+        }
+
+        if (user.status !== UserStatus.ACTIVE) {
           await this.recordLogin(
             manager,
             transport,
-            user?.id ?? null,
+            user.id,
             null,
             false,
-            user ? 'INACTIVE_ACCOUNT' : 'UNKNOWN_ACCOUNT',
+            'INACTIVE_ACCOUNT',
           );
           return this.invalidLogin();
         }

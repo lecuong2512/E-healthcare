@@ -91,10 +91,26 @@ export class StaffAdminService {
     } };
   }
 
-  async changeStatus(userId: string, status: UserStatus) {
+  async changeStatus(userId: string, status: UserStatus, actorId?: string) {
+    if (actorId && userId === actorId && status === UserStatus.BLOCKED) {
+      throw new BadRequestException('Bạn không thể tự khóa tài khoản của chính mình.');
+    }
     const repository = this.dataSource.getRepository(UserEntity);
     const user = await repository.findOneBy({ id: userId });
     if (!user) throw new NotFoundException('Không tìm thấy nhân sự.');
+
+    try {
+      const userRoleRepo = this.dataSource.getRepository(UserRoleEntity);
+      if (userRoleRepo?.findOneBy) {
+        const userRole = await userRoleRepo.findOneBy({ userId });
+        if (userRole?.role === Role.ADMIN && status === UserStatus.BLOCKED) {
+          throw new BadRequestException('Không thể khóa tài khoản Quản trị viên hệ thống.');
+        }
+      }
+    } catch (e) {
+      if (e instanceof BadRequestException) throw e;
+    }
+
     user.status = status;
     return repository.save(user);
   }

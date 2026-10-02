@@ -37,7 +37,9 @@ export class StaffAdminController {
   updateShiftAssignment(@Param('shiftId') shiftId: string, @Body() body: Parameters<StaffAdminService['updateShiftAssignment']>[1]) { return this.service.updateShiftAssignment(shiftId, body); }
 
   @Patch(':userId/status')
-  changeStatus(@Param('userId') userId: string, @Body('status') status: UserStatus) { return this.service.changeStatus(userId, status); }
+  changeStatus(@Param('userId') userId: string, @Body('status') status: UserStatus, @Req() request: AuthenticatedRequest) {
+    return this.service.changeStatus(userId, status, request.auth?.userId);
+  }
 
   @Patch(':userId')
   updateProfile(@Param('userId') userId: string, @Body() body: Parameters<StaffAdminService['updateProfile']>[1]) { return this.service.updateProfile(userId, body); }

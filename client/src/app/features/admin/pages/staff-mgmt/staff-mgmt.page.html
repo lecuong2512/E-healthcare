@@ -42,7 +42,9 @@
                 <td><span [class.blocked]="person.status === 'Đã khóa'">{{ person.status }}</span></td>
                 <td><div class="actions">
                   <button class="row-action detail-action" type="button" (click)="openDetails(person)">Xem chi tiết</button>
-                  <button class="row-action" type="button" (click)="changeStatus(person, person.status === 'Đã khóa' ? 'ACTIVE' : 'BLOCKED')">{{ person.status === 'Đã khóa' ? 'Mở khóa' : 'Khóa' }}</button>
+                  @if (person.roleValue !== Role.ADMIN) {
+                    <button class="row-action" type="button" (click)="changeStatus(person, person.status === 'Đã khóa' ? 'ACTIVE' : 'BLOCKED')">{{ person.status === 'Đã khóa' ? 'Mở khóa' : 'Khóa' }}</button>
+                  }
                   <button class="row-action" type="button" (click)="openDetails(person)">Chỉnh sửa</button>
                 </div></td>
               </tr>
