@@ -23,7 +23,7 @@ export interface UpdatePhrProfileRequest {
   dateOfBirth: string;
   address: string;
   healthInsurance: string;
-  bloodType: string;
+  bloodType?: string;
   allergies: string;
   chronicDiseases: string;
   surgeryHistory: string;

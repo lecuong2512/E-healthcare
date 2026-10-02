@@ -38,9 +38,20 @@ export class DoctorQueueController {
 
   @Get()
   async snapshot(@Req() request: AuthenticatedRequest): Promise<QueueSnapshot> {
-    const doctor = await this.dataSource.getRepository(DoctorEntity)
-      .findOneBy({ userId: request.auth!.userId });
+    const doctor = await this.dataSource.getRepository(DoctorEntity).findOne({
+      where: { userId: request.auth!.userId },
+      relations: { user: true, specialty: true },
+    });
     if (!doctor) throw new NotFoundException('Không tìm thấy bác sĩ.');
-    return this.queries.snapshot('DOCTOR', doctor.id);
+    const snap = await this.queries.snapshot('DOCTOR', doctor.id);
+    return {
+      ...snap,
+      doctor: {
+        id: doctor.id,
+        fullName: doctor.user?.fullName || 'Bác sĩ',
+        roomNumber: doctor.roomNumber,
+        specialtyName: doctor.specialty?.name,
+      },
+    };
   }
 }

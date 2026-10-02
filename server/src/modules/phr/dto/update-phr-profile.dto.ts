@@ -43,9 +43,12 @@ export class UpdatePhrProfileDto {
   })
   healthInsurance!: string;
 
-  @IsString()
-  @Matches(/^(A|B|AB|O)[+-]$/)
-  bloodType!: string;
+  @IsOptional()
+  @ValidateIf((o) => o.bloodType !== undefined && o.bloodType !== null)
+  @Matches(/^(A|B|AB|O)[+-]$/, {
+    message: 'Nhóm máu phải thuộc một trong các nhóm: A+, A-, B+, B-, AB+, AB-, O+, O-.',
+  })
+  bloodType?: string;
 
   @IsString()
   allergies!: string;

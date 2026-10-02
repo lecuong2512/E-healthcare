@@ -140,6 +140,8 @@ export class PaymentResultPage {
     const query = this.route.snapshot.queryParamMap;
     const resultCode = query.get('resultCode');
     const vnpResponseCode = query.get('vnp_ResponseCode');
+    const vnpSecureHash = query.get('vnp_SecureHash');
+    const momoSignature = query.get('signature');
 
     if (vnpResponseCode === '00' || resultCode === '0') {
       this.isGatewaySuccess.set(true);
@@ -153,7 +155,40 @@ export class PaymentResultPage {
       this.errorMessage.set('Không tìm thấy lịch hẹn cần kiểm tra.');
       return;
     }
-    this.poll();
+
+    const hasCallbackParams = (vnpResponseCode !== null && vnpSecureHash !== null) ||
+      (resultCode !== null && momoSignature !== null);
+
+    if (hasCallbackParams && typeof this.api.verifyReturn === 'function') {
+      const allParams: Record<string, string> = {};
+      const keys = query.keys || [];
+      keys.forEach((key) => {
+        const val = query.get(key);
+        if (val !== null) allParams[key] = val;
+      });
+      if (vnpResponseCode) allParams['vnp_ResponseCode'] = vnpResponseCode;
+      if (vnpSecureHash) allParams['vnp_SecureHash'] = vnpSecureHash;
+      if (resultCode) allParams['resultCode'] = resultCode;
+      if (momoSignature) allParams['signature'] = momoSignature;
+
+      const provider = vnpResponseCode !== null ? 'VNPAY' : 'MOMO';
+      this.api.verifyReturn(allParams, provider).pipe(
+        catchError((err) => {
+          console.warn('verifyReturn fallback to polling:', err);
+          return EMPTY;
+        }),
+        finalize(() => {
+          this.poll();
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      ).subscribe({
+        next: () => {
+          this.refresh();
+        },
+      });
+    } else {
+      this.poll();
+    }
   }
 
   refresh(): void {

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -23,6 +24,7 @@ import { AuthenticatedRequest } from '../../common/guards/authenticated-request'
 import { InitiatePaymentDto, ResolveReconciliationDto, ResolveRefundDto } from './dto';
 import { PaymentService } from './payment.service';
 import { PaymentReconciliationService } from './payment-reconciliation.service';
+import { extractClientIp } from '../audit/audit-context';
 
 @Controller('payments')
 export class PaymentController {
@@ -92,7 +94,7 @@ export class PaymentController {
       request.auth!.userId,
       idempotencyKey || '',
       dto,
-      request.ip || request.socket.remoteAddress || '127.0.0.1',
+      extractClientIp(request) || '127.0.0.1',
     );
   }
 
@@ -163,5 +165,38 @@ export class PaymentController {
     @Body() payload: Record<string, unknown>,
   ): Promise<void> {
     await this.payments.handleMomoIpn(payload);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Post('verify-return')
+  @HttpCode(HttpStatus.OK)
+  async verifyReturn(
+    @Body() payload: { provider?: string; params: Record<string, string> },
+  ): Promise<{ outcome: string }> {
+    const params = payload?.params || {};
+    const hasVnpay = Boolean(params['vnp_TxnRef'] || params['vnp_ResponseCode'] || params['vnp_SecureHash']);
+    const hasMomo = Boolean(params['orderId'] || params['resultCode'] || params['signature']);
+    const provider = payload?.provider?.toUpperCase() || (hasVnpay ? 'VNPAY' : hasMomo ? 'MOMO' : null);
+
+    if (provider === 'VNPAY') {
+      const outcome = await this.payments.handleVnpayIpn(params);
+      return { outcome };
+    }
+    if (provider === 'MOMO') {
+      const outcome = await this.payments.handleMomoIpn(params);
+      return { outcome };
+    }
+    throw new BadRequestException('Không tìm thấy tham số xác thực cổng thanh toán hợp lệ.');
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Get('vnpay/return')
+  async vnpayReturn(
+    @Query() params: Record<string, string>,
+  ): Promise<{ outcome: string }> {
+    const outcome = await this.payments.handleVnpayIpn(params);
+    return { outcome };
   }
 }

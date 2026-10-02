@@ -32,11 +32,16 @@ export function configureApp(app: INestApplication): void {
     }
     next();
   });
-  if (environment.TRUSTED_PROXY_CIDRS) {
-    const proxies = environment.TRUSTED_PROXY_CIDRS.split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
-    app.getHttpAdapter().getInstance().set("trust proxy", proxies);
+  if (typeof app.getHttpAdapter === "function") {
+    if (environment.TRUSTED_PROXY_CIDRS && environment.TRUSTED_PROXY_CIDRS.trim().length > 0) {
+      const proxies = environment.TRUSTED_PROXY_CIDRS.split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      app.getHttpAdapter().getInstance().set("trust proxy", proxies);
+    } else {
+      // Luôn tin cậy reverse proxy (Nginx gateway trên cùng máy chủ hoặc Docker)
+      app.getHttpAdapter().getInstance().set("trust proxy", true);
+    }
   }
   app.setGlobalPrefix("api/v1");
   app.useGlobalPipes(

@@ -164,7 +164,7 @@ export class AdminAuditService {
       actorRole: row.actor_role,
       action: row.action,
       outcome: row.outcome,
-      ipAddress: row.ip_address,
+      ipAddress: row.ip_address ? row.ip_address.replace(/^::ffff:/, '') : null,
       userAgent: row.user_agent,
       resourceType: row.resource_type,
       resourceId: row.resource_id,

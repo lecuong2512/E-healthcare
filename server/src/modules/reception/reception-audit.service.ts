@@ -3,6 +3,7 @@ import { ReceptionAuditAction } from '@shared/enums';
 import { EntityManager } from 'typeorm';
 import { AuthenticatedRequest } from '../../common/guards/authenticated-request';
 import { ReceptionAuditLogEntity } from '../../database/entities/reception-audit-log.entity';
+import { extractClientIp } from '../audit/audit-context';
 
 export interface ReceptionAuditContext {
   actorId: string;
@@ -14,7 +15,7 @@ export function receptionAuditContext(request: AuthenticatedRequest): ReceptionA
   if (!request.auth?.userId) throw new UnauthorizedException();
   return {
     actorId: request.auth.userId,
-    ip: request.ip?.slice(0, 64) ?? null,
+    ip: extractClientIp(request)?.slice(0, 64) ?? null,
     userAgent: request.headers['user-agent']?.slice(0, 512) ?? null,
   };
 }

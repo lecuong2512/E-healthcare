@@ -94,7 +94,7 @@ export class PhrService {
     phr.citizenId = request.citizenId.trim() || null;
     phr.address = request.address;
     phr.healthInsurance = request.healthInsurance;
-    phr.bloodType = request.bloodType;
+    phr.bloodType = request.bloodType?.trim() ? request.bloodType.trim() : null;
     phr.allergies = request.allergies;
     phr.chronicDiseases = request.chronicDiseases;
     phr.surgeryHistory = request.surgeryHistory;

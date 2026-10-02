@@ -10,6 +10,7 @@ import {
 } from '@shared/constants/queue-socket.constants';
 import { QueueSnapshot, QueueStatusChanged, QueueTicket } from '@shared/interfaces';
 import { SocketService } from '../../../../core/services/socket.service';
+import { TokenStoreService } from '../../../../core/services/token-store.service';
 
 export type QueueStatus =
   | 'PENDING_PAYMENT'
@@ -42,6 +43,7 @@ export class PatientQueuePage implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
   private readonly socketService = inject(SocketService);
+  private readonly tokenStore = inject(TokenStoreService, { optional: true });
 
   readonly statusLabels: Record<string, string> = {
     CONFIRMED: 'Đã xác nhận',
@@ -71,6 +73,10 @@ export class PatientQueuePage implements OnInit, OnDestroy {
   private socket?: Socket;
 
   ngOnInit(): void {
+    const user = this.tokenStore?.currentUser();
+    if (user?.fullName) {
+      this.doctorName = user.fullName;
+    }
     this.loadQueue();
     this.initSocket();
   }
@@ -148,12 +154,19 @@ export class PatientQueuePage implements OnInit, OnDestroy {
   }
 
   applySnapshot(snapshot: QueueSnapshot): void {
-    if (!snapshot || !Array.isArray(snapshot.items)) return;
-    this.patients = snapshot.items.map((item) => this.mapTicketToPatient(item));
-    if (snapshot.items.length > 0) {
-      this.doctorName = snapshot.items[0].doctorName;
-      this.roomNumber = snapshot.items[0].roomNumber;
-      this.specialtyName = snapshot.items[0].specialtyName;
+    if (!snapshot) return;
+    if (snapshot.doctor) {
+      this.doctorName = snapshot.doctor.fullName || this.doctorName;
+      this.roomNumber = snapshot.doctor.roomNumber || this.roomNumber;
+      this.specialtyName = snapshot.doctor.specialtyName || this.specialtyName;
+    }
+    if (Array.isArray(snapshot.items)) {
+      this.patients = snapshot.items.map((item, idx) => this.mapTicketToPatient(item, idx));
+      if (!this.doctorName && snapshot.items.length > 0) {
+        this.doctorName = snapshot.items[0].doctorName;
+        this.roomNumber = snapshot.items[0].roomNumber;
+        this.specialtyName = snapshot.items[0].specialtyName;
+      }
     }
   }
 
@@ -167,17 +180,17 @@ export class PatientQueuePage implements OnInit, OnDestroy {
       if (event.ticket) {
         this.patients[index] = {
           ...this.patients[index],
-          ...this.mapTicketToPatient(event.ticket),
+          ...this.mapTicketToPatient(event.ticket, index),
           status: event.status as QueueStatus,
         };
       }
     } else if (event.ticket) {
-      this.patients.push(this.mapTicketToPatient(event.ticket));
+      this.patients.push(this.mapTicketToPatient(event.ticket, this.patients.length));
       this.patients.sort((a, b) => a.stt - b.stt);
     }
   }
 
-  mapTicketToPatient(ticket: QueueTicket): QueuePatient {
+  mapTicketToPatient(ticket: QueueTicket, index = 0): QueuePatient {
     let formattedTime = '08:00–08:30';
     if (ticket.checkedInAt) {
       const d = new Date(ticket.checkedInAt);
@@ -188,15 +201,26 @@ export class PatientQueuePage implements OnInit, OnDestroy {
         });
       }
     }
+    const currentYear = new Date().getFullYear();
+    let birthYear = currentYear - 30;
+    if (ticket.patientDob) {
+      const parsedYear = new Date(ticket.patientDob).getFullYear();
+      if (!isNaN(parsedYear)) birthYear = parsedYear;
+    }
+    const genderLabels: Record<string, string> = {
+      MALE: 'Nam',
+      FEMALE: 'Nữ',
+      OTHER: 'Khác',
+    };
     return {
       id: ticket.appointmentId,
-      stt: ticket.queueNumber,
+      stt: ticket.queueNumber > 0 ? ticket.queueNumber : index + 1,
       time: formattedTime,
       code: ticket.appointmentCode,
       name: ticket.patientName,
-      gender: 'Chưa cập nhật',
-      year: new Date().getFullYear() - 30,
-      symptoms: 'Khám theo hẹn',
+      gender: (ticket.patientGender && genderLabels[ticket.patientGender]) || ticket.patientGender || 'Chưa cập nhật',
+      year: birthYear,
+      symptoms: ticket.reasonForVisit || 'Khám theo hẹn',
       status: ticket.status as QueueStatus,
     };
   }

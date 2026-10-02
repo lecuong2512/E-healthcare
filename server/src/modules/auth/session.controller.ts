@@ -27,7 +27,7 @@ export function writeSession(response: Response, session: IssuedSession) {
       (session.refreshExpiresIn ?? REFRESH_TTL) * 1000,
     ),
   });
-  return { accessToken: session.accessToken, role: session.role };
+  return { accessToken: session.accessToken, role: session.role, user: session.user };
 }
 
 @Controller("auth")

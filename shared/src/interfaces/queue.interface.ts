@@ -1,9 +1,19 @@
 import { AppointmentStatus, QueueSource } from '../enums';
 
+export interface QueueDoctorInfo {
+  id: string;
+  fullName: string;
+  roomNumber?: string;
+  specialtyName?: string;
+}
+
 export interface QueueTicket {
   appointmentId: string;
   appointmentCode: string;
   patientName: string;
+  patientGender?: string;
+  patientDob?: string;
+  reasonForVisit?: string;
   doctorId: string;
   doctorName: string;
   specialtyName: string;
@@ -18,6 +28,7 @@ export interface QueueTicket {
 export interface QueueSnapshot {
   scope: 'RECEPTION' | 'DOCTOR';
   doctorId?: string;
+  doctor?: QueueDoctorInfo;
   date: string;
   items: QueueTicket[];
 }

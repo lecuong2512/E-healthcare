@@ -137,6 +137,13 @@ export class PatientBookingApiService {
     return this.http.post<{ appointmentId: string }>(`${this.api}/payments/${encodeURIComponent(appointmentId)}/fallback-to-clinic`, {});
   }
 
+  verifyReturn(params: Record<string, string>, provider?: string): Observable<{ outcome: string }> {
+    return this.http.post<{ outcome: string }>(`${this.api}/payments/verify-return`, {
+      provider,
+      params,
+    });
+  }
+
   getVouchers(): Observable<PatientVoucher[]> {
     return this.http.get<PatientVoucher[]>(`${this.api}/appointments/me/vouchers`);
   }

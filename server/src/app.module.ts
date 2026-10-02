@@ -6,6 +6,7 @@ import { PhrModule } from "./modules/phr/phr.module";
 import { AppointmentModule } from "./modules/appointment/appointment.module";
 import { APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { AppThrottlerGuard } from "./common/guards/app-throttler.guard";
 import { AccessTokenGuard } from "./common/guards/access-token.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
 import { DoctorModule } from "./modules/doctor/doctor.module";
@@ -39,8 +40,9 @@ import { UserModule } from "./modules/user/user.module";
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
   ],
   providers: [
-    ThrottlerGuard,
-    { provide: APP_GUARD, useExisting: ThrottlerGuard },
+    AppThrottlerGuard,
+    { provide: ThrottlerGuard, useExisting: AppThrottlerGuard },
+    { provide: APP_GUARD, useExisting: AppThrottlerGuard },
     AccessTokenGuard,
     RolesGuard,
     { provide: APP_GUARD, useExisting: AccessTokenGuard },

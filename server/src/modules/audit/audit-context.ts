@@ -49,11 +49,36 @@ export function auditContextFromRequest(
   };
 }
 
+export function normalizeIp(ip: string): string {
+  const trimmed = ip.trim();
+  if (trimmed.startsWith('::ffff:')) {
+    return trimmed.slice(7);
+  }
+  return trimmed;
+}
+
+export function extractClientIp(request: Request): string | null {
+  const forwarded = request.headers?.['x-forwarded-for'];
+  if (forwarded) {
+    const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    const clientIp = raw?.split(',')?.[0]?.trim();
+    if (clientIp) return normalizeIp(clientIp);
+  }
+  const realIp = request.headers?.['x-real-ip'];
+  if (realIp) {
+    const raw = Array.isArray(realIp) ? realIp[0] : realIp;
+    const clientIp = raw?.trim();
+    if (clientIp) return normalizeIp(clientIp);
+  }
+  const direct = request.ip || request.socket?.remoteAddress;
+  return direct ? normalizeIp(direct) : null;
+}
+
 export function auditTransportContextFromRequest(
   request: Request,
 ): AuditTransportContext {
   return {
-    ipAddress: request.ip || null,
+    ipAddress: extractClientIp(request),
     userAgent: safeUserAgent(singleHeader(request.headers['user-agent'])),
     // Public clients cannot choose the audit correlation identifier. A trusted
     // reverse proxy may retain its own correlation header in gateway logs.

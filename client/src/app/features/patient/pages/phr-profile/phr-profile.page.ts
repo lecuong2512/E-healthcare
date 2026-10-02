@@ -142,7 +142,7 @@ export class PhrProfilePage implements OnInit {
       dateOfBirth: this.form.dateOfBirth,
       address: this.form.address?.trim() ?? '',
       healthInsurance: this.form.healthInsurance?.trim() ?? '',
-      bloodType: this.form.bloodType ?? '',
+      bloodType: this.form.bloodType?.trim() ? this.form.bloodType.trim() : undefined,
       allergies: this.form.allergies?.trim() ?? '',
       chronicDiseases: this.form.chronicDiseases?.trim() ?? '',
       surgeryHistory: this.form.surgeryHistory?.trim() ?? '',

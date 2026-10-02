@@ -242,4 +242,27 @@ describe('Payment HTTP authorization and DTO contract', () => {
       undefined,
     );
   });
+
+  it('allows public verification of return parameters from payment gateways', async () => {
+    const vnpParams = { vnp_TxnRef: 'PAY01', vnp_ResponseCode: '00', vnp_SecureHash: 'hash' };
+    const resVnp = await request(app.getHttpServer())
+      .post('/api/v1/payments/verify-return')
+      .send({ provider: 'VNPAY', params: vnpParams })
+      .expect(200);
+    expect(resVnp.body).toEqual({ outcome: 'SUCCESS' });
+    expect(payments.handleVnpayIpn).toHaveBeenCalledWith(vnpParams);
+
+    const momoParams = { orderId: 'PAY02', resultCode: '0', signature: 'sig' };
+    const resMomo = await request(app.getHttpServer())
+      .post('/api/v1/payments/verify-return')
+      .send({ provider: 'MOMO', params: momoParams })
+      .expect(200);
+    expect(resMomo.body).toEqual({ outcome: 'SUCCESS' });
+    expect(payments.handleMomoIpn).toHaveBeenCalledWith(momoParams);
+
+    const resGet = await request(app.getHttpServer())
+      .get('/api/v1/payments/vnpay/return?vnp_TxnRef=PAY01&vnp_ResponseCode=00')
+      .expect(200);
+    expect(resGet.body).toEqual({ outcome: 'SUCCESS' });
+  });
 });
