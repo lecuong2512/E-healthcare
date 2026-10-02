@@ -32,4 +32,32 @@ describe('AdminDashboardPage', () => {
     fixture.componentInstance.download('xlsx');
     expect(api.export).toHaveBeenCalledWith(7, 'xlsx');
   });
+  it('switches time periods when select is called with 1, 7, and 30 days', () => {
+    const api = { overview: jasmine.createSpy().and.returnValue(of({ visits: 5, revenue: 1000000, completionRate: 100, cancellationRate: 0, noShowRate: 0, trend: [{ day: '2026-10-02', visits: 5, revenue: 1000000 }], paymentBreakdown: [], doctorPerformance: [] })) };
+    TestBed.configureTestingModule({ providers: [{ provide: AdminDashboardApiService, useValue: api }] });
+    const fixture = TestBed.createComponent(AdminDashboardPage);
+    fixture.detectChanges();
+
+    // Select Hôm nay (1 day)
+    fixture.componentInstance.select(1);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.days()).toBe(1);
+    expect(api.overview).toHaveBeenCalledWith(1);
+    expect(fixture.componentInstance.periodLabel()).toBe('vs hôm qua');
+    expect(fixture.componentInstance.chartHeading()).toContain('Hôm nay');
+
+    // Select Tháng này (30 days)
+    fixture.componentInstance.select(30);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.days()).toBe(30);
+    expect(api.overview).toHaveBeenCalledWith(30);
+    expect(fixture.componentInstance.periodLabel()).toBe('vs tháng trước');
+    expect(fixture.componentInstance.chartHeading()).toContain('Tháng này');
+
+    // Select 7 ngày qua
+    fixture.componentInstance.select(7);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.days()).toBe(7);
+    expect(fixture.componentInstance.periodLabel()).toBe('vs tuần trước');
+  });
 });

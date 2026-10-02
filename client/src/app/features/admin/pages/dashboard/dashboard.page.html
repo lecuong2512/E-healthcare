@@ -1,16 +1,16 @@
 <main>
   <section>
     <h1>Bảng điều hành & KPI vận hành</h1><small>SRS-ADM-03</small>
-    <div class="toolbar"><nav><button (click)="select(1)">Hôm nay</button><button class="active" (click)="select(7)">7 ngày qua</button><button (click)="select(30)">Tháng này</button></nav><div><button (click)="download('xlsx')">⇩ Xuất Excel .xlsx</button><button (click)="download('pdf')">⇩ Xuất PDF</button></div></div>
-    <div class="metrics">
-      <article><span>Tổng lượt khám</span><b>{{kpi().visits | number}}</b><em><mark [class.negative]="isNegative(kpi().comparison?.visits)">{{deltaText(kpi().comparison?.visits)}}</mark> <small>vs tuần trước</small></em></article>
-      <article><span>Tổng doanh thu</span><b>{{kpi().revenue | number}} VND</b><em><mark [class.negative]="isNegative(kpi().comparison?.revenue)">{{deltaText(kpi().comparison?.revenue)}}</mark> <small>vs tuần trước</small></em></article>
+    <div class="toolbar"><nav><button type="button" [class.active]="days() === 1" (click)="select(1)">Hôm nay</button><button type="button" [class.active]="days() === 7" (click)="select(7)">7 ngày qua</button><button type="button" [class.active]="days() === 30" (click)="select(30)">Tháng này</button></nav><div><button type="button" (click)="download('xlsx')">⇩ Xuất Excel .xlsx</button><button type="button" (click)="download('pdf')">⇩ Xuất PDF</button></div></div>
+    <div class="metrics" [class.loading]="isLoading()">
+      <article><span>Tổng lượt khám</span><b>{{kpi().visits | number}}</b><em><mark [class.negative]="isNegative(kpi().comparison?.visits)">{{deltaText(kpi().comparison?.visits)}}</mark> <small>{{periodLabel()}}</small></em></article>
+      <article><span>Tổng doanh thu</span><b>{{kpi().revenue | number}} VND</b><em><mark [class.negative]="isNegative(kpi().comparison?.revenue)">{{deltaText(kpi().comparison?.revenue)}}</mark> <small>{{periodLabel()}}</small></em></article>
       <article><span>Tỷ lệ hoàn thành</span><b>{{kpi().completionRate}}%</b><em><mark [class.negative]="kpi().completionRate < 90">{{kpi().completionRate >= 90 ? '↑ Mục tiêu ≥ 90%' : '↓ Mục tiêu ≥ 90%'}}</mark> <small>{{kpi().completionRate >= 90 ? 'Đạt chỉ tiêu' : 'Cần cải thiện'}}</small></em></article>
-      <article><span>No-Show / Hủy</span><b>{{kpi().noShowRate}}% / {{kpi().cancellationRate}}%</b><em><mark class="negative" [class.neutral]="!isNegative(serviceQualityChange())">{{deltaText(serviceQualityChange())}}</mark> <small>vs tuần trước</small></em></article>
+      <article><span>No-Show / Hủy</span><b>{{kpi().noShowRate}}% / {{kpi().cancellationRate}}%</b><em><mark class="negative" [class.neutral]="!isNegative(serviceQualityChange())">{{deltaText(serviceQualityChange())}}</mark> <small>{{periodLabel()}}</small></em></article>
     </div>
-    <div class="charts">
+    <div class="charts" [class.loading]="isLoading()">
       <article class="trend-card">
-        <div class="chart-heading"><h2>Doanh thu & lượt khám theo tuần</h2><div class="legend"><span class="revenue-key"></span>Doanh thu <span class="visit-key"></span>Lượt khám</div></div>
+        <div class="chart-heading"><h2>{{chartHeading()}}</h2><div class="legend"><span class="revenue-key"></span>Doanh thu <span class="visit-key"></span>Lượt khám</div></div>
         @if(kpi().trend.length){
           <svg class="weekly-chart" viewBox="0 0 665 228" role="img" aria-label="Biểu đồ doanh thu và lượt khám">
             <g class="grid"><line x1="52" x2="595" y1="38" y2="38"/><line x1="52" x2="595" y1="107" y2="107"/><line x1="52" x2="595" y1="176" y2="176"/></g>

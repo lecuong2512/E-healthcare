@@ -5,13 +5,29 @@ const EMPTY: DashboardKpi={visits:0,revenue:0,completionRate:0,cancellationRate:
 @Component({selector:'app-admin-dashboard-page',standalone:true,imports:[CommonModule],templateUrl:'./dashboard.page.html',styleUrl:'./dashboard.page.scss',changeDetection:ChangeDetectionStrategy.OnPush})
 export class AdminDashboardPage {
   private readonly api=inject(AdminDashboardApiService);
-  readonly days=signal(7); readonly kpi=signal<DashboardKpi>(EMPTY);
+  readonly days=signal(7); readonly kpi=signal<DashboardKpi>(EMPTY); readonly isLoading=signal(false);
   ngOnInit(){this.load();}
   select(days:number){this.days.set(days);this.load();}
-  load(){this.api.overview(this.days()).subscribe({next:value=>this.kpi.set(value)});}
+  load(){
+    this.isLoading.set(true);
+    this.api.overview(this.days()).subscribe({
+      next:value=>{this.kpi.set(value);this.isLoading.set(false);},
+      error:()=>this.isLoading.set(false)
+    });
+  }
   download(type:'xlsx'|'pdf'){this.api.export(this.days(),type).subscribe({next:blob=>{const url=URL.createObjectURL(blob); const link=document.createElement('a'); link.href=url; link.download=`ehealth-kpi.${type}`; link.click(); URL.revokeObjectURL(url);}});}
+  chartHeading(){
+    if(this.days()===1) return 'Doanh thu & lượt khám trong ngày (Hôm nay)';
+    if(this.days()===30) return 'Doanh thu & lượt khám 30 ngày qua (Tháng này)';
+    return 'Doanh thu & lượt khám 7 ngày qua';
+  }
+  periodLabel(){
+    if(this.days()===1) return 'vs hôm qua';
+    if(this.days()===30) return 'vs tháng trước';
+    return 'vs tuần trước';
+  }
   chartDay(day:string){return ['CN','T2','T3','T4','T5','T6','T7'][new Date(`${day}T00:00:00Z`).getUTCDay()];}
-  chartX(index:number){const count=this.kpi().trend.length; return 70 + index * (500 / Math.max(1,count-1));}
+  chartX(index:number){const count=this.kpi().trend.length; if(count<=1) return 320; return 70 + index * (500 / Math.max(1,count-1));}
   private chartScale(value:number,max:number){return 176 - (value / Math.max(1,max)) * 138;}
   revenueY(value:number){return this.chartScale(value,this.revenueMaximum());}
   visitY(value:number){return this.chartScale(value,this.visitMaximum());}

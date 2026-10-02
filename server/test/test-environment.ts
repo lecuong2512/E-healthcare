@@ -12,3 +12,4 @@ environment.QUEUE_BOARD_SECRET = "test-queue-board-secret-not-for-production-123
 environment.MEDICAL_DATA_ENCRYPTION_KEY =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 environment.MEDICAL_DATA_ENCRYPTION_KEY_VERSION = "1";
+environment.COOKIE_SECURE = "true";

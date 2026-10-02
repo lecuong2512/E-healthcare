@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import "../../config/environment";
+import { randomUUID } from "node:crypto";
 import { hash } from "bcrypt";
 import { createDataSource } from "../database-options";
 import { environment, requiredEnvironment } from "../../config/environment";
@@ -349,9 +350,9 @@ async function runSeed() {
     { start: "22:00:00", end: "22:30:00" },
   ];
 
-  let firstSchedule: DoctorScheduleEntity | null = null;
   const schedulesToSave: DoctorScheduleEntity[] = [];
 
+  // Generate upcoming 5 days schedules (d = 0 to 4)
   for (let d = 0; d < 5; d++) {
     const curDate = new Date();
     curDate.setDate(curDate.getDate() + d);
@@ -373,34 +374,256 @@ async function runSeed() {
     }
   }
 
+  // Generate past schedules for appointments history
+  const pastDaysList = [1, 2, 3, 5, 7, 10, 15, 18, 25, 35, 45];
+  for (const d of pastDaysList) {
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - d);
+    const dateStr = formatDate(pastDate);
+
+    for (let docIdx = 0; docIdx < createdDoctors.length; docIdx++) {
+      const doc = createdDoctors[docIdx];
+      schedulesToSave.push(schedRepo.create({
+        doctorId: doc.id,
+        date: dateStr,
+        startTime: "09:00",
+        endTime: "09:30",
+        status: SlotStatus.BOOKED,
+      }));
+    }
+  }
+
   // Save schedules in chunks
   const savedSchedules = await schedRepo.save(schedulesToSave, { chunk: 100 });
-  console.log(`Seeded ${savedSchedules.length} Doctor Schedules across 5 days (Morning, Afternoon, Evening shifts).`);
+  console.log(`Seeded ${savedSchedules.length} Doctor Schedules (Upcoming 5 days + Past history slots).`);
 
-  // First booked slot for sample appointment
-  firstSchedule = savedSchedules.find(s => s.status === SlotStatus.BOOKED) ?? null;
+  // Helper to find schedule for a doctor and days ago
+  const findSchedule = (docId: string, daysAgo: number) => {
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() - daysAgo);
+    const dateStr = formatDate(targetDate);
+    return savedSchedules.find(s => s.doctorId === docId && s.date === dateStr) || savedSchedules[0];
+  };
 
-  // 6. Sample Appointment for QA
-  if (firstSchedule && createdDoctors.length > 0) {
-    const appt = await apptRepo.save(
-      apptRepo.create({
-        appointmentCode: "APPT-QA-0001",
-        patientId: patient.id,
-        doctorId: createdDoctors[0].id,
-        scheduleId: firstSchedule.id,
-        status: AppointmentStatus.CONFIRMED,
-        reasonForVisit: "Tức ngực, hồi hộp, muốn kiểm tra điện tâm đồ.",
-        paymentStatus: PaymentStatus.PAID,
-        paymentMethod: PaymentMethod.VNPAY,
-        totalAmount: 200000,
-        queueNumber: 1,
-        queueDate: firstSchedule.date,
-        queueSource: QueueSource.APPOINTMENT,
-        paidAt: new Date(),
-      })
+  // 6. Sample Appointments for QA & KPI Analytics
+  const appointmentsToSeed = [
+    // Hôm nay (Day 0)
+    {
+      code: "APPT-QA-0001",
+      docIdx: 0,
+      daysAgo: 0,
+      status: AppointmentStatus.COMPLETED,
+      reason: "Tức ngực, hồi hộp, muốn kiểm tra điện tâm đồ.",
+      method: PaymentMethod.VNPAY,
+      amount: 200000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 25,
+    },
+    {
+      code: "APPT-QA-0002",
+      docIdx: 1,
+      daysAgo: 0,
+      status: AppointmentStatus.CONFIRMED,
+      reason: "Khám da liễu dị ứng theo lịch hẹn.",
+      method: PaymentMethod.MOMO,
+      amount: 250000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 0,
+    },
+    // Hôm qua (Day 1)
+    {
+      code: "APPT-QA-0003",
+      docIdx: 3,
+      daysAgo: 1,
+      status: AppointmentStatus.COMPLETED,
+      reason: "Đau hạ sườn phải, kiểm tra gan mật.",
+      method: PaymentMethod.PAY_AT_CLINIC,
+      amount: 300000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 30,
+    },
+    {
+      code: "APPT-QA-0004",
+      docIdx: 2,
+      daysAgo: 1,
+      status: AppointmentStatus.COMPLETED,
+      reason: "Khám ho sốt cho trẻ 4 tuổi.",
+      method: PaymentMethod.VNPAY,
+      amount: 200000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 20,
+    },
+    // 3 ngày trước (Day 3)
+    {
+      code: "APPT-QA-0005",
+      docIdx: 4,
+      daysAgo: 3,
+      status: AppointmentStatus.COMPLETED,
+      reason: "Viêm xoang cấp, nội soi tai mũi họng.",
+      method: PaymentMethod.MOMO,
+      amount: 180000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 15,
+    },
+    {
+      code: "APPT-QA-0006",
+      docIdx: 0,
+      daysAgo: 3,
+      status: AppointmentStatus.CANCELLED_BY_PATIENT,
+      reason: "Bận công tác đột xuất, hủy hẹn.",
+      method: PaymentMethod.VNPAY,
+      amount: 200000,
+      pStatus: PaymentStatus.REFUNDED,
+      durationMins: 0,
+    },
+    // 5 ngày trước (Day 5)
+    {
+      code: "APPT-QA-0007",
+      docIdx: 3,
+      daysAgo: 5,
+      status: AppointmentStatus.COMPLETED,
+      reason: "Khám hậu phẫu ruột thừa.",
+      method: PaymentMethod.VNPAY,
+      amount: 300000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 25,
+    },
+    {
+      code: "APPT-QA-0008",
+      docIdx: 2,
+      daysAgo: 5,
+      status: AppointmentStatus.NO_SHOW,
+      reason: "Khám tiêu hóa nhi.",
+      method: PaymentMethod.PAY_AT_CLINIC,
+      amount: 200000,
+      pStatus: PaymentStatus.UNPAID,
+      durationMins: 0,
+    },
+    // 10 ngày trước (Day 10)
+    {
+      code: "APPT-QA-0009",
+      docIdx: 1,
+      daysAgo: 10,
+      status: AppointmentStatus.COMPLETED,
+      reason: "Điều trị mụn viêm mạn tính.",
+      method: PaymentMethod.PAY_AT_CLINIC,
+      amount: 250000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 20,
+    },
+    {
+      code: "APPT-QA-0010",
+      docIdx: 0,
+      daysAgo: 10,
+      status: AppointmentStatus.COMPLETED,
+      reason: "Tái khám huyết áp tim mạch.",
+      method: PaymentMethod.MOMO,
+      amount: 200000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 18,
+    },
+    // 18 ngày trước (Day 18)
+    {
+      code: "APPT-QA-0011",
+      docIdx: 3,
+      daysAgo: 18,
+      status: AppointmentStatus.COMPLETED,
+      reason: "Khám sỏi mật tái phát.",
+      method: PaymentMethod.MOMO,
+      amount: 300000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 32,
+    },
+    {
+      code: "APPT-QA-0012",
+      docIdx: 4,
+      daysAgo: 18,
+      status: AppointmentStatus.COMPLETED,
+      reason: "Viêm họng hạt mạn tính.",
+      method: PaymentMethod.VNPAY,
+      amount: 180000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 17,
+    },
+    // 25 ngày trước (Day 25)
+    {
+      code: "APPT-QA-0013",
+      docIdx: 2,
+      daysAgo: 25,
+      status: AppointmentStatus.COMPLETED,
+      reason: "Tiêm chủng và kiểm tra cân nặng trẻ.",
+      method: PaymentMethod.PAY_AT_CLINIC,
+      amount: 200000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 22,
+    },
+    // 35 & 45 ngày trước (Baseline comparison)
+    {
+      code: "APPT-QA-0014",
+      docIdx: 0,
+      daysAgo: 35,
+      status: AppointmentStatus.COMPLETED,
+      reason: "Khám tim định kỳ.",
+      method: PaymentMethod.VNPAY,
+      amount: 200000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 20,
+    },
+    {
+      code: "APPT-QA-0015",
+      docIdx: 3,
+      daysAgo: 45,
+      status: AppointmentStatus.COMPLETED,
+      reason: "Tư vấn ngoại tổng quát.",
+      method: PaymentMethod.MOMO,
+      amount: 300000,
+      pStatus: PaymentStatus.PAID,
+      durationMins: 25,
+    },
+  ];
+
+  for (let i = 0; i < appointmentsToSeed.length; i++) {
+    const item = appointmentsToSeed[i];
+    const doc = createdDoctors[item.docIdx];
+    const sched = findSchedule(doc.id, item.daysAgo);
+    const apptId = randomUUID();
+
+    await dataSource.query(
+      `INSERT INTO appointments (
+        id, appointment_code, patient_id, doctor_id, schedule_id,
+        status, reason_for_visit, payment_status, payment_method, total_amount,
+        queue_number, queue_date, queue_source,
+        created_at, paid_at, checked_in_at, completed_at, created_by
+      ) VALUES (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10,
+        $11, $12, $13,
+        NOW() - ($14::text || ' day')::interval - INTERVAL '2 hours',
+        CASE WHEN $15::text = 'PAID' THEN NOW() - ($14::text || ' day')::interval - INTERVAL '2 hours' ELSE NULL END,
+        CASE WHEN $6::text = 'COMPLETED' THEN NOW() - ($14::text || ' day')::interval - INTERVAL '1 hour' ELSE NULL END,
+        CASE WHEN $6::text = 'COMPLETED' THEN NOW() - ($14::text || ' day')::interval - INTERVAL '15 minutes' ELSE NULL END,
+        $3
+      )`,
+      [
+        apptId,
+        item.code,
+        patient.id,
+        doc.id,
+        sched.id,
+        item.status,
+        item.reason,
+        item.pStatus,
+        item.method,
+        item.amount,
+        i + 1,
+        sched.date,
+        QueueSource.APPOINTMENT,
+        String(item.daysAgo),
+        item.pStatus,
+      ]
     );
-    console.log(`Seeded sample confirmed appointment ${appt.appointmentCode}`);
   }
+  console.log(`Seeded ${appointmentsToSeed.length} sample appointments with realistic KPI timeline across 45 days.`);
 
   await dataSource.destroy();
   console.log("Seed completed successfully!");
