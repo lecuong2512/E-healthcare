@@ -588,6 +588,11 @@ async function runSeed() {
     const sched = findSchedule(doc.id, item.daysAgo);
     const apptId = randomUUID();
 
+    const createdAt = new Date(Date.now() - item.daysAgo * 86400000 - 2 * 3600000);
+    const paidAt = item.pStatus === PaymentStatus.PAID ? new Date(createdAt.getTime() + 5 * 60000) : null;
+    const checkedInAt = item.status === AppointmentStatus.COMPLETED ? new Date(createdAt.getTime() + 60 * 60000) : null;
+    const completedAt = item.status === AppointmentStatus.COMPLETED ? new Date(createdAt.getTime() + 85 * 60000) : null;
+
     await dataSource.query(
       `INSERT INTO appointments (
         id, appointment_code, patient_id, doctor_id, schedule_id,
@@ -598,11 +603,7 @@ async function runSeed() {
         $1, $2, $3, $4, $5,
         $6, $7, $8, $9, $10,
         $11, $12, $13,
-        NOW() - ($14::text || ' day')::interval - INTERVAL '2 hours',
-        CASE WHEN $15::text = 'PAID' THEN NOW() - ($14::text || ' day')::interval - INTERVAL '2 hours' ELSE NULL END,
-        CASE WHEN $6::text = 'COMPLETED' THEN NOW() - ($14::text || ' day')::interval - INTERVAL '1 hour' ELSE NULL END,
-        CASE WHEN $6::text = 'COMPLETED' THEN NOW() - ($14::text || ' day')::interval - INTERVAL '15 minutes' ELSE NULL END,
-        $3
+        $14, $15, $16, $17, $18
       )`,
       [
         apptId,
@@ -618,8 +619,11 @@ async function runSeed() {
         i + 1,
         sched.date,
         QueueSource.APPOINTMENT,
-        String(item.daysAgo),
-        item.pStatus,
+        createdAt,
+        paidAt,
+        checkedInAt,
+        completedAt,
+        patient.id,
       ]
     );
   }
