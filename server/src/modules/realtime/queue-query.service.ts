@@ -12,11 +12,18 @@ export class QueueQueryService {
 
   async snapshot(scope: 'RECEPTION' | 'DOCTOR', doctorId?: string): Promise<QueueSnapshot> {
     const date = vietnamNow().date;
+    const statuses = scope === 'DOCTOR'
+      ? [
+          AppointmentStatus.CHECKED_IN,
+          AppointmentStatus.IN_CONSULTATION,
+          AppointmentStatus.COMPLETED,
+          AppointmentStatus.NO_SHOW,
+        ]
+      : [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_CONSULTATION];
+
     const query = this.ticketQuery()
       .where('appointment.queue_date = :date', { date })
-      .andWhere('appointment.status IN (:...statuses)', {
-        statuses: [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_CONSULTATION],
-      })
+      .andWhere('appointment.status IN (:...statuses)', { statuses })
       .andWhere('appointment.queue_number IS NOT NULL')
       .andWhere('appointment.queue_source IS NOT NULL')
       .andWhere('appointment.checked_in_at IS NOT NULL')

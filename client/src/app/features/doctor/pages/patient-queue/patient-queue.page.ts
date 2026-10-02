@@ -176,17 +176,16 @@ export class PatientQueuePage implements OnInit, OnDestroy {
       (p) => (p.id && p.id === event.appointmentId) || p.code === event.appointmentCode,
     );
     if (index !== -1) {
-      this.patients[index].status = event.status as QueueStatus;
-      if (event.ticket) {
-        this.patients[index] = {
-          ...this.patients[index],
-          ...this.mapTicketToPatient(event.ticket, index),
-          status: event.status as QueueStatus,
-        };
-      }
+      this.patients[index] = {
+        ...this.patients[index],
+        ...(event.ticket ? this.mapTicketToPatient(event.ticket, index) : {}),
+        status: event.status as QueueStatus,
+      };
+      this.patients = [...this.patients];
     } else if (event.ticket) {
-      this.patients.push(this.mapTicketToPatient(event.ticket, this.patients.length));
-      this.patients.sort((a, b) => a.stt - b.stt);
+      this.patients = [...this.patients, this.mapTicketToPatient(event.ticket, this.patients.length)].sort(
+        (a, b) => a.stt - b.stt,
+      );
     }
   }
 
@@ -241,6 +240,11 @@ export class PatientQueuePage implements OnInit, OnDestroy {
           });
       }
     }
+    this.router.navigate(['/doctor/consultation', targetId]);
+  }
+
+  viewRecord(patient: QueuePatient): void {
+    const targetId = patient.id || patient.code;
     this.router.navigate(['/doctor/consultation', targetId]);
   }
 }

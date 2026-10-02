@@ -339,7 +339,12 @@ describe('Realtime queue', () => {
     expect(builder.where).toHaveBeenCalledWith('appointment.queue_date = :date', expect.any(Object));
     expect(builder.andWhere).toHaveBeenCalledWith('appointment.doctor_id = :doctorId', { doctorId });
     expect(builder.andWhere).toHaveBeenCalledWith('appointment.status IN (:...statuses)', {
-      statuses: [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_CONSULTATION],
+      statuses: [
+        AppointmentStatus.CHECKED_IN,
+        AppointmentStatus.IN_CONSULTATION,
+        AppointmentStatus.COMPLETED,
+        AppointmentStatus.NO_SHOW,
+      ],
     });
     expect(builder.addOrderBy).toHaveBeenCalledWith('appointment.queue_number', 'ASC');
   });
