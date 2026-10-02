@@ -43,7 +43,18 @@ export class ReceptionService {
     const builder = this.dataSource
       .getRepository(AppointmentEntity)
       .createQueryBuilder('appointment')
-      .innerJoinAndSelect('appointment.patient', 'patient')
+      .innerJoinAndSelect('appointment.patient', 'patient');
+
+    if (typeof (builder as any).leftJoinAndMapOne === 'function') {
+      (builder as any).leftJoinAndMapOne(
+        'appointment.booker',
+        UserEntity,
+        'booker',
+        'booker.id = appointment.created_by',
+      );
+    }
+
+    builder
       .innerJoinAndSelect('appointment.doctor', 'doctor')
       .innerJoinAndSelect('doctor.user', 'doctorUser')
       .innerJoinAndSelect('doctor.specialty', 'specialty')
@@ -57,9 +68,12 @@ export class ReceptionService {
         code: query.code.toUpperCase(),
       });
     } else {
-      builder.andWhere('patient.phone_number IN (:...phones)', {
-        phones: vietnamesePhoneVariants(query.phone!),
-      });
+      builder.andWhere(
+        '(patient.phone_number IN (:...phones) OR booker.phone_number IN (:...phones))',
+        {
+          phones: vietnamesePhoneVariants(query.phone!),
+        },
+      );
     }
 
     const appointments = await builder.getMany();
@@ -99,7 +113,7 @@ export class ReceptionService {
         status: appointment.status,
         patientId: appointment.patientId,
         patientName: appointment.patient.fullName,
-        patientPhone: appointment.patient.phoneNumber,
+        patientPhone: appointment.patient.phoneNumber || (appointment as any).booker?.phoneNumber || null,
         doctorId: appointment.doctorId,
         doctorName: appointment.doctor.user.fullName,
         specialtyName: appointment.doctor.specialty.name,

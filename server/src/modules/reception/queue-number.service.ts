@@ -10,12 +10,19 @@ export class QueueNumberService {
   ): Promise<number> {
     const rows = (await manager.query(
       `INSERT INTO doctor_queue_counters (doctor_id, queue_date, last_number)
-       VALUES ($1, $2, 1)
+       VALUES (
+         $1,
+         $2,
+         (SELECT COALESCE(MAX(queue_number), 0) + 1 FROM appointments WHERE doctor_id = $1 AND queue_date = $2)
+       )
        ON CONFLICT (doctor_id, queue_date)
-       DO UPDATE SET last_number = doctor_queue_counters.last_number + 1
+       DO UPDATE SET last_number = GREATEST(
+         doctor_queue_counters.last_number + 1,
+         (SELECT COALESCE(MAX(queue_number), 0) + 1 FROM appointments WHERE doctor_id = $1 AND queue_date = $2)
+       )
        RETURNING last_number`,
       [doctorId, queueDate],
-    )) as Array<{ last_number: number }>;
-    return rows[0].last_number;
+    )) as Array<{ last_number: number | string }>;
+    return Number(rows[0].last_number);
   }
 }

@@ -322,6 +322,32 @@ export class BookingService {
         targetPatient = await queryRunner.manager.getRepository(UserEntity).findOneBy({
           id: authenticatedUserId,
         });
+        if (targetPatient) {
+          let shouldSave = false;
+          if (dto.patientPhone) {
+            const rawPhone = dto.patientPhone.replace(/\D/g, '');
+            if (rawPhone && !targetPatient.phoneNumber) {
+              targetPatient.phoneNumber = rawPhone;
+              shouldSave = true;
+            }
+          }
+          if (dto.patientDob && (!targetPatient.dateOfBirth || targetPatient.dateOfBirth === '1990-01-01')) {
+            targetPatient.dateOfBirth = dto.patientDob;
+            shouldSave = true;
+          }
+          if (dto.patientGender && !targetPatient.gender) {
+            const rawGender = dto.patientGender.toLowerCase();
+            targetPatient.gender = rawGender === 'female' || rawGender === Gender.FEMALE
+              ? Gender.FEMALE
+              : rawGender === 'other' || rawGender === Gender.OTHER
+                ? Gender.OTHER
+                : Gender.MALE;
+            shouldSave = true;
+          }
+          if (shouldSave) {
+            await queryRunner.manager.getRepository(UserEntity).save(targetPatient);
+          }
+        }
       }
 
       const appointment = queryRunner.manager.create(AppointmentEntity, {

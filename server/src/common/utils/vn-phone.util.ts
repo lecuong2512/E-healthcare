@@ -13,5 +13,13 @@ export function normalizeVietnamesePhone(input: string): string {
 
 export function vietnamesePhoneVariants(input: string): string[] {
   const canonical = normalizeVietnamesePhone(input);
-  return [canonical, `0${canonical.slice(3)}`];
+  const withoutPrefix = canonical.slice(3);
+  return Array.from(
+    new Set([
+      canonical,
+      `0${withoutPrefix}`,
+      `84${withoutPrefix}`,
+      withoutPrefix,
+    ]),
+  );
 }
